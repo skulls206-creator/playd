@@ -1114,7 +1114,11 @@ export function useFileSystem() {
 
   const rescanAll = async (): Promise<void> => {
     const handles = await getStoredHandles();
-    if (handles.length === 0) return;
+    if (handles.length === 0) {
+      setScanStatus('No folders added — use Add Folder to import music');
+      setTimeout(() => setScanStatus(''), 5000);
+      return;
+    }
     for (const handle of handles) {
       await scanFolder(handle);
     }

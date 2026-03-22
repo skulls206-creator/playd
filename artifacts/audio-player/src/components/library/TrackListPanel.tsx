@@ -115,7 +115,7 @@ interface TrackListPanelProps {
 export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
-  const { isScanning, scanProgress, scanStatus, scanFolder, rescanAll, getStoredHandles, importDroppedItems } = useFileSystem();
+  const { isScanning, scanProgress, scanStatus, rescanAll, importDroppedItems } = useFileSystem();
   const queryClient = useQueryClient();
 
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -130,27 +130,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const dragCounterRef = useRef(0);
 
   const handleRescan = async () => {
-    const handles = await getStoredHandles();
-    if (handles.length === 0) return;
-
-    // Check permission silently (queryPermission never shows a dialog).
-    // Only scan folders where access is still granted — avoids the
-    // browser's re-authorization prompt on mobile.
-    let scanned = 0;
-    for (const h of handles) {
-      let hasPermission = true;
-      try {
-        const state = await (h as any).queryPermission({ mode: 'read' });
-        hasPermission = state === 'granted';
-      } catch {
-        // queryPermission not supported — assume we have access and try
-      }
-      if (hasPermission) {
-        await scanFolder(h);
-        scanned++;
-      }
-    }
-
+    await rescanAll();
     queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
   };
 
