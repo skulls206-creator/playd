@@ -95,8 +95,9 @@ export function useFileSystem() {
           const fileName = parts[parts.length - 1];
           const folderPath = parts.slice(0, -1).join('/') || rootName;
 
-          // Store file in memory for session playback
-          inMemoryFiles.set(relativePath, file);
+          // Store file in memory for session playback — keyed by the same
+          // pattern that getFileFromPath uses: "folderPath/fileName"
+          inMemoryFiles.set(`${folderPath}/${fileName}`, file);
 
           tracks.push({
             title: metadata.common.title || file.name.replace(/\.[^/.]+$/, ''),
@@ -182,7 +183,8 @@ export function useFileSystem() {
   // ── Load the bundled sample track from public/ (always available, no picker needed) ──
   const loadSampleTrack = async (): Promise<boolean> => {
     try {
-      const resp = await fetch('/GRAHAM_-_Enough_For_Me.mp3');
+      // import.meta.env.BASE_URL respects the Vite base path (e.g. /audio-player/)
+      const resp = await fetch(`${import.meta.env.BASE_URL}GRAHAM_-_Enough_For_Me.mp3`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
       const fileName = 'GRAHAM_-_Enough_For_Me.mp3';

@@ -21,9 +21,16 @@ function toPublic(server: typeof subsonicServersTable.$inferSelect) {
   return rest;
 }
 
+/** Normalize a server URL to always have a protocol */
+function normalizeServerUrl(url: string): string {
+  const trimmed = url.replace(/\/$/, "");
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 /** Build a Subsonic REST API URL with auth params */
 function subsonicUrl(server: typeof subsonicServersTable.$inferSelect, endpoint: string, extra?: Record<string, string | number>) {
-  const base = server.url.replace(/\/$/, "");
+  const base = normalizeServerUrl(server.url);
   const params = new URLSearchParams({
     v: "1.16.1",
     c: "foobarweb",
