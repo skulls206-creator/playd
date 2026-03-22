@@ -117,6 +117,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
   const { isScanning, scanProgress, scanStatus, scanFileList, importDroppedItems } = useFileSystem();
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const mobileFilesInputRef = useRef<HTMLInputElement>(null);
 
   const handleFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -137,7 +138,13 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const dragCounterRef = useRef(0);
 
   const handleRescan = () => {
-    folderInputRef.current?.click();
+    // webkitdirectory only works on desktop — use a plain audio multi-picker on mobile
+    const isMobile = window.innerWidth < 640;
+    if (isMobile) {
+      mobileFilesInputRef.current?.click();
+    } else {
+      folderInputRef.current?.click();
+    }
   };
 
   const handleClearLibrary = async () => {
@@ -296,12 +303,21 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      {/* Hidden folder picker — same pattern as Preferences, reliable in all contexts */}
+      {/* Desktop: folder picker (webkitdirectory, unsupported on mobile) */}
       <input
         ref={folderInputRef}
         type="file"
         style={{ display: 'none' }}
         {...{ webkitdirectory: '', multiple: true } as any}
+        onChange={handleFolderInputChange}
+      />
+      {/* Mobile: plain audio file picker — webkitdirectory doesn't work on mobile browsers */}
+      <input
+        ref={mobileFilesInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        accept="audio/*,.mp3,.flac,.ogg,.opus,.m4a,.wav,.aiff,.aac,.wma"
+        multiple
         onChange={handleFolderInputChange}
       />
 
