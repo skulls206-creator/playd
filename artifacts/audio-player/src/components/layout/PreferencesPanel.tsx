@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import {
@@ -26,10 +26,15 @@ import { Separator } from '@/components/ui/separator';
 import {
   FolderOpen, RefreshCw, Trash2, Plus, Server, CheckCircle2,
   XCircle, Loader2, ChevronDown, ChevronUp, Info, HardDrive,
-  Cloud, Database, Monitor, Save, FileMusic
+  Cloud, Database, Monitor, Save, FileMusic, Bell, BellOff
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { get, del, set } from 'idb-keyval';
+import {
+  notificationsEnabled,
+  setNotificationsEnabled,
+  requestNotificationPermission,
+} from '@/hooks/use-now-playing-notification';
 
 interface SubsonicFormState {
   name: string;
@@ -78,6 +83,26 @@ export function PreferencesPanel() {
   // EQ save form
   const [newPresetName, setNewPresetName] = useState('');
   const [savingPreset, setSavingPreset] = useState(false);
+
+  // Notifications
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'denied'
+  );
+  const [notifOn, setNotifOn] = useState(notificationsEnabled);
+
+  const handleRequestNotifPermission = useCallback(async () => {
+    const perm = await requestNotificationPermission();
+    setNotifPermission(perm);
+    if (perm === 'granted') {
+      setNotificationsEnabled(true);
+      setNotifOn(true);
+    }
+  }, []);
+
+  const handleToggleNotif = useCallback((val: boolean) => {
+    setNotificationsEnabled(val);
+    setNotifOn(val);
+  }, []);
 
   useEffect(() => {
     if (isPrefsOpen) {
@@ -632,6 +657,65 @@ export function PreferencesPanel() {
                   );
                 })}
               </div>
+            </section>
+
+            {/* ── Notifications ── */}
+            <section>
+              <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                <Bell className="w-4 h-4 text-muted-foreground" />
+                Song Change Notifications
+              </h3>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                Show an OS notification when a new track starts playing.
+                On Windows this appears as a toast in the bottom-right corner.
+                The Windows media controls widget (play · pause · skip) is always
+                available when audio is playing — no extra setup needed.
+              </p>
+
+              {!('Notification' in window) ? (
+                <p className="text-[11px] text-muted-foreground/60">
+                  Notifications are not supported in this browser.
+                </p>
+              ) : notifPermission === 'denied' ? (
+                <p className="text-[11px] text-destructive/80">
+                  Notifications are blocked. Open your browser settings and allow
+                  notifications for this site, then reload.
+                </p>
+              ) : notifPermission === 'default' ? (
+                <Button
+                  size="sm" className="h-8 text-xs gap-1.5"
+                  onClick={handleRequestNotifPermission}
+                >
+                  <Bell className="w-3 h-3" />
+                  Enable Notifications
+                </Button>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleToggleNotif(!notifOn)}
+                    className={clsx(
+                      'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
+                      'transition-colors duration-200 focus:outline-none',
+                      notifOn ? 'bg-primary' : 'bg-border',
+                    )}
+                    role="switch"
+                    aria-checked={notifOn}
+                  >
+                    <span
+                      className={clsx(
+                        'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg',
+                        'transform transition duration-200',
+                        notifOn ? 'translate-x-4' : 'translate-x-0',
+                      )}
+                    />
+                  </button>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {notifOn
+                      ? <><Bell className="w-3 h-3 text-primary" /><span className="text-foreground">Notifications on</span></>
+                      : <><BellOff className="w-3 h-3" /><span>Notifications off</span></>}
+                  </div>
+                </div>
+              )}
             </section>
           </TabsContent>
 

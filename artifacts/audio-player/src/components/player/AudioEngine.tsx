@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
+import { useNowPlayingNotification } from '@/hooks/use-now-playing-notification';
 
 const FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
@@ -29,6 +30,8 @@ export function AudioEngine() {
   } = useAudioPlayer();
 
   const { getFileFromPath } = useFileSystem();
+
+  useNowPlayingNotification(currentTrack ?? null);
 
   // Initialize Web Audio API
   useEffect(() => {
