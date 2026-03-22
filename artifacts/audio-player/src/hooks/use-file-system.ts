@@ -8,6 +8,50 @@ const ART_STORE_KEY = 'track-art';
 const AUDIO_EXTS = /\.(mp3|flac|m4a|m4p|aac|wav|ogg|opus|webm|wma|aiff|aif|alac|mp4|3gp)$/i;
 
 /**
+ * Detect audio MIME type by reading the file's magic bytes (first 12 bytes).
+ * This lets us parse extension-less files (e.g. YouTube Music offline tracks).
+ *
+ * Signatures:
+ *   OGG/Opus  → 4F 67 67 53          "OggS"
+ *   WebM      → 1A 45 DF A3          EBML header
+ *   MP3+ID3   → 49 44 33             "ID3"
+ *   MP3 sync  → FF FB / FF F3 / FF F2
+ *   FLAC      → 66 4C 61 43          "fLaC"
+ *   WAV       → 52 49 46 46          "RIFF"
+ *   MP4/M4A   → ?? ?? ?? ?? 66 74 79 70  "ftyp" at offset 4
+ *   AAC ADTS  → FF F1 / FF F9
+ */
+async function detectMimeType(file: File): Promise<string | undefined> {
+  try {
+    const buf = await file.slice(0, 12).arrayBuffer();
+    const b = new Uint8Array(buf);
+    if (b[0] === 0x4F && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return 'audio/ogg';
+    if (b[0] === 0x1A && b[1] === 0x45 && b[2] === 0xDF && b[3] === 0xA3) return 'audio/webm';
+    if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33)                  return 'audio/mpeg'; // ID3
+    if ((b[0] === 0xFF) && (b[1] === 0xFB || b[1] === 0xF3 || b[1] === 0xF2)) return 'audio/mpeg';
+    if (b[0] === 0x66 && b[1] === 0x4C && b[2] === 0x61 && b[3] === 0x43) return 'audio/flac';
+    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return 'audio/wav';
+    if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return 'audio/mp4'; // ftyp
+    if (b[0] === 0xFF && (b[1] === 0xF1 || b[1] === 0xF9))                return 'audio/aac';
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * If the file has no useful MIME type, detect it from magic bytes and return
+ * a new Blob with the correct type so music-metadata-browser picks the right
+ * parser. Does not copy file content — just wraps the existing blob.
+ */
+async function withMimeType(file: File): Promise<Blob> {
+  if (file.type && file.type !== 'application/octet-stream') return file;
+  const mime = await detectMimeType(file);
+  if (!mime) return file;
+  return new Blob([file], { type: mime });
+}
+
+/**
  * Returns true if the file is likely audio and worth attempting to parse.
  * Accepts:
  *  1. Known audio/video extensions (AUDIO_EXTS)
@@ -109,7 +153,8 @@ export function useFileSystem() {
         inMemoryFiles.set(`${folderPath}/${fileName}`, file);
 
         try {
-          const metadata = await mm.parseBlob(file, { duration: true, skipCovers: false });
+          const blob = await withMimeType(file);
+          const metadata = await mm.parseBlob(blob, { duration: true, skipCovers: false });
 
           // Album art → IndexedDB only (not sent to server)
           if (metadata.common.picture?.length) {
