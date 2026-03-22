@@ -1,10 +1,40 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { get, set } from 'idb-keyval';
 import * as mm from 'music-metadata-browser';
 import { useBulkUpsertTracks, getListTracksQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 const ART_STORE_KEY = 'track-art';
+const AUDIO_EXTS = /\.(mp3|flac|m4a|aac|wav|ogg|opus)$/i;
+
+/**
+ * In-memory store for File objects loaded via the webkitdirectory fallback.
+ * Keys: `${folderPath}/${fileName}` (same convention as DB folderPath + fileName).
+ * Lives for the browser session only — no persistence across reloads.
+ */
+const inMemoryFiles = new Map<string, File>();
+
+/** Open a webkitdirectory file-picker as a fallback when showDirectoryPicker is blocked. */
+function pickFilesViaInput(): Promise<FileList | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    (input as any).webkitdirectory = true;
+    input.accept = '.mp3,.flac,.m4a,.aac,.wav,.ogg,.opus';
+
+    let settled = false;
+    const settle = (value: FileList | null) => {
+      if (!settled) { settled = true; resolve(value); }
+    };
+
+    input.addEventListener('change', () => settle(input.files));
+    // Cancel detection: browser refocuses the window after the dialog closes
+    const onFocus = () => setTimeout(() => settle(null), 400);
+    window.addEventListener('focus', onFocus, { once: true });
+    input.click();
+  });
+}
 
 export function useFileSystem() {
   const [isScanning, setIsScanning] = useState(false);
@@ -29,105 +59,159 @@ export function useFileSystem() {
     return artStore[`${folderPath}/${fileName}`] || null;
   };
 
-  const addFolder = async () => {
-    try {
-      const handle = await (window as any).showDirectoryPicker({ mode: 'read' });
-      const existing = await getStoredHandles();
-      if (!existing.some(h => h.name === handle.name)) {
-        await set('music-folders', [...existing, handle]);
-      }
-      await scanFolder(handle);
-      return true;
-    } catch (e: any) {
-      if (e?.name !== 'AbortError') {
-        console.error('Error picking directory', e);
-      }
-      return false;
-    }
-  };
-
-  const scanFolder = async (dirHandle: FileSystemDirectoryHandle) => {
+  // ── Core scan logic that works on any iterable of {file, relativePath} ──
+  const processTracks = async (
+    entries: Array<{ file: File; relativePath: string }>,
+    rootName: string,
+  ) => {
     setIsScanning(true);
     setScanProgress(0);
-    setScanStatus(`Scanning ${dirHandle.name}…`);
+    setScanStatus(`Scanning ${rootName}…`);
 
     try {
-      const hasPermission = await verifyPermission(dirHandle);
-      if (!hasPermission) throw new Error('Permission denied');
-
       const tracks: any[] = [];
       const artStore: Record<string, string> = (await get(ART_STORE_KEY)) || {};
+      let count = 0;
 
-      async function walk(handle: FileSystemDirectoryHandle, currentPath: string) {
-        for await (const entry of (handle as any).values()) {
-          if (entry.kind === 'directory') {
-            await walk(entry, `${currentPath}/${entry.name}`);
-          } else if (entry.kind === 'file') {
-            if (/\.(mp3|flac|m4a|aac|wav|ogg|opus)$/i.test(entry.name)) {
-              const file = await entry.getFile();
-              try {
-                const metadata = await mm.parseBlob(file, { duration: true, skipCovers: false });
+      for (const { file, relativePath } of entries) {
+        if (!AUDIO_EXTS.test(file.name)) continue;
+        try {
+          const metadata = await mm.parseBlob(file, { duration: true, skipCovers: false });
 
-                // Store album art in IndexedDB (not sent to server to keep payload small)
-                if (metadata.common.picture && metadata.common.picture.length > 0) {
-                  const pic = metadata.common.picture[0];
-                  const blob = new Blob([pic.data], { type: pic.format });
-                  const dataUrl: string = await new Promise(resolve => {
-                    const reader = new FileReader();
-                    reader.onload = e => resolve(e.target?.result as string);
-                    reader.readAsDataURL(blob);
-                  });
-                  artStore[`${currentPath}/${entry.name}`] = dataUrl;
-                }
-
-                tracks.push({
-                  title: metadata.common.title || entry.name.replace(/\.[^/.]+$/, ''),
-                  artist: metadata.common.artist || 'Unknown Artist',
-                  album: metadata.common.album || 'Unknown Album',
-                  year: metadata.common.year || null,
-                  genre: metadata.common.genre?.[0] || null,
-                  duration: Math.round(metadata.format.duration || 0),
-                  trackNumber: metadata.common.track?.no || null,
-                  fileName: entry.name,
-                  folderPath: currentPath,
-                  albumArtDataUrl: null, // stored locally in IndexedDB, not sent to server
-                  source: 'local',
-                });
-
-                setScanProgress(p => p + 1);
-                setScanStatus(`Scanning ${dirHandle.name}… (${tracks.length} tracks)`);
-              } catch (e) {
-                console.warn('Failed to parse', entry.name, e);
-              }
-            }
+          // Album art → IndexedDB only (not sent to server)
+          if (metadata.common.picture?.length) {
+            const pic = metadata.common.picture[0];
+            const blob = new Blob([pic.data], { type: pic.format });
+            const dataUrl: string = await new Promise(resolve => {
+              const reader = new FileReader();
+              reader.onload = e => resolve(e.target?.result as string);
+              reader.readAsDataURL(blob);
+            });
+            artStore[relativePath] = dataUrl;
           }
+
+          // Parse folderPath from relativePath
+          const parts = relativePath.split('/');
+          const fileName = parts[parts.length - 1];
+          const folderPath = parts.slice(0, -1).join('/') || rootName;
+
+          // Store file in memory for session playback
+          inMemoryFiles.set(relativePath, file);
+
+          tracks.push({
+            title: metadata.common.title || file.name.replace(/\.[^/.]+$/, ''),
+            artist: metadata.common.artist || 'Unknown Artist',
+            album: metadata.common.album || 'Unknown Album',
+            year: metadata.common.year || null,
+            genre: metadata.common.genre?.[0] || null,
+            duration: Math.round(metadata.format.duration || 0),
+            trackNumber: metadata.common.track?.no || null,
+            fileName,
+            folderPath,
+            albumArtDataUrl: null,
+            source: 'local',
+          });
+
+          count++;
+          setScanProgress(count);
+          setScanStatus(`Scanning ${rootName}… (${count} tracks found)`);
+        } catch (e) {
+          console.warn('Failed to parse', file.name, e);
         }
       }
 
-      await walk(dirHandle, dirHandle.name);
-
-      // Save art to IndexedDB
       await set(ART_STORE_KEY, artStore);
-
-      setScanStatus(`Saving ${tracks.length} tracks…`);
+      setScanStatus(`Saving ${tracks.length} tracks to library…`);
 
       if (tracks.length > 0) {
         await bulkUpsert.mutateAsync({ data: { tracks } });
       }
 
-      // Invalidate tracks query so the sidebar refreshes immediately
       await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-
+      setScanStatus(`Done — ${tracks.length} tracks imported`);
+      setTimeout(() => setScanStatus(''), 3000);
     } catch (error) {
       console.error('Scan failed', error);
-      setScanStatus('Scan failed — check console');
+      setScanStatus('Scan failed — see console for details');
+      setTimeout(() => setScanStatus(''), 5000);
     } finally {
       setIsScanning(false);
-      setScanStatus('');
     }
   };
 
+  // ── Scan via FileSystemDirectoryHandle (File System Access API) ──
+  const scanFolder = async (dirHandle: FileSystemDirectoryHandle) => {
+    const entries: Array<{ file: File; relativePath: string }> = [];
+
+    const hasPermission = await verifyPermission(dirHandle);
+    if (!hasPermission) {
+      setScanStatus('Permission denied');
+      return;
+    }
+
+    async function walk(handle: FileSystemDirectoryHandle, path: string) {
+      for await (const entry of (handle as any).values()) {
+        if (entry.kind === 'directory') {
+          await walk(entry, `${path}/${entry.name}`);
+        } else if (entry.kind === 'file' && AUDIO_EXTS.test(entry.name)) {
+          const file = await entry.getFile();
+          entries.push({ file, relativePath: `${path}/${entry.name}` });
+        }
+      }
+    }
+
+    await walk(dirHandle, dirHandle.name);
+    await processTracks(entries, dirHandle.name);
+  };
+
+  // ── Scan via FileList (webkitdirectory fallback) ──
+  const scanFileList = async (files: FileList) => {
+    if (!files.length) return;
+    const entries: Array<{ file: File; relativePath: string }> = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (AUDIO_EXTS.test(file.name)) {
+        // webkitRelativePath: "FolderName/sub/file.mp3"
+        entries.push({ file, relativePath: file.webkitRelativePath || file.name });
+      }
+    }
+    const rootName = entries[0]?.relativePath.split('/')[0] || 'Imported';
+    await processTracks(entries, rootName);
+  };
+
+  // ── Main entry: try File System Access API, fall back to file input ──
+  const addFolder = async (): Promise<boolean> => {
+    // Try modern File System Access API first
+    if (typeof (window as any).showDirectoryPicker === 'function') {
+      try {
+        const handle: FileSystemDirectoryHandle = await (window as any).showDirectoryPicker({ mode: 'read' });
+        const existing = await getStoredHandles();
+        if (!existing.some(h => h.name === handle.name)) {
+          await set('music-folders', [...existing, handle]);
+        }
+        await scanFolder(handle);
+        return true;
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return false; // User cancelled — silent
+        // SecurityError, NotAllowedError, etc. — fall through to file input
+        console.info('showDirectoryPicker unavailable, using file input fallback:', e?.name);
+      }
+    }
+
+    // Fallback: <input webkitdirectory> — works in all contexts including iframes
+    const files = await pickFilesViaInput();
+    if (!files || files.length === 0) return false;
+    await scanFileList(files);
+    return true;
+  };
+
+  // ── Resolve a local file for playback ──
   const getFileFromPath = async (fileName: string, folderPath: string): Promise<File | null> => {
+    // 1. Check in-memory store (populated by webkitdirectory fallback)
+    const memKey = `${folderPath}/${fileName}`;
+    if (inMemoryFiles.has(memKey)) return inMemoryFiles.get(memKey)!;
+
+    // 2. Try FileSystemDirectoryHandle (File System Access API)
     try {
       const handles = await getStoredHandles();
       const rootFolderName = folderPath.split('/')[0];
@@ -138,11 +222,9 @@ export function useFileSystem() {
 
       const pathParts = folderPath.split('/').slice(1);
       let currentHandle: FileSystemDirectoryHandle = rootHandle;
-
       for (const part of pathParts) {
         currentHandle = await currentHandle.getDirectoryHandle(part);
       }
-
       const fileHandle = await currentHandle.getFileHandle(fileName);
       return await fileHandle.getFile();
     } catch (e) {

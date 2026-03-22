@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "6F5uQRSVXY5oRLU4zZoD-"
+uri = "file://artifacts/audio-player/public/test-tone.wav"
+type = "audio"
+title = "Test Tone (440Hz WAV — 2 seconds)"
