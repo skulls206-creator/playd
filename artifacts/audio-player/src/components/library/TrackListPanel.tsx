@@ -100,7 +100,7 @@ interface TrackListPanelProps {
 export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
-  const { isScanning, scanProgress, rescanAll, getStoredHandles, importDroppedItems } = useFileSystem();
+  const { isScanning, scanProgress, scanStatus, scanFolder, rescanAll, getStoredHandles, importDroppedItems } = useFileSystem();
   const queryClient = useQueryClient();
 
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -117,7 +117,25 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const handleRescan = async () => {
     const handles = await getStoredHandles();
     if (handles.length === 0) return;
-    await rescanAll();
+
+    // Check permission silently (queryPermission never shows a dialog).
+    // Only scan folders where access is still granted — avoids the
+    // browser's re-authorization prompt on mobile.
+    let scanned = 0;
+    for (const h of handles) {
+      let hasPermission = true;
+      try {
+        const state = await (h as any).queryPermission({ mode: 'read' });
+        hasPermission = state === 'granted';
+      } catch {
+        // queryPermission not supported — assume we have access and try
+      }
+      if (hasPermission) {
+        await scanFolder(h);
+        scanned++;
+      }
+    }
+
     queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
   };
 
@@ -311,13 +329,20 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
           )}
         >
           <RefreshCw className={clsx('w-3 h-3', isScanning && 'animate-spin')} />
-          <span className="hidden sm:inline">Refresh</span>
+          <span>Refresh</span>
         </button>
 
         {/* Active filter label / scan status */}
         {isScanning ? (
           <span className="text-[10px] text-emerald-400 flex-1 truncate">
             Scanning… {scanProgress > 0 ? `${scanProgress} found` : ''}
+          </span>
+        ) : scanStatus ? (
+          <span className={clsx(
+            'text-[10px] flex-1 truncate',
+            scanStatus.startsWith('✓') ? 'text-emerald-400' : 'text-red-400',
+          )}>
+            {scanStatus}
           </span>
         ) : libraryFilter.type !== 'all' ? (
           <div className="flex items-center gap-1 min-w-0 flex-1">
