@@ -7,13 +7,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
   Music2, ListMusic, Settings, Search,
-  Library, Disc3, User, ChevronDown, ChevronRight
+  Library, Disc3, User, ChevronDown, ChevronRight, X
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 type NavSection = 'artists' | 'albums' | 'playlists';
 
-export function Sidebar() {
+interface SidebarProps {
+  onClose?: () => void;
+}
+
+export function Sidebar({ onClose }: SidebarProps = {}) {
   const { data: tracks = [] } = useListTracks();
   const { data: playlists = [] } = useListPlaylists();
   const { isScanning } = useFileSystem();
@@ -77,14 +81,26 @@ export function Sidebar() {
     </button>
   );
 
+  const handleNavClick = (fn: () => void) => {
+    fn();
+    onClose?.();
+  };
+
   return (
-    <div className="w-52 flex-shrink-0 bg-sidebar border-r border-border flex flex-col h-full overflow-hidden">
+    <div className="w-72 sm:w-52 flex-shrink-0 bg-sidebar border-r border-border flex flex-col h-full overflow-hidden">
       {/* Logo + Search */}
       <div className="p-3 border-b border-border space-y-3">
-        <h1 className="text-base font-bold tracking-tight text-primary flex items-center gap-2">
-          <Music2 className="w-5 h-5" />
-          playd.music
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-base font-bold tracking-tight text-primary flex items-center gap-2">
+            <Music2 className="w-5 h-5" />
+            playd.music
+          </h1>
+          {onClose && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={onClose}>
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -102,7 +118,7 @@ export function Sidebar() {
           {/* All Songs */}
           <div className="px-2 mb-1">
             <button
-              onClick={() => setLibraryFilter({ type: 'all', label: 'All Songs' })}
+              onClick={() => handleNavClick(() => setLibraryFilter({ type: 'all', label: 'All Songs' }))}
               className={clsx(
                 'w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-xs font-medium transition-colors',
                 libraryFilter.type === 'all'
@@ -127,7 +143,7 @@ export function Sidebar() {
                     label={artist}
                     indent
                     active={libraryFilter.type === 'artist' && libraryFilter.value === artist}
-                    onClick={() => setLibraryFilter({ type: 'artist', value: artist, label: artist })}
+                    onClick={() => handleNavClick(() => setLibraryFilter({ type: 'artist', value: artist, label: artist }))}
                   />
                 ))}
                 {filteredArtists.length === 0 && (
@@ -148,7 +164,7 @@ export function Sidebar() {
                     label={album}
                     indent
                     active={libraryFilter.type === 'album' && libraryFilter.value === album}
-                    onClick={() => setLibraryFilter({ type: 'album', value: album, label: album })}
+                    onClick={() => handleNavClick(() => setLibraryFilter({ type: 'album', value: album, label: album }))}
                   />
                 ))}
                 {filteredAlbums.length === 0 && (

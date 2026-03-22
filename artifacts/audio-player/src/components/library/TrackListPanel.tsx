@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef } from 'react';
 import { useListTracks } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronUp, ChevronDown, Music, Pause, Play } from 'lucide-react';
+import { ChevronUp, ChevronDown, Music, Pause, Play, Menu } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
 
@@ -90,7 +90,11 @@ function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
-export function TrackListPanel() {
+interface TrackListPanelProps {
+  onMenuOpen?: () => void;
+}
+
+export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, libraryFilter } = useAudioPlayer();
 
@@ -179,8 +183,19 @@ export function TrackListPanel() {
     <div className="flex-1 flex flex-col overflow-hidden bg-background min-w-0">
       {/* Column headers */}
       <div className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none">
+        {/* Mobile: hamburger to open sidebar */}
+        {onMenuOpen && (
+          <button
+            className="sm:hidden mr-2 text-muted-foreground hover:text-foreground transition-colors"
+            onClick={onMenuOpen}
+            title="Open library"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        )}
+
         {/* # — fixed */}
-        <div className="w-12 shrink-0 text-right pr-3">
+        <div className="w-10 shrink-0 text-right pr-2">
           <ColHeader col="trackNumber" label="#" extraClass="justify-end" />
         </div>
 
@@ -190,25 +205,25 @@ export function TrackListPanel() {
           <ResizeHandle col="title" colWidths={colWidths} setColWidths={setColWidths} />
         </div>
 
-        {/* Artist — resizable */}
-        <div className="relative shrink-0 pr-3" style={{ width: colWidths.artist }}>
+        {/* Artist — resizable, hidden on mobile */}
+        <div className="relative shrink-0 pr-3 hidden sm:block" style={{ width: colWidths.artist }}>
           <ColHeader col="artist" label="Artist" />
           <ResizeHandle col="artist" colWidths={colWidths} setColWidths={setColWidths} />
         </div>
 
-        {/* Album — resizable */}
-        <div className="relative shrink-0 pr-3" style={{ width: colWidths.album }}>
+        {/* Album — resizable, hidden on mobile */}
+        <div className="relative shrink-0 pr-3 hidden sm:block" style={{ width: colWidths.album }}>
           <ColHeader col="album" label="Album" />
           <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
         </div>
 
-        {/* Year — fixed */}
-        <div className="w-14 shrink-0 text-right pr-3">
+        {/* Year — hidden on mobile */}
+        <div className="w-14 shrink-0 text-right pr-3 hidden sm:block">
           <ColHeader col="year" label="Year" extraClass="justify-end" />
         </div>
 
         {/* Duration — fixed */}
-        <div className="w-14 shrink-0 text-right">
+        <div className="w-12 shrink-0 text-right">
           <ColHeader col="duration" label="Time" extraClass="justify-end" />
         </div>
       </div>
@@ -236,13 +251,14 @@ export function TrackListPanel() {
                     onDoubleClick={() => playRow(track, idx)}
                     onClick={() => { if (!isCurrent) playRow(track, idx); }}
                     className={clsx(
-                      'flex items-center px-3 h-8 cursor-default select-none border-b border-border/10 group hover:bg-white/5',
+                      'flex items-center px-3 cursor-default select-none border-b border-border/10 group hover:bg-white/5',
+                      'h-11 sm:h-8',
                       isCurrent && 'bg-primary/10 text-primary',
                       !isCurrent && 'text-foreground/80',
                     )}
                   >
                     {/* # */}
-                    <div className="w-12 text-right pr-3 shrink-0 text-[11px] text-muted-foreground font-mono">
+                    <div className="w-10 text-right pr-2 shrink-0 text-[11px] text-muted-foreground font-mono">
                       {isCurrent ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); togglePlay(); }}
@@ -256,36 +272,46 @@ export function TrackListPanel() {
                       )}
                     </div>
 
-                    {/* Title */}
-                    <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.title }}>
-                      <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
-                        {track.title}
-                      </span>
+                    {/* Title — on mobile shows artist stacked underneath */}
+                    <div className="shrink-0 pr-3 overflow-hidden min-w-0 flex-1 sm:flex-none" style={{ width: undefined }}>
+                      <div className="sm:hidden flex flex-col justify-center min-w-0">
+                        <span className={clsx('text-xs truncate block leading-tight', isCurrent && 'font-semibold text-primary')}>
+                          {track.title}
+                        </span>
+                        <span className="text-[10px] truncate block text-muted-foreground leading-tight">
+                          {track.artist || '—'}
+                        </span>
+                      </div>
+                      <div className="hidden sm:block" style={{ width: colWidths.title }}>
+                        <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
+                          {track.title}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Artist */}
-                    <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
+                    {/* Artist — desktop only */}
+                    <div className="hidden sm:block shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
                       <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
                         {track.artist}
                       </span>
                     </div>
 
-                    {/* Album */}
-                    <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
+                    {/* Album — desktop only */}
+                    <div className="hidden sm:block shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
                       <span className="text-xs truncate block text-muted-foreground/70">
                         {track.album || '—'}
                       </span>
                     </div>
 
-                    {/* Year */}
-                    <div className="w-14 shrink-0 text-right pr-4">
+                    {/* Year — desktop only */}
+                    <div className="hidden sm:block w-14 shrink-0 text-right pr-4">
                       <span className="text-[11px] font-mono text-muted-foreground/50">
                         {track.year || ''}
                       </span>
                     </div>
 
                     {/* Duration */}
-                    <div className="w-14 shrink-0 text-right">
+                    <div className="w-12 shrink-0 text-right">
                       <span className="text-[11px] font-mono text-muted-foreground/70">
                         {formatDuration(track.duration ?? 0)}
                       </span>
