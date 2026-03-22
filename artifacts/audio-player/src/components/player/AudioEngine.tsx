@@ -34,7 +34,6 @@ export function AudioEngine() {
   useEffect(() => {
     if (!audioRef.current) {
       audioRef.current = new Audio();
-      audioRef.current.crossOrigin = "anonymous";
       
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       contextRef.current = ctx;
