@@ -5,7 +5,7 @@ import { useBulkUpsertTracks, getListTracksQueryKey } from '@workspace/api-clien
 import { useQueryClient } from '@tanstack/react-query';
 
 const ART_STORE_KEY = 'track-art';
-const AUDIO_EXTS = /\.(mp3|flac|m4a|aac|wav|ogg|opus|webm|wma|aiff|aif|alac)$/i;
+const AUDIO_EXTS = /\.(mp3|flac|m4a|m4p|aac|wav|ogg|opus|webm|wma|aiff|aif|alac|mp4|3gp)$/i;
 
 /**
  * In-memory store for File objects loaded via the webkitdirectory fallback.

@@ -41,7 +41,7 @@ const EMPTY_SUBSONIC: SubsonicFormState = { name: '', url: '', username: '', pas
 
 export function PreferencesPanel() {
   const { isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset } = useAudioPlayer();
-  const { loadSampleTrack, scanFolder, scanFileList, verifyPermission, isScanning, scanStatus } = useFileSystem();
+  const { loadSampleTrack, scanFileList, isScanning, scanStatus } = useFileSystem();
 
   // Hidden file inputs — clicked directly by buttons to preserve browser user-gesture.
   // Dynamic input.click() inside async functions loses the gesture context in sandboxed
@@ -102,33 +102,10 @@ export function PreferencesPanel() {
     setLocalFolders(updated);
   };
 
-  // Detect if we're inside an iframe (e.g. Replit preview) where
-  // showDirectoryPicker is blocked by the browser's security policy.
-  const isInIframe = (() => { try { return window !== window.top; } catch { return true; } })();
-
-  const handleAddFolder = async () => {
-    // In a real browser tab (not iframe), try the persistent File System Access API.
-    // This stores the handle in IndexedDB so the folder shows up in the list
-    // and can be re-scanned without re-picking.
-    if (!isInIframe && typeof (window as any).showDirectoryPicker === 'function') {
-      try {
-        const handle: FileSystemDirectoryHandle = await (window as any).showDirectoryPicker({ mode: 'read' });
-        const existing: FileSystemDirectoryHandle[] = (await get('music-folders')) || [];
-        if (!existing.some((h: FileSystemDirectoryHandle) => h.name === handle.name)) {
-          await set('music-folders', [...existing, handle]);
-        }
-        await scanFolder(handle);
-        loadLocalFolders();
-        return;
-      } catch (e: any) {
-        if (e?.name === 'AbortError') return; // user cancelled
-        // SecurityError or any other — fall through to the hidden input
-      }
-    }
-    // Iframe / fallback: click the rendered hidden input synchronously so the
-    // browser user-gesture context is preserved and the folder picker opens.
-    folderInputRef.current?.click();
-  };
+  // Always use the rendered hidden <input webkitdirectory> — it reliably
+  // enumerates all files (including protected/cloud locations) and is the only
+  // approach that consistently works across both iframe and standalone contexts.
+  const handleAddFolder = () => folderInputRef.current?.click();
 
   const handleAddFiles  = () => filesInputRef.current?.click();
 
