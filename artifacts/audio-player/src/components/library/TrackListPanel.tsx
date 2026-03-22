@@ -221,22 +221,6 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
           </button>
         )}
 
-        {/* Active filter label + clear */}
-        {libraryFilter.type !== 'all' ? (
-          <div className="flex items-center gap-1 min-w-0 flex-1">
-            <span className="text-[10px] text-primary/80 truncate">{libraryFilter.label}</span>
-            <button
-              onClick={() => setLibraryFilter({ type: 'all', value: '', label: 'All Songs' })}
-              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-              title="Show all songs"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        ) : (
-          <span className="text-[10px] text-muted-foreground/50 flex-1 truncate">All Songs</span>
-        )}
-
         {/* Refresh Folders */}
         <button
           onClick={handleRescan}
@@ -252,6 +236,22 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
           <RefreshCw className={clsx('w-3 h-3', isScanning && 'animate-spin')} />
           <span className="hidden sm:inline">Refresh</span>
         </button>
+
+        {/* Active filter label + clear */}
+        {libraryFilter.type !== 'all' ? (
+          <div className="flex items-center gap-1 min-w-0 flex-1">
+            <span className="text-[10px] text-primary/80 truncate">{libraryFilter.label}</span>
+            <button
+              onClick={() => setLibraryFilter({ type: 'all', value: '', label: 'All Songs' })}
+              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              title="Show all songs"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/50 flex-1 truncate">All Songs</span>
+        )}
 
         {/* Clear Library */}
         <button
