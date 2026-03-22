@@ -35,7 +35,6 @@ function loadColWidths() {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatDuration(secs: number): string {
-  if (!secs) return '—';
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
@@ -84,10 +83,41 @@ function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
     document.addEventListener('mouseup', onUp);
   }, [col, colWidths, setColWidths]);
 
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation();
+    const touch = e.touches[0];
+    dragging.current = true;
+    setIsActive(true);
+    const startX = touch.clientX;
+    const startW = colWidths[col];
+
+    const onTouchMove = (ev: TouchEvent) => {
+      if (!dragging.current) return;
+      ev.preventDefault();
+      const t = ev.touches[0];
+      const newW = Math.max(COL_MIN[col], startW + t.clientX - startX);
+      setColWidths(prev => ({ ...prev, [col]: newW }));
+    };
+
+    const onTouchEnd = (ev: TouchEvent) => {
+      dragging.current = false;
+      setIsActive(false);
+      const t = ev.changedTouches[0];
+      const newW = Math.max(COL_MIN[col], startW + t.clientX - startX);
+      localStorage.setItem(COL_LS[col], String(newW));
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
+
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd);
+  }, [col, colWidths, setColWidths]);
+
   return (
     <div
-      className="absolute right-0 top-0 h-full w-[10px] cursor-col-resize group/handle flex items-center justify-center z-10"
+      className="absolute right-0 top-0 h-full w-[20px] cursor-col-resize touch-none group/handle flex items-center justify-center z-10"
       onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
       title="Drag to resize column"
     >
       {/* Visible divider line — always shown, brightens on hover/drag */}
@@ -408,153 +438,147 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
         </button>
       </div>
 
-      {/* Column headers */}
-      <div className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none">
-        <div className="w-10 shrink-0 text-right pr-2">
-          <ColHeader col="trackNumber" label="#" extraClass="justify-end" />
-        </div>
-        <div className="relative shrink-0 pr-3" style={{ width: colWidths.title }}>
-          <ColHeader col="title" label="Title" />
-          <ResizeHandle col="title" colWidths={colWidths} setColWidths={setColWidths} />
-        </div>
-        <div className="relative shrink-0 pr-3 hidden sm:block" style={{ width: colWidths.artist }}>
-          <ColHeader col="artist" label="Artist" />
-          <ResizeHandle col="artist" colWidths={colWidths} setColWidths={setColWidths} />
-        </div>
-        <div className="relative shrink-0 pr-3 hidden sm:block" style={{ width: colWidths.album }}>
-          <ColHeader col="album" label="Album" />
-          <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
-        </div>
-        <div className="w-14 shrink-0 text-right pr-3 hidden sm:block">
-          <ColHeader col="year" label="Year" extraClass="justify-end" />
-        </div>
-        <div className="w-12 shrink-0 text-right">
-          <ColHeader col="duration" label="Time" extraClass="justify-end" />
-        </div>
-      </div>
+      {/* Horizontally scrollable area — column headers + track rows scroll together */}
+      <div className="flex-1 overflow-x-auto flex flex-col min-w-0">
 
-      {/* Track rows */}
-      <ScrollArea className="flex-1">
-        {sorted.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
-            <Music className="w-10 h-10 opacity-20" />
-            <p className="text-sm">No tracks yet — drop a folder here, or add one in Preferences</p>
+        {/* Column headers — always show all columns */}
+        <div
+          className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none"
+          style={{ minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album }}
+        >
+          <div className="w-10 shrink-0 text-right pr-2">
+            <ColHeader col="trackNumber" label="#" extraClass="justify-end" />
           </div>
-        ) : (
-          <div>
-            {sorted.map((track, idx) => {
-              const isCurrent  = currentTrack?.id === track.id;
-              const isSelected = selectedIds.has(track.id);
-              const isRowPlaying = isCurrent && isPlaying;
+          <div className="relative shrink-0 pr-3" style={{ width: colWidths.title }}>
+            <ColHeader col="title" label="Title" />
+            <ResizeHandle col="title" colWidths={colWidths} setColWidths={setColWidths} />
+          </div>
+          <div className="relative shrink-0 pr-4" style={{ width: colWidths.artist }}>
+            <ColHeader col="artist" label="Artist" />
+            <ResizeHandle col="artist" colWidths={colWidths} setColWidths={setColWidths} />
+          </div>
+          <div className="relative shrink-0 pr-4" style={{ width: colWidths.album }}>
+            <ColHeader col="album" label="Album" />
+            <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
+          </div>
+          <div className="w-14 shrink-0 text-right pr-4">
+            <ColHeader col="year" label="Year" extraClass="justify-end" />
+          </div>
+          <div className="w-12 shrink-0 text-right">
+            <ColHeader col="duration" label="Time" extraClass="justify-end" />
+          </div>
+        </div>
 
-              // Build the context tracks: if right-clicked track is in selection
-              // and multiple are selected, expose the full selection; otherwise just this track.
-              const ctxTracks = isSelected && selectedIds.size > 1 ? selectedTracks : [track];
+        {/* Track rows */}
+        <ScrollArea className="flex-1">
+          {sorted.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
+              <Music className="w-10 h-10 opacity-20" />
+              <p className="text-sm">No tracks yet — drop a folder here, or add one in Preferences</p>
+            </div>
+          ) : (
+            <div style={{ minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album }}>
+              {sorted.map((track, idx) => {
+                const isCurrent  = currentTrack?.id === track.id;
+                const isSelected = selectedIds.has(track.id);
+                const isRowPlaying = isCurrent && isPlaying;
 
-              return (
-                <TrackContextMenu
-                  key={track.id}
-                  track={track}
-                  selectedTracks={ctxTracks}
-                  queueIndex={idx}
-                  onPlayNow={() => {
-                    setSelectedIds(new Set([track.id]));
-                    playRow(track, idx);
-                  }}
-                  onPlaySelected={() => {
-                    if (ctxTracks.length > 1) {
-                      const queue = ctxTracks.map((t, i) => ({ id: i, trackId: t.id, position: i, track: t }));
-                      setQueue(queue);
-                      play(ctxTracks[0], queue, 0);
-                    } else {
-                      playRow(track, idx);
-                    }
-                  }}
-                  onQueueSelected={() => {
-                    ctxTracks.forEach(t => addToQueueEnd(t));
-                  }}
-                >
-                  <div
-                    onDoubleClick={() => {
+                const ctxTracks = isSelected && selectedIds.size > 1 ? selectedTracks : [track];
+
+                return (
+                  <TrackContextMenu
+                    key={track.id}
+                    track={track}
+                    selectedTracks={ctxTracks}
+                    queueIndex={idx}
+                    onPlayNow={() => {
                       setSelectedIds(new Set([track.id]));
                       playRow(track, idx);
                     }}
-                    onClick={(e) => handleRowClick(e, track, idx)}
-                    className={clsx(
-                      'flex items-center px-3 cursor-default select-none border-b border-border/10 group',
-                      'h-11 sm:h-8',
-                      isCurrent && isSelected  && 'bg-primary/15 text-primary',
-                      isCurrent && !isSelected && 'bg-primary/10 text-primary',
-                      !isCurrent && isSelected && 'bg-white/[0.07] text-foreground',
-                      !isCurrent && !isSelected && 'text-foreground/80 hover:bg-white/5',
-                    )}
+                    onPlaySelected={() => {
+                      if (ctxTracks.length > 1) {
+                        const queue = ctxTracks.map((t, i) => ({ id: i, trackId: t.id, position: i, track: t }));
+                        setQueue(queue);
+                        play(ctxTracks[0], queue, 0);
+                      } else {
+                        playRow(track, idx);
+                      }
+                    }}
+                    onQueueSelected={() => {
+                      ctxTracks.forEach(t => addToQueueEnd(t));
+                    }}
                   >
-                    {/* # */}
-                    <div className="w-10 text-right pr-2 shrink-0 text-[11px] text-muted-foreground font-mono">
-                      {isCurrent ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                          className="text-primary hover:text-primary/70 transition-colors flex items-center justify-end w-full"
-                          title={isRowPlaying ? 'Pause' : 'Play'}
-                        >
-                          {isRowPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                        </button>
-                      ) : (
-                        realTrackNumber(track.trackNumber) ?? (idx + 1)
+                    <div
+                      onDoubleClick={() => {
+                        setSelectedIds(new Set([track.id]));
+                        playRow(track, idx);
+                      }}
+                      onClick={(e) => handleRowClick(e, track, idx)}
+                      className={clsx(
+                        'flex items-center px-3 cursor-default select-none border-b border-border/10 group h-9',
+                        isCurrent && isSelected  && 'bg-primary/15 text-primary',
+                        isCurrent && !isSelected && 'bg-primary/10 text-primary',
+                        !isCurrent && isSelected && 'bg-white/[0.07] text-foreground',
+                        !isCurrent && !isSelected && 'text-foreground/80 hover:bg-white/5',
                       )}
-                    </div>
-
-                    {/* Title — on mobile shows artist stacked underneath */}
-                    <div className="shrink-0 pr-3 overflow-hidden min-w-0 flex-1 sm:flex-none" style={{ width: undefined }}>
-                      <div className="sm:hidden flex flex-col justify-center min-w-0">
-                        <span className={clsx('text-xs truncate block leading-tight', isCurrent && 'font-semibold text-primary')}>
-                          {track.title}
-                        </span>
-                        <span className="text-[10px] truncate block text-muted-foreground leading-tight">
-                          {track.artist || '—'}
-                        </span>
+                    >
+                      {/* # */}
+                      <div className="w-10 text-right pr-2 shrink-0 text-[11px] text-muted-foreground font-mono">
+                        {isCurrent ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                            className="text-primary hover:text-primary/70 transition-colors flex items-center justify-end w-full"
+                            title={isRowPlaying ? 'Pause' : 'Play'}
+                          >
+                            {isRowPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                          </button>
+                        ) : (
+                          realTrackNumber(track.trackNumber) ?? (idx + 1)
+                        )}
                       </div>
-                      <div className="hidden sm:block" style={{ width: colWidths.title }}>
+
+                      {/* Title */}
+                      <div className="shrink-0 pr-3 overflow-hidden" style={{ width: colWidths.title }}>
                         <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
                           {track.title}
                         </span>
                       </div>
-                    </div>
 
-                    {/* Artist — desktop only */}
-                    <div className="hidden sm:block shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
-                      <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
-                        {track.artist}
-                      </span>
-                    </div>
+                      {/* Artist */}
+                      <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
+                        <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
+                          {track.artist || '—'}
+                        </span>
+                      </div>
 
-                    {/* Album — desktop only */}
-                    <div className="hidden sm:block shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
-                      <span className="text-xs truncate block text-muted-foreground/70">
-                        {track.album || '—'}
-                      </span>
-                    </div>
+                      {/* Album */}
+                      <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
+                        <span className="text-xs truncate block text-muted-foreground/60">
+                          {track.album || '—'}
+                        </span>
+                      </div>
 
-                    {/* Year — desktop only */}
-                    <div className="hidden sm:block w-14 shrink-0 text-right pr-4">
-                      <span className="text-[11px] font-mono text-muted-foreground/50">
-                        {track.year || ''}
-                      </span>
-                    </div>
+                      {/* Year */}
+                      <div className="w-14 shrink-0 text-right pr-4">
+                        <span className="text-[11px] font-mono text-muted-foreground/50">
+                          {track.year || ''}
+                        </span>
+                      </div>
 
-                    {/* Duration */}
-                    <div className="w-12 shrink-0 text-right">
-                      <span className="text-[11px] font-mono text-muted-foreground/70">
-                        {formatDuration(track.duration ?? 0)}
-                      </span>
+                      {/* Duration */}
+                      <div className="w-12 shrink-0 text-right">
+                        <span className="text-[11px] font-mono text-muted-foreground">
+                          {formatDuration(track.duration ?? 0)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </TrackContextMenu>
-              );
-            })}
-          </div>
-        )}
-      </ScrollArea>
+                  </TrackContextMenu>
+                );
+              })}
+            </div>
+          )}
+        </ScrollArea>
+      </div>
 
       {/* Status bar */}
       <div className="h-6 border-t border-border bg-black/20 flex items-center px-3 gap-4 shrink-0 select-none">
