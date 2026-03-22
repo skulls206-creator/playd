@@ -102,8 +102,34 @@ export function PreferencesPanel() {
     setLocalFolders(updated);
   };
 
-  // These just click the hidden inputs synchronously — user gesture stays intact.
-  const handleAddFolder = () => folderInputRef.current?.click();
+  // Detect if we're inside an iframe (e.g. Replit preview) where
+  // showDirectoryPicker is blocked by the browser's security policy.
+  const isInIframe = (() => { try { return window !== window.top; } catch { return true; } })();
+
+  const handleAddFolder = async () => {
+    // In a real browser tab (not iframe), try the persistent File System Access API.
+    // This stores the handle in IndexedDB so the folder shows up in the list
+    // and can be re-scanned without re-picking.
+    if (!isInIframe && typeof (window as any).showDirectoryPicker === 'function') {
+      try {
+        const handle: FileSystemDirectoryHandle = await (window as any).showDirectoryPicker({ mode: 'read' });
+        const existing: FileSystemDirectoryHandle[] = (await get('music-folders')) || [];
+        if (!existing.some((h: FileSystemDirectoryHandle) => h.name === handle.name)) {
+          await set('music-folders', [...existing, handle]);
+        }
+        await scanFolder(handle);
+        loadLocalFolders();
+        return;
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return; // user cancelled
+        // SecurityError or any other — fall through to the hidden input
+      }
+    }
+    // Iframe / fallback: click the rendered hidden input synchronously so the
+    // browser user-gesture context is preserved and the folder picker opens.
+    folderInputRef.current?.click();
+  };
+
   const handleAddFiles  = () => filesInputRef.current?.click();
 
   const onFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -269,16 +295,29 @@ export function PreferencesPanel() {
                 </div>
               </div>
 
-              {isScanning && (
-                <div className="flex items-center gap-2 text-xs text-primary animate-pulse px-3 py-2 bg-primary/10 rounded-md mb-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              {(isScanning || scanStatus) && (
+                <div className={clsx(
+                  'flex items-center gap-2 text-xs px-3 py-2 rounded-md mb-2',
+                  isScanning
+                    ? 'text-primary animate-pulse bg-primary/10'
+                    : scanStatus.startsWith('✓')
+                      ? 'text-green-400 bg-green-400/10'
+                      : 'text-destructive bg-destructive/10'
+                )}>
+                  {isScanning
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    : scanStatus.startsWith('✓')
+                      ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      : <XCircle className="w-3.5 h-3.5 shrink-0" />
+                  }
                   {scanStatus || 'Scanning…'}
                 </div>
               )}
 
               {localFolders.length === 0 ? (
-                <div className="text-xs text-muted-foreground text-center py-6 border border-dashed border-border/30 rounded-md">
-                  No folders added yet.<br />Click "Add Folder" to import your music.
+                <div className="text-xs text-muted-foreground text-center py-5 border border-dashed border-border/30 rounded-md space-y-1 px-3">
+                  <p>No persistent folder saved.</p>
+                  <p className="text-[10px] opacity-70">Use <strong>Add Folder</strong> to import — your tracks are saved to the library even without a stored folder. Re-import each session for local playback.</p>
                 </div>
               ) : (
                 <div className="space-y-1.5">

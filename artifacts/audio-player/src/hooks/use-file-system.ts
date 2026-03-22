@@ -5,7 +5,7 @@ import { useBulkUpsertTracks, getListTracksQueryKey } from '@workspace/api-clien
 import { useQueryClient } from '@tanstack/react-query';
 
 const ART_STORE_KEY = 'track-art';
-const AUDIO_EXTS = /\.(mp3|flac|m4a|aac|wav|ogg|opus)$/i;
+const AUDIO_EXTS = /\.(mp3|flac|m4a|aac|wav|ogg|opus|webm|wma|aiff|aif|alac)$/i;
 
 /**
  * In-memory store for File objects loaded via the webkitdirectory fallback.
@@ -134,8 +134,8 @@ export function useFileSystem() {
       await bulkUpsert.mutateAsync({ data: { tracks } });
 
       await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-      setScanStatus(`Done — ${tracks.length} tracks added`);
-      setTimeout(() => setScanStatus(''), 3000);
+      setScanStatus(`✓ ${tracks.length} tracks imported successfully`);
+      setTimeout(() => setScanStatus(''), 8000);
     } catch (error) {
       console.error('Scan failed', error);
       setScanStatus('Scan failed — see console for details');
