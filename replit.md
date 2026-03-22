@@ -99,7 +99,7 @@ foobar2000-style audio player PWA. Served at `/`.
 - **Auth**: JWT Bearer auth (bcryptjs hashes, jsonwebtoken signs). Token stored in `localStorage` under `playd_token`. `setAuthTokenGetter` wired in `api-client-react` so all React Query hooks include `Authorization: Bearer` automatically. `useAuth` zustand store handles init/login/register/logout. `AuthGate` in App.tsx blocks the app until auth is verified.
 - **Per-user isolation**: every DB table (tracks, playlists, eq_presets, subsonic_servers, queued_tracks) has a nullable `user_id` FK. All API queries filter by `req.userId` (set by `requireAuth` middleware). Users never see each other's data.
 - **Local mode**: File System Access API (`window.showDirectoryPicker()`), folder handles persisted in IndexedDB via `idb-keyval`, tags parsed by native TS parsers (ID3v2, FLAC, Vorbis, WAV)
-- **Subsonic mode**: connects to Subsonic/OpenSubsonic REST servers; streams audio via server-side proxy
+- **Subsonic mode**: ALL Subsonic API calls (test, sync, stream) are client-side — the browser fetches directly from the Subsonic server. The API has a JWT-protected `/api/subsonic-servers/:id/config` endpoint that returns credentials; the browser uses them to build stream URLs and sync the library. This bypasses server-side NAT/port restrictions that blocked home servers on non-standard ports.
 - Playback via HTML5 `<audio>` → Web Audio API pipeline (GainNode → 10× BiquadFilterNode for EQ)
 - Media Session API for OS media keys, lock screen controls, system transport widget
 - Web Notifications API for persistent now-playing notification

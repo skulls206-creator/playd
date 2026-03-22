@@ -12,7 +12,6 @@ import {
   getListEqPresetsQueryKey,
   getListSubsonicServersQueryKey,
   getListTracksQueryKey,
-  testSubsonicServer,
   customFetch,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -44,6 +43,28 @@ interface SubsonicFormState {
 }
 
 const EMPTY_SUBSONIC: SubsonicFormState = { name: '', url: '', username: '', password: '' };
+
+// ── Client-side Subsonic helpers ──────────────────────────────────────────────
+interface SubsonicConfig { id: number; name: string; url: string; username: string; password: string }
+
+function buildSubsonicUrl(cfg: Omit<SubsonicConfig, 'id' | 'name'>, endpoint: string, extra?: Record<string, string | number>) {
+  const base = cfg.url.replace(/\/$/, '');
+  const params = new URLSearchParams({ v: '1.16.1', c: 'playd', f: 'json', u: cfg.username, p: cfg.password, ...Object.fromEntries(Object.entries(extra ?? {}).map(([k, v]) => [k, String(v)])) });
+  return `${base}/rest/${endpoint}?${params}`;
+}
+
+async function subsonicApiFetch(url: string): Promise<any> {
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json() as any;
+  const sub = data?.['subsonic-response'];
+  if (sub?.status !== 'ok') throw new Error(sub?.error?.message ?? 'Subsonic API error');
+  return sub;
+}
+
+async function fetchSubsonicConfig(id: number): Promise<SubsonicConfig> {
+  return customFetch<SubsonicConfig>(`/api/subsonic-servers/${id}/config`);
+}
 
 export function PreferencesPanel() {
   const { isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset } = useAudioPlayer();
@@ -227,20 +248,80 @@ export function PreferencesPanel() {
   const handleTestServer = async (id: number) => {
     setTestResults(r => ({ ...r, [id]: 'loading' }));
     try {
-      const result = await testSubsonicServer(id);
-      setTestResults(r => ({ ...r, [id]: { ok: result.success, msg: result.message ?? '' } }));
-    } catch {
-      setTestResults(r => ({ ...r, [id]: { ok: false, msg: 'Request failed' } }));
+      const cfg = await fetchSubsonicConfig(id);
+      const pingUrl = buildSubsonicUrl(cfg, 'ping.view');
+      const resp = await fetch(pingUrl, { signal: AbortSignal.timeout(10000) });
+      if (!resp.ok) { setTestResults(r => ({ ...r, [id]: { ok: false, msg: `HTTP ${resp.status}` } })); return; }
+      const data = await resp.json() as any;
+      const sub = data?.['subsonic-response'];
+      if (sub?.status === 'ok') {
+        setTestResults(r => ({ ...r, [id]: { ok: true, msg: `Connected · v${sub.version ?? '?'}` } }));
+      } else {
+        setTestResults(r => ({ ...r, [id]: { ok: false, msg: sub?.error?.message ?? 'Auth failed' } }));
+      }
+    } catch (e: any) {
+      const msg = e?.message?.includes('timeout') ? 'Timeout — server unreachable' : (e?.message ?? 'Connection failed');
+      setTestResults(r => ({ ...r, [id]: { ok: false, msg } }));
     }
   };
 
   const handleSyncServer = async (id: number) => {
     setSyncStates(s => ({ ...s, [id]: { status: 'syncing' } }));
     try {
-      const resp = await fetch(`/api/subsonic-servers/${id}/sync`, { method: 'POST' });
-      const data = await resp.json() as any;
-      if (!resp.ok || !data.success) throw new Error(data.error ?? `HTTP ${resp.status}`);
-      setSyncStates(s => ({ ...s, [id]: { status: 'done', msg: `${data.upserted} tracks synced` } }));
+      const cfg = await fetchSubsonicConfig(id);
+      const songMap = new Map<string, any>();
+
+      // Strategy 1: paginated album list → per-album song fetch
+      try {
+        const PAGE = 500; let offset = 0;
+        while (true) {
+          const sub = await subsonicApiFetch(buildSubsonicUrl(cfg, 'getAlbumList2', { type: 'alphabeticalByName', size: PAGE, offset }));
+          const albums: any[] = sub.albumList2?.album ?? [];
+          if (albums.length === 0) break;
+          for (const al of albums) {
+            try { const s2 = await subsonicApiFetch(buildSubsonicUrl(cfg, 'getAlbum', { id: String(al.id) })); for (const s of s2.album?.song ?? []) songMap.set(String(s.id), s); } catch { }
+          }
+          if (albums.length < PAGE) break;
+          offset += PAGE;
+        }
+      } catch { }
+
+      // Strategy 2: getSongs (if server supports it)
+      if (songMap.size === 0) {
+        try {
+          const PAGE = 500; let offset = 0;
+          while (true) {
+            const sub = await subsonicApiFetch(buildSubsonicUrl(cfg, 'getSongs', { size: PAGE, offset }));
+            const songs: any[] = sub.songs?.song ?? [];
+            if (songs.length === 0) break;
+            for (const s of songs) songMap.set(String(s.id), s);
+            if (songs.length < PAGE) break;
+            offset += PAGE;
+          }
+        } catch { }
+      }
+
+      if (songMap.size === 0) throw new Error('No tracks found — server may not support these endpoints');
+
+      const tracks = Array.from(songMap.values()).map(song => ({
+        title: song.title || 'Unknown Title',
+        artist: song.artist || 'Unknown Artist',
+        album: song.album || 'Unknown Album',
+        year: song.year ?? null,
+        genre: song.genre ?? null,
+        duration: Math.round(song.duration ?? 0),
+        trackNumber: song.track ?? null,
+        fileName: song.path?.split('/').pop() ?? String(song.id),
+        folderPath: song.path?.split('/').slice(0, -1).join('/') ?? '',
+        albumArtDataUrl: null as null,
+        source: 'subsonic' as const,
+        subsonicId: String(song.id),
+        subsonicServerId: cfg.id,
+      }));
+
+      await customFetch('/api/tracks/bulk', { method: 'POST', body: JSON.stringify({ tracks }) });
+
+      setSyncStates(s => ({ ...s, [id]: { status: 'done', msg: `${tracks.length} tracks synced` } }));
       await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
     } catch (e: any) {
       setSyncStates(s => ({ ...s, [id]: { status: 'error', msg: e?.message ?? 'Sync failed' } }));
@@ -273,7 +354,7 @@ export function PreferencesPanel() {
 
   return (
     <Sheet open={isPrefsOpen} onOpenChange={togglePrefs}>
-      <SheetContent side="right" className="w-[480px] bg-card border-border/50 p-0 flex flex-col overflow-hidden">
+      <SheetContent side="right" className="w-full max-w-[480px] bg-card border-border/50 p-0 flex flex-col overflow-hidden">
         <SheetHeader className="px-6 py-4 border-b border-border/30 shrink-0">
           <SheetTitle className="text-primary tracking-wide">Preferences</SheetTitle>
         </SheetHeader>
@@ -405,37 +486,37 @@ export function PreferencesPanel() {
 
             {/* Subsonic Servers */}
             <section>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
+              <div className="mb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 shrink-0">
                     <Cloud className="w-3.5 h-3.5 text-primary" />
-                    Subsonic / OpenSubsonic Servers
+                    Subsonic Servers
                   </h3>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Stream music from Navidrome, Airsonic, Jellyfin, etc.
-                  </p>
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs gap-1.5 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                      onClick={handleClearSubsonic}
+                      disabled={clearingSubsonic}
+                      title="Remove all Subsonic-synced tracks from the library"
+                    >
+                      {clearingSubsonic ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                      Clear
+                    </Button>
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 text-xs gap-1.5 border-border/50"
+                      onClick={() => { setSubsonicForm(EMPTY_SUBSONIC); setEditingServerId(null); setShowSubsonicForm(s => !s); }}
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Server
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-1.5">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs gap-1.5 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
-                    onClick={handleClearSubsonic}
-                    disabled={clearingSubsonic}
-                    title="Remove all Subsonic-synced tracks from the library"
-                  >
-                    {clearingSubsonic ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                    Clear Tracks
-                  </Button>
-                  <Button
-                    size="sm" variant="outline"
-                    className="h-7 text-xs gap-1.5 border-border/50"
-                    onClick={() => { setSubsonicForm(EMPTY_SUBSONIC); setEditingServerId(null); setShowSubsonicForm(s => !s); }}
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add Server
-                  </Button>
-                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Navidrome, Airsonic, Jellyfin, and any OpenSubsonic-compatible server.
+                </p>
               </div>
 
               {/* Add / Edit form */}
@@ -513,16 +594,16 @@ export function PreferencesPanel() {
                     const syncState = syncStates[server.id];
                     return (
                       <div key={server.id} className="p-3 bg-black/20 rounded-md border border-border/20 group">
-                        <div className="flex items-center gap-3">
-                          <Server className="w-4 h-4 text-primary/70 shrink-0" />
+                        <div className="flex items-start gap-2.5">
+                          <Server className="w-4 h-4 text-primary/70 shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{server.name}</div>
-                            <div className="text-[11px] text-muted-foreground font-mono truncate">{server.url}</div>
+                            <div className="text-sm font-medium">{server.name}</div>
+                            <div className="text-[11px] text-muted-foreground font-mono break-all">{server.url}</div>
                             <div className="text-[11px] text-muted-foreground">User: {server.username}</div>
                           </div>
-                          <div className="flex gap-1 shrink-0">
+                          <div className="flex gap-0.5 shrink-0 flex-wrap justify-end">
                             <Button
-                              variant="ghost" size="sm" className="h-6 text-[10px] px-2"
+                              variant="ghost" size="icon" className="h-6 w-6"
                               onClick={() => handleSyncServer(server.id)}
                               disabled={syncState?.status === 'syncing'}
                               title="Sync library from this server"
@@ -531,20 +612,21 @@ export function PreferencesPanel() {
                                 ? <Loader2 className="w-3 h-3 animate-spin" />
                                 : <RefreshCw className="w-3 h-3" />
                               }
-                              <span className="ml-1">Sync</span>
                             </Button>
                             <Button
                               variant="ghost" size="sm" className="h-6 text-[10px] px-2"
                               onClick={() => handleTestServer(server.id)}
                               disabled={testResult === 'loading'}
+                              title="Test connection to this server"
                             >
                               {testResult === 'loading' ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Test'}
                             </Button>
                             <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => handleEditServer(server)}>Edit</Button>
                             <Button
-                              variant="ghost" size="sm" className="h-6 text-[10px] px-2 hover:text-destructive"
+                              variant="ghost" size="icon" className="h-6 w-6 hover:text-destructive"
                               onClick={() => handleDeleteServer(server.id)}
                               disabled={deleteServer.isPending}
+                              title="Delete server"
                             >
                               <Trash2 className="w-3 h-3" />
                             </Button>

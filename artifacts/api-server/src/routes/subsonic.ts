@@ -111,6 +111,16 @@ router.get("/subsonic-servers/:id/test", requireAuth, async (req, res): Promise<
   }
 });
 
+// ── CONFIG (for client-side Subsonic API calls) ───────────────────────────────
+
+router.get("/subsonic-servers/:id/config", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [server] = await db.select().from(subsonicServersTable).where(and(eq(subsonicServersTable.id, id), eq(subsonicServersTable.userId, req.userId!)));
+  if (!server) { res.status(404).json({ error: "Server not found" }); return; }
+  res.json({ id: server.id, name: server.name, url: server.url.replace(/\/$/, ""), username: server.username, password: server.password });
+});
+
 // ── SYNC ──────────────────────────────────────────────────────────────────────
 
 async function subsonicFetch(url: string, timeoutMs = 15000): Promise<any> {
