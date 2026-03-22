@@ -3,6 +3,7 @@ import { QueuePanel } from '@/components/queue/QueuePanel';
 import { TransportBar } from '@/components/layout/TransportBar';
 import { AudioEngine } from '@/components/player/AudioEngine';
 import { EqPanel } from '@/components/player/EqPanel';
+import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
 import { useEffect } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,8 @@ export default function MainPlayer() {
         {/* Floating Overlays */}
         <EqPanel />
       </div>
+
+      <PreferencesPanel />
 
       {/* Footer Transport */}
       <TransportBar />

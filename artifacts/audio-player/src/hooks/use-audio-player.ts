@@ -32,6 +32,8 @@ interface PlayerState {
   setQueue: (items: QueueItem[]) => void;
   toggleMiniPlayer: () => void;
   toggleEq: () => void;
+  togglePrefs: () => void;
+  isPrefsOpen: boolean;
   setRepeatMode: (mode: 'off' | 'all' | 'one') => void;
   toggleShuffle: () => void;
   setEqBand: (index: number, value: number) => void;
@@ -57,6 +59,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   
   isMiniPlayer: false,
   isEqOpen: false,
+  isPrefsOpen: false,
   repeatMode: 'off',
   isShuffle: false,
   activeEqPreset: null,
@@ -150,6 +153,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   
   toggleMiniPlayer: () => set((state) => ({ isMiniPlayer: !state.isMiniPlayer })),
   toggleEq: () => set((state) => ({ isEqOpen: !state.isEqOpen })),
+  togglePrefs: () => set((state) => ({ isPrefsOpen: !state.isPrefsOpen })),
   
   setRepeatMode: (mode) => set({ repeatMode: mode }),
   toggleShuffle: () => set((state) => ({ isShuffle: !state.isShuffle })),

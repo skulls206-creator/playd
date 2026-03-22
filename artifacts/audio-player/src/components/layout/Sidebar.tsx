@@ -23,7 +23,7 @@ export function Sidebar() {
   const { data: tracks = [] } = useListTracks();
   const { data: playlists = [] } = useListPlaylists();
   const { addFolder, isScanning, scanStatus } = useFileSystem();
-  const { play, setQueue } = useAudioPlayer();
+  const { play, setQueue, togglePrefs } = useAudioPlayer();
   
   const [search, setSearch] = useState('');
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
@@ -183,7 +183,7 @@ export function Sidebar() {
       </ScrollArea>
 
       <div className="p-3 border-t border-border mt-auto">
-        <Button variant="ghost" className="w-full justify-start gap-2 h-8 text-xs text-muted-foreground hover:text-foreground">
+        <Button variant="ghost" className="w-full justify-start gap-2 h-8 text-xs text-muted-foreground hover:text-foreground" onClick={togglePrefs}>
           <Settings className="w-3.5 h-3.5" />
           Preferences
         </Button>

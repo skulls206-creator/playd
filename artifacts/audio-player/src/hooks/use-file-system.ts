@@ -156,6 +156,7 @@ export function useFileSystem() {
     scanProgress,
     scanStatus,
     addFolder,
+    scanFolder,
     getStoredHandles,
     verifyPermission,
     getFileFromPath,
