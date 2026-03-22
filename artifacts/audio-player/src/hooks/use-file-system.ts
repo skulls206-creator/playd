@@ -40,15 +40,51 @@ async function detectMimeType(file: File): Promise<string | undefined> {
 }
 
 /**
- * If the file has no useful MIME type, detect it from magic bytes and return
- * a new Blob with the correct type so music-metadata-browser picks the right
- * parser. Does not copy file content — just wraps the existing blob.
+ * Always detect MIME type from magic bytes and wrap the file with the correct
+ * type so music-metadata-browser picks the right parser. We override the
+ * browser-supplied type because .opus files can arrive as 'video/ogg',
+ * 'audio/opus', or '' depending on the browser/OS — all of which confuse the
+ * parser. Magic bytes are authoritative.
  */
 async function withMimeType(file: File): Promise<Blob> {
-  if (file.type && file.type !== 'application/octet-stream') return file;
   const mime = await detectMimeType(file);
-  if (!mime) return file;
-  return new Blob([file], { type: mime });
+  if (mime && mime !== file.type) return new Blob([file], { type: mime });
+  return file;
+}
+
+/**
+ * Parse artist and title from a YouTube Music filename.
+ * Handles patterns like:
+ *   "NF - HOPE-(p).opus"              → { artist: "NF",    title: "HOPE" }
+ *   "Token - Cough Freestyle-(p).opus" → { artist: "Token", title: "Cough Freestyle" }
+ *   "Just a Title.mp3"                 → { artist: "",      title: "Just a Title" }
+ */
+function parseFilenameMetadata(fileName: string): { artist: string; title: string } {
+  // Strip extension
+  let name = fileName.replace(/\.[^.]+$/, '');
+  // Strip YouTube Music's -(p) download marker (may have spaces around dash)
+  name = name.replace(/\s*-\s*\(p\)\s*$/, '').trim();
+  // Try "Artist - Title" split on first occurrence of " - "
+  const sep = name.indexOf(' - ');
+  if (sep > 0) {
+    return { artist: name.slice(0, sep).trim(), title: name.slice(sep + 3).trim() };
+  }
+  return { artist: '', title: name.trim() };
+}
+
+/**
+ * Pull a vorbis/ID3 tag value by key from native tag blocks.
+ * Useful when music-metadata-browser's common mapping misses a field.
+ */
+function nativeTag(native: mm.INativeTagDict | undefined, ...keys: string[]): string | undefined {
+  if (!native) return undefined;
+  for (const [, tagList] of Object.entries(native)) {
+    for (const key of keys) {
+      const hit = tagList.find(t => t.id.toUpperCase() === key.toUpperCase());
+      if (hit?.value) return String(hit.value);
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -152,28 +188,46 @@ export function useFileSystem() {
         // Store the File object in memory for session playback regardless
         inMemoryFiles.set(`${folderPath}/${fileName}`, file);
 
+        // Filename is always available as a last-resort fallback
+        const fileMeta = parseFilenameMetadata(fileName);
+
         try {
-          const blob = await withMimeType(file);
-          const metadata = await mm.parseBlob(blob, { duration: true, skipCovers: false });
+          const blobToScan = await withMimeType(file);
+          const metadata = await mm.parseBlob(blobToScan, { duration: true, skipCovers: false });
 
           // Album art → IndexedDB only (not sent to server)
           if (metadata.common.picture?.length) {
             const pic = metadata.common.picture[0];
-            const blob = new Blob([pic.data], { type: pic.format });
+            const artBlob = new Blob([pic.data], { type: pic.format });
             const dataUrl: string = await new Promise(resolve => {
               const reader = new FileReader();
               reader.onload = e => resolve(e.target?.result as string);
-              reader.readAsDataURL(blob);
+              reader.readAsDataURL(artBlob);
             });
             artStore[relativePath] = dataUrl;
           }
 
+          // Artist: common → native vorbis ARTIST tag → filename parse → empty
+          const artist =
+            metadata.common.artist ||
+            (metadata.common.artists as string[] | undefined)?.[0] ||
+            nativeTag(metadata.native, 'ARTIST', 'artist') ||
+            fileMeta.artist ||
+            '';
+
+          // Title: common → native tag → filename parse → raw file name
+          const title =
+            metadata.common.title ||
+            nativeTag(metadata.native, 'TITLE', 'title') ||
+            fileMeta.title ||
+            fileName;
+
           tracks.push({
-            title: metadata.common.title || file.name || fileName,
-            artist: metadata.common.artist || 'Unknown Artist',
-            album: metadata.common.album || 'Unknown Album',
+            title,
+            artist,
+            album: metadata.common.album || nativeTag(metadata.native, 'ALBUM') || 'Unknown Album',
             year: metadata.common.year || null,
-            genre: metadata.common.genre?.[0] || null,
+            genre: metadata.common.genre?.[0] || nativeTag(metadata.native, 'GENRE') || null,
             duration: Math.round(metadata.format.duration || 0),
             trackNumber: metadata.common.track?.no || null,
             fileName,
@@ -182,11 +236,10 @@ export function useFileSystem() {
             source: 'local',
           });
         } catch {
-          // Can't read audio metadata — add as a bare file entry anyway.
-          // The user said their folder is all music, so trust them.
+          // Metadata parse failed — fall back entirely to filename parsing.
           tracks.push({
-            title: file.name || fileName,
-            artist: '',
+            title: fileMeta.title || fileName,
+            artist: fileMeta.artist || '',
             album: '',
             year: null,
             genre: null,
