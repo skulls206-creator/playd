@@ -294,6 +294,7 @@ export function useFileSystem() {
     addFiles,
     loadSampleTrack,
     scanFolder,
+    scanFileList,
     getStoredHandles,
     verifyPermission,
     getFileFromPath,

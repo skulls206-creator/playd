@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import {
@@ -41,7 +41,13 @@ const EMPTY_SUBSONIC: SubsonicFormState = { name: '', url: '', username: '', pas
 
 export function PreferencesPanel() {
   const { isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset } = useAudioPlayer();
-  const { addFolder, addFiles, loadSampleTrack, scanFolder, verifyPermission, isScanning, scanStatus } = useFileSystem();
+  const { loadSampleTrack, scanFolder, scanFileList, verifyPermission, isScanning, scanStatus } = useFileSystem();
+
+  // Hidden file inputs — clicked directly by buttons to preserve browser user-gesture.
+  // Dynamic input.click() inside async functions loses the gesture context in sandboxed
+  // iframes, causing the picker to silently do nothing.
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const filesInputRef  = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
   // Subsonic
@@ -96,13 +102,24 @@ export function PreferencesPanel() {
     setLocalFolders(updated);
   };
 
-  const handleAddFolder = async () => {
-    const ok = await addFolder();
-    if (ok) loadLocalFolders();
+  // These just click the hidden inputs synchronously — user gesture stays intact.
+  const handleAddFolder = () => folderInputRef.current?.click();
+  const handleAddFiles  = () => filesInputRef.current?.click();
+
+  const onFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      await scanFileList(files);
+      loadLocalFolders();
+    }
+    // Reset so the same folder can be re-picked
+    e.target.value = '';
   };
 
-  const handleAddFiles = async () => {
-    await addFiles();
+  const onFilesInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) await scanFileList(files);
+    e.target.value = '';
   };
 
   // Subsonic helpers
@@ -219,6 +236,25 @@ export function PreferencesPanel() {
                   </p>
                 </div>
                 <div className="flex gap-1.5 flex-wrap justify-end">
+                  {/* Hidden inputs — buttons click these directly to preserve browser user-gesture */}
+                  <input
+                    ref={folderInputRef}
+                    type="file"
+                    // webkitdirectory makes this a folder picker; do NOT set `accept`
+                    // alongside webkitdirectory — it conflicts in Chrome/Edge and returns 0 files
+                    {...{ webkitdirectory: '' } as any}
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={onFolderInputChange}
+                  />
+                  <input
+                    ref={filesInputRef}
+                    type="file"
+                    multiple
+                    accept=".mp3,.flac,.m4a,.aac,.wav,.ogg,.opus"
+                    style={{ display: 'none' }}
+                    onChange={onFilesInputChange}
+                  />
                   <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-primary/70 hover:text-primary" onClick={loadSampleTrack} disabled={isScanning} title="Load the bundled demo track">
                     Load Sample
                   </Button>
