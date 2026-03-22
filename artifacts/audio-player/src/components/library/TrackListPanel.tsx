@@ -115,7 +115,7 @@ interface TrackListPanelProps {
 export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
-  const { isScanning, scanProgress, scanStatus, addFolder, importDroppedItems } = useFileSystem();
+  const { isScanning, scanProgress, scanStatus, rescanAll, importDroppedItems } = useFileSystem();
   const queryClient = useQueryClient();
 
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -130,11 +130,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const dragCounterRef = useRef(0);
 
   const handleRescan = async () => {
-    // Open the directory picker and do a full fresh scan — same as Add Folder.
-    // This reliably re-imports all songs even after clearing the library or
-    // after a page reload where stored permission handles have expired.
-    await addFolder();
-    queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    await rescanAll();
   };
 
   const handleClearLibrary = async () => {
@@ -318,7 +314,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
         <button
           onClick={handleRescan}
           disabled={isScanning}
-          title="Rescan all added folders"
+          title="Reconnect to saved folders"
           className={clsx(
             'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
             isScanning
