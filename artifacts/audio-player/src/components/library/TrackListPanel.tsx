@@ -598,7 +598,10 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
 
                       {/* Duration — always visible */}
                       <div className="w-12 shrink-0 text-right">
-                        <span className="text-[11px] font-mono text-muted-foreground">
+                        <span className={clsx(
+                          'text-[11px] font-mono',
+                          isCurrent ? 'text-primary/80' : 'text-foreground/50',
+                        )}>
                           {formatDuration(track.duration ?? 0)}
                         </span>
                       </div>
