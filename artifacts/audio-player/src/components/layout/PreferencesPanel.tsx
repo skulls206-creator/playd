@@ -65,6 +65,7 @@ export function PreferencesPanel() {
   const [localFolders, setLocalFolders] = useState<string[]>([]);
   const [scanningFolderName, setScanningFolderName] = useState<string | null>(null);
   const [clearingLibrary, setClearingLibrary] = useState(false);
+  const [clearingSubsonic, setClearingSubsonic] = useState(false);
 
   // Subsonic form state
   const [showSubsonicForm, setShowSubsonicForm] = useState(false);
@@ -114,6 +115,17 @@ export function PreferencesPanel() {
       await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
     } finally {
       setClearingLibrary(false);
+    }
+  };
+
+  const handleClearSubsonic = async () => {
+    if (!confirm('Remove all Subsonic-synced tracks from the library? Local tracks are kept. Re-sync from the server to restore.')) return;
+    setClearingSubsonic(true);
+    try {
+      await fetch('/api/tracks/subsonic', { method: 'DELETE' });
+      await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    } finally {
+      setClearingSubsonic(false);
     }
   };
 
@@ -377,14 +389,27 @@ export function PreferencesPanel() {
                     Stream music from Navidrome, Airsonic, Jellyfin, etc.
                   </p>
                 </div>
-                <Button
-                  size="sm" variant="outline"
-                  className="h-7 text-xs gap-1.5 border-border/50"
-                  onClick={() => { setSubsonicForm(EMPTY_SUBSONIC); setEditingServerId(null); setShowSubsonicForm(s => !s); }}
-                >
-                  <Plus className="w-3 h-3" />
-                  Add Server
-                </Button>
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs gap-1.5 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                    onClick={handleClearSubsonic}
+                    disabled={clearingSubsonic}
+                    title="Remove all Subsonic-synced tracks from the library"
+                  >
+                    {clearingSubsonic ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    Clear Tracks
+                  </Button>
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-7 text-xs gap-1.5 border-border/50"
+                    onClick={() => { setSubsonicForm(EMPTY_SUBSONIC); setEditingServerId(null); setShowSubsonicForm(s => !s); }}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Server
+                  </Button>
+                </div>
               </div>
 
               {/* Add / Edit form */}

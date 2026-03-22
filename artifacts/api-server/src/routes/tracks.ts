@@ -147,6 +147,11 @@ router.delete("/tracks/local", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
+router.delete("/tracks/subsonic", async (req, res): Promise<void> => {
+  await db.delete(tracksTable).where(eq(tracksTable.source, "subsonic"));
+  res.sendStatus(204);
+});
+
 router.delete("/tracks/folder", async (req, res): Promise<void> => {
   const { name } = req.query as Record<string, string>;
   if (!name) { res.status(400).json({ error: "folder name required" }); return; }
