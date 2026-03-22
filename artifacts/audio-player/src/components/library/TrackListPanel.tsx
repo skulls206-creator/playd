@@ -24,9 +24,8 @@ const COLS: { key: SortCol; label: string; className: string }[] = [
   { key: 'duration',    label: 'Time',   className: 'w-14 text-right shrink-0' },
 ];
 
-/** Real disc track numbers are 1–999. Larger values are server IDs, not track numbers. */
 function realTrackNumber(n: number | null | undefined): number | null {
-  if (n == null || n <= 0 || n > 999) return null;
+  if (n == null || n <= 0) return null;
   return n;
 }
 
