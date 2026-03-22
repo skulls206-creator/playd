@@ -193,8 +193,14 @@ export function useFileSystem() {
         const fileMeta = parseFilenameMetadata(fileName);
 
         try {
-          const blobToScan = await withMimeType(file);
-          const metadata = await mm.parseBlob(blobToScan, { duration: true, skipCovers: false });
+          const arrayBuffer = await file.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          const mime = await detectMimeType(file);
+          const metadata = await mm.parseBuffer(
+            uint8Array,
+            { mimeType: mime || file.type || undefined, path: file.name, size: file.size },
+            { duration: true, skipCovers: false }
+          );
 
           // Album art → IndexedDB only (not sent to server)
           if (metadata.common.picture?.length) {
@@ -242,12 +248,13 @@ export function useFileSystem() {
             albumArtDataUrl: null,
             source: 'local',
           });
-        } catch {
+        } catch (err) {
           // Metadata parse failed — fall back entirely to filename parsing.
+          console.warn(`[playd] metadata parse failed for "${fileName}":`, err);
           tracks.push({
             title: fileMeta.title || fileName,
             artist: fileMeta.artist || '',
-            album: '',
+            album: 'Unknown Album',
             year: null,
             genre: null,
             duration: 0,
