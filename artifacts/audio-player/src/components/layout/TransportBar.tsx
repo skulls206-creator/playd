@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { 
   Play, Pause, SkipBack, SkipForward, 
-  Shuffle, Repeat, Repeat1, Volume2, VolumeX, SlidersHorizontal, ListMusic
+  Shuffle, Repeat, Repeat1, Volume2, VolumeX, SlidersHorizontal, ListMusic, Settings
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
@@ -18,9 +18,9 @@ function formatTime(seconds: number) {
 export function TransportBar() {
   const { 
     currentTrack, isPlaying, progress, duration, volume, isMuted,
-    repeatMode, isShuffle, isEqOpen, isQueueOpen,
+    repeatMode, isShuffle, isEqOpen, isQueueOpen, isPrefsOpen,
     play, pause, togglePlay, next, prev, seek, setVolume, toggleMute,
-    setRepeatMode, toggleShuffle, toggleEq, toggleQueue
+    setRepeatMode, toggleShuffle, toggleEq, toggleQueue, togglePrefs
   } = useAudioPlayer();
 
   return (
@@ -111,6 +111,14 @@ export function TransportBar() {
           title="Equalizer"
         >
           <SlidersHorizontal className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="ghost" size="icon"
+          className={clsx("h-8 w-8", isPrefsOpen && "bg-primary/20 text-primary")}
+          onClick={togglePrefs}
+          title="Preferences"
+        >
+          <Settings className="w-4 h-4" />
         </Button>
 
         <div className="flex items-center gap-2 w-32">
