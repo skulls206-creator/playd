@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { get, set } from 'idb-keyval';
 import { useBulkUpsertTracks, getListTracksQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -748,8 +748,25 @@ export function useFileSystem() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatus, setScanStatus] = useState('');
+  const statusClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bulkUpsert = useBulkUpsertTracks();
   const queryClient = useQueryClient();
+
+  // Always cancel any pending clear before setting a new status message.
+  // Pass clearAfterMs to auto-clear; omit to leave it up indefinitely.
+  const setStatus = (msg: string, clearAfterMs?: number) => {
+    if (statusClearRef.current) {
+      clearTimeout(statusClearRef.current);
+      statusClearRef.current = null;
+    }
+    setScanStatus(msg);
+    if (clearAfterMs) {
+      statusClearRef.current = setTimeout(() => {
+        setScanStatus('');
+        statusClearRef.current = null;
+      }, clearAfterMs);
+    }
+  };
 
   const verifyPermission = async (fileHandle: FileSystemHandle, readWrite = false) => {
     const options = { mode: readWrite ? 'readwrite' : 'read' } as any;
@@ -774,7 +791,7 @@ export function useFileSystem() {
   ) => {
     setIsScanning(true);
     setScanProgress(0);
-    setScanStatus(`Scanning ${rootName}…`);
+    setStatus(`Scanning ${rootName}…`);
 
     try {
       const tracks: any[] = [];
@@ -949,7 +966,7 @@ export function useFileSystem() {
 
         count++;
         setScanProgress(count);
-        setScanStatus(`Scanning ${rootName}… (${count} files loaded)`);
+        setStatus(`Scanning ${rootName}… (${count} files loaded)`);
       }
 
       await set(ART_STORE_KEY, artStore);
@@ -958,21 +975,18 @@ export function useFileSystem() {
         const extInfo = skippedExts && skippedExts.length > 0
           ? ` Found: ${[...new Set(skippedExts)].slice(0, 6).join(', ')}`
           : '';
-        setScanStatus(`No audio files found.${extInfo}`);
-        setTimeout(() => setScanStatus(''), 8000);
+        setStatus(`No audio files found.${extInfo}`, 8000);
         return;
       }
 
-      setScanStatus(`Saving ${tracks.length} tracks to library…`);
+      setStatus(`Saving ${tracks.length} tracks to library…`);
       await bulkUpsert.mutateAsync({ data: { tracks } });
 
       await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-      setScanStatus(`✓ ${tracks.length} tracks imported successfully`);
-      setTimeout(() => setScanStatus(''), 8000);
+      setStatus(`✓ ${tracks.length} tracks imported successfully`, 8000);
     } catch (error) {
       console.error('Scan failed', error);
-      setScanStatus('Scan failed — see console for details');
-      setTimeout(() => setScanStatus(''), 5000);
+      setStatus('Scan failed — see console for details', 5000);
     } finally {
       setIsScanning(false);
     }
@@ -984,7 +998,7 @@ export function useFileSystem() {
 
     const hasPermission = await verifyPermission(dirHandle);
     if (!hasPermission) {
-      setScanStatus('Permission denied');
+      setStatus('Permission denied', 5000);
       return;
     }
 
@@ -1115,8 +1129,7 @@ export function useFileSystem() {
   const rescanAll = async (): Promise<void> => {
     const handles = await getStoredHandles();
     if (handles.length === 0) {
-      setScanStatus('No folders added — use Add Folder to import music');
-      setTimeout(() => setScanStatus(''), 5000);
+      setStatus('No folders added — use Add Folder to import music', 5000);
       return;
     }
     for (const handle of handles) {
