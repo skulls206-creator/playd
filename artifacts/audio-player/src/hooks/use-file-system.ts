@@ -230,7 +230,13 @@ export function useFileSystem() {
             year: metadata.common.year || null,
             genre: metadata.common.genre?.[0] || nativeTag(metadata.native, 'GENRE') || null,
             duration: Math.round(metadata.format.duration || 0),
-            trackNumber: metadata.common.track?.no || null,
+            trackNumber: (() => {
+              const n = metadata.common.track?.no;
+              if (n && n > 0) return n;
+              const raw = nativeTag(metadata.native, 'TRACKNUMBER', 'tracknumber');
+              const parsed = raw ? parseInt(raw, 10) : NaN;
+              return isNaN(parsed) || parsed <= 0 ? null : parsed;
+            })(),
             fileName,
             folderPath,
             albumArtDataUrl: null,
