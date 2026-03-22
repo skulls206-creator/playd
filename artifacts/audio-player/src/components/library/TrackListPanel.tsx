@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useListTracks } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronUp, ChevronDown, Music } from 'lucide-react';
+import { ChevronUp, ChevronDown, Music, Pause, Play } from 'lucide-react';
 import { clsx } from 'clsx';
 
 type SortCol = 'trackNumber' | 'title' | 'artist' | 'album' | 'duration' | 'year';
@@ -32,7 +32,7 @@ function realTrackNumber(n: number | null | undefined): number | null {
 
 export function TrackListPanel() {
   const { data: allTracks = [] } = useListTracks();
-  const { currentTrack, play, setQueue, libraryFilter } = useAudioPlayer();
+  const { currentTrack, isPlaying, play, pause, togglePlay, setQueue, libraryFilter } = useAudioPlayer();
 
   const [sortCol, setSortColRaw] = useState<SortCol>(
     () => (localStorage.getItem('playd_sortCol') as SortCol | null) ?? 'artist'
@@ -140,29 +140,39 @@ export function TrackListPanel() {
         ) : (
           <div>
             {sorted.map((track, idx) => {
-              const isPlaying = currentTrack?.id === track.id;
+              const isCurrent = currentTrack?.id === track.id;
+              const isRowPlaying = isCurrent && isPlaying;
               return (
                 <div
                   key={track.id}
-                  onDoubleClick={() => playRow(track, idx)}
+                  onClick={() => { if (!isCurrent) playRow(track, idx); }}
                   className={clsx(
                     'flex items-center px-3 h-8 gap-0 cursor-default select-none border-b border-border/10 group hover:bg-white/5',
-                    isPlaying && 'bg-primary/10 text-primary',
-                    !isPlaying && 'text-foreground/80'
+                    isCurrent && 'bg-primary/10 text-primary',
+                    !isCurrent && 'text-foreground/80'
                   )}
                 >
-                  {/* # */}
+                  {/* # — shows play/pause toggle for active track, track number otherwise */}
                   <div className="w-12 text-right pr-3 shrink-0 text-[11px] text-muted-foreground font-mono">
-                    {isPlaying
-                      ? <span className="text-primary">▶</span>
-                      : (realTrackNumber(track.trackNumber) != null
-                          ? realTrackNumber(track.trackNumber)
-                          : <span className="opacity-30">{idx + 1}</span>)
-                    }
+                    {isCurrent ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                        className="text-primary hover:text-primary/70 transition-colors flex items-center justify-end w-full"
+                        title={isRowPlaying ? 'Pause' : 'Play'}
+                      >
+                        {isRowPlaying
+                          ? <Pause className="w-3 h-3" />
+                          : <Play className="w-3 h-3" />}
+                      </button>
+                    ) : (
+                      realTrackNumber(track.trackNumber) != null
+                        ? realTrackNumber(track.trackNumber)
+                        : <span className="opacity-30">{idx + 1}</span>
+                    )}
                   </div>
                   {/* Title */}
                   <div className="flex-1 min-w-0 pr-4">
-                    <span className={clsx('text-xs truncate block', isPlaying && 'font-semibold text-primary')}>
+                    <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
                       {track.title}
                     </span>
                   </div>

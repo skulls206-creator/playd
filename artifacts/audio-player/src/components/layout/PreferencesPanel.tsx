@@ -64,6 +64,7 @@ export function PreferencesPanel() {
   // Local folders state (from IndexedDB)
   const [localFolders, setLocalFolders] = useState<FileSystemDirectoryHandle[]>([]);
   const [scanningFolderName, setScanningFolderName] = useState<string | null>(null);
+  const [clearingLibrary, setClearingLibrary] = useState(false);
 
   // Subsonic form state
   const [showSubsonicForm, setShowSubsonicForm] = useState(false);
@@ -100,6 +101,17 @@ export function PreferencesPanel() {
     const updated = localFolders.filter(h => h.name !== handle.name);
     await set('music-folders', updated);
     setLocalFolders(updated);
+  };
+
+  const handleClearLibrary = async () => {
+    if (!confirm('Remove all local tracks from the library? Subsonic tracks are kept. You can re-import anytime.')) return;
+    setClearingLibrary(true);
+    try {
+      await fetch('/api/tracks/local', { method: 'DELETE' });
+      await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    } finally {
+      setClearingLibrary(false);
+    }
   };
 
   // Always use the rendered hidden <input webkitdirectory> — it reliably
@@ -268,6 +280,17 @@ export function PreferencesPanel() {
                   <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/50" onClick={handleAddFolder} disabled={isScanning} title="Pick a whole folder">
                     <Plus className="w-3 h-3" />
                     Add Folder
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs gap-1.5 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                    onClick={handleClearLibrary}
+                    disabled={isScanning || clearingLibrary}
+                    title="Remove all local tracks from the library"
+                  >
+                    {clearingLibrary ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    Clear Library
                   </Button>
                 </div>
               </div>
