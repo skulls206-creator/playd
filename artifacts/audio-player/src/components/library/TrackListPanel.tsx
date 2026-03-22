@@ -4,7 +4,7 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, RefreshCw, Trash2, X, FolderInput } from 'lucide-react';
+import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderPlus, Trash2, X, FolderInput } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
 import type { Track } from '@workspace/api-client-react';
@@ -115,7 +115,7 @@ interface TrackListPanelProps {
 export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
-  const { isScanning, scanProgress, scanStatus, rescanAll, importDroppedItems } = useFileSystem();
+  const { isScanning, scanProgress, scanStatus, addFolder, importDroppedItems } = useFileSystem();
   const queryClient = useQueryClient();
 
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -130,7 +130,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const dragCounterRef = useRef(0);
 
   const handleRescan = async () => {
-    await rescanAll();
+    await addFolder();
   };
 
   const handleClearLibrary = async () => {
@@ -314,7 +314,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
         <button
           onClick={handleRescan}
           disabled={isScanning}
-          title="Reconnect to saved folders"
+          title="Add folder to import music"
           className={clsx(
             'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
             isScanning
@@ -322,8 +322,8 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
               : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
           )}
         >
-          <RefreshCw className={clsx('w-3 h-3', isScanning && 'animate-spin')} />
-          <span>Refresh</span>
+          <FolderPlus className="w-3 h-3" />
+          <span>{isScanning ? 'Importing…' : 'Add Folder'}</span>
         </button>
 
         {/* Active filter label + scan status (always visible side-by-side) */}
