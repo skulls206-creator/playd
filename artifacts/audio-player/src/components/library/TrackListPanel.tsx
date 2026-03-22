@@ -202,10 +202,11 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   );
   const [colWidths, setColWidths] = useState(loadColWidths);
 
-  // Detect narrow mobile portrait — hides Artist/Album/Year, lets Title flex
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  // Detect narrow viewport — hides Artist/Album/Year columns, lets Title flex
+  // 768px threshold covers both real phones AND narrow browser windows (e.g. Replit preview at 677px)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 640);
+    const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
@@ -488,9 +489,9 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
               <ResizeHandle col="year" colWidths={colWidths} setColWidths={setColWidths} />
             </div>
           )}
-          {/* Spacer — absorbs remaining space so Time is pinned to the right */}
-          <div className="flex-1" />
-          {/* Duration — pinned to far right, fixed width, no handle */}
+          {/* Spacer — desktop only: absorbs remaining space so Time is pinned far right */}
+          {!isMobile && <div className="flex-1" />}
+          {/* Duration — always visible, pinned to far right */}
           <div className="w-12 shrink-0 text-right">
             <ColHeader col="duration" label="Time" extraClass="justify-end" />
           </div>
@@ -601,10 +602,10 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
                         </div>
                       )}
 
-                      {/* Spacer — pushes Duration to the far right */}
-                      <div className="flex-1" />
+                      {/* Spacer — desktop only: pushes Duration to far right */}
+                      {!isMobile && <div className="flex-1" />}
 
-                      {/* Duration — pinned to far right */}
+                      {/* Duration — always visible */}
                       <div className="w-12 shrink-0 text-right">
                         {(track.duration ?? 0) > 0 ? (
                           <span className={clsx(
