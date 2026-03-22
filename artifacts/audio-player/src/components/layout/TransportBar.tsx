@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
@@ -35,6 +35,31 @@ export function TransportBar() {
     if (!currentTrack) return;
     setNowPlayingOpen(v => !v);
   };
+
+  // ── Mobile volume long-press popup ───────────────────────────────────────
+  const [mobileVolOpen, setMobileVolOpen] = useState(false);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didOpen = useRef(false);
+
+  const onVolPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    didOpen.current = false;
+    holdTimer.current = setTimeout(() => {
+      didOpen.current = true;
+      setMobileVolOpen(true);
+    }, 400);
+  };
+
+  const onVolPointerUp = () => {
+    if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; }
+    if (!didOpen.current) toggleMute();
+  };
+
+  const onVolPointerCancel = () => {
+    if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; }
+  };
+
+  useEffect(() => () => { if (holdTimer.current) clearTimeout(holdTimer.current); }, []);
 
   const progressPct = duration ? (progress / duration) * 100 : 0;
 
@@ -147,13 +172,65 @@ export function TransportBar() {
             </Button>
           </div>
 
-          {/* Volume mute toggle + queue/prefs icons */}
+          {/* Volume: tap = mute, hold = vertical slider popup */}
           <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleMute}>
-              {isMuted || volume === 0
-                ? <VolumeX className="w-4 h-4" />
-                : <Volume2 className="w-4 h-4" />}
-            </Button>
+            <div className="relative">
+              {/* Backdrop to dismiss popup on outside tap */}
+              {mobileVolOpen && (
+                <div
+                  className="fixed inset-0 z-40"
+                  onPointerDown={() => setMobileVolOpen(false)}
+                />
+              )}
+
+              {/* Vertical volume popup — slides up from the button */}
+              {mobileVolOpen && (
+                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 bg-card/95 backdrop-blur border border-border rounded-2xl shadow-2xl px-3 py-4"
+                  onPointerDown={e => e.stopPropagation()}
+                >
+                  <span className="text-[10px] font-mono text-foreground/60 tabular-nums">
+                    {Math.round(isMuted ? 0 : volume * 100)}%
+                  </span>
+                  <div className="h-36 flex items-center justify-center">
+                    <Slider
+                      orientation="vertical"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[isMuted ? 0 : Math.round(volume * 100)]}
+                      onValueChange={([val]) => {
+                        setVolume(val / 100);
+                        if (val > 0 && isMuted) toggleMute();
+                      }}
+                      className="h-36"
+                    />
+                  </div>
+                  <button
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    onPointerDown={e => { e.stopPropagation(); toggleMute(); }}
+                  >
+                    {isMuted || volume === 0
+                      ? <VolumeX className="w-4 h-4" />
+                      : <Volume2 className="w-4 h-4" />}
+                  </button>
+                </div>
+              )}
+
+              {/* The actual volume button */}
+              <button
+                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors select-none touch-none"
+                onPointerDown={onVolPointerDown}
+                onPointerUp={onVolPointerUp}
+                onPointerLeave={onVolPointerCancel}
+                onPointerCancel={onVolPointerCancel}
+                onContextMenu={e => e.preventDefault()}
+              >
+                {isMuted || volume === 0
+                  ? <VolumeX className="w-4 h-4" />
+                  : <Volume2 className="w-4 h-4" />}
+              </button>
+            </div>
+
             <Button
               variant="ghost" size="icon"
               className={clsx('h-8 w-8', isPrefsOpen && 'text-primary')}
