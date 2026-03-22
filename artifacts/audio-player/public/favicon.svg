@@ -1,3 +1,26 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <!-- Dark background with rounded corners -->
+  <rect width="180" height="180" rx="38" fill="#0a0a0a"/>
+
+  <!-- Subtle inner glow rim -->
+  <rect x="1" y="1" width="178" height="178" rx="37" fill="none" stroke="#FF3C00" stroke-width="1.5" stroke-opacity="0.18"/>
+
+  <!-- Waveform bars — 6 bars, center-aligned, symmetric heights -->
+  <!-- Bar 1 (leftmost, short) -->
+  <rect x="24" y="74" width="16" height="32" rx="5" fill="#FF3C00" fill-opacity="0.55"/>
+
+  <!-- Bar 2 -->
+  <rect x="46" y="56" width="16" height="68" rx="5" fill="#FF3C00" fill-opacity="0.75"/>
+
+  <!-- Bar 3 (tallest) -->
+  <rect x="68" y="38" width="16" height="104" rx="5" fill="#FF3C00"/>
+
+  <!-- Bar 4 (tallest mirror) -->
+  <rect x="96" y="38" width="16" height="104" rx="5" fill="#FF3C00"/>
+
+  <!-- Bar 5 -->
+  <rect x="118" y="56" width="16" height="68" rx="5" fill="#FF3C00" fill-opacity="0.75"/>
+
+  <!-- Bar 6 (rightmost, short) -->
+  <rect x="140" y="74" width="16" height="32" rx="5" fill="#FF3C00" fill-opacity="0.55"/>
 </svg>
