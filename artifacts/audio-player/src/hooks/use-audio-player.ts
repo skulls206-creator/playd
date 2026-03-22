@@ -25,6 +25,7 @@ interface PlayerState {
   // Modes & Settings
   isMiniPlayer: boolean;
   isEqOpen: boolean;
+  isQueueOpen: boolean;
   repeatMode: 'off' | 'all' | 'one';
   isShuffle: boolean;
   activeEqPreset: EqPreset | null;
@@ -42,6 +43,7 @@ interface PlayerState {
   setQueue: (items: QueueItem[]) => void;
   toggleMiniPlayer: () => void;
   toggleEq: () => void;
+  toggleQueue: () => void;
   togglePrefs: () => void;
   isPrefsOpen: boolean;
   setRepeatMode: (mode: 'off' | 'all' | 'one') => void;
@@ -57,14 +59,22 @@ interface PlayerState {
 
 const DEFAULT_EQ = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
+function loadPref<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : fallback; }
+  catch { return fallback; }
+}
+function savePref(key: string, value: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
 export const useAudioPlayer = create<PlayerState>((set, get) => ({
   libraryFilter: { type: 'all' },
   setLibraryFilter: (filter) => set({ libraryFilter: filter }),
 
   currentTrack: null,
   isPlaying: false,
-  volume: 1,
-  isMuted: false,
+  volume: loadPref('playd_volume', 1),
+  isMuted: loadPref('playd_muted', false),
   progress: 0,
   duration: 0,
   queue: [],
@@ -73,8 +83,9 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   isMiniPlayer: false,
   isEqOpen: false,
   isPrefsOpen: false,
-  repeatMode: 'off',
-  isShuffle: false,
+  isQueueOpen: false,
+  repeatMode: loadPref<'off'|'all'|'one'>('playd_repeat', 'off'),
+  isShuffle: loadPref('playd_shuffle', false),
   activeEqPreset: null,
   eqBands: DEFAULT_EQ,
 
@@ -160,16 +171,27 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   }),
 
   seek: (time) => set({ progress: time }),
-  setVolume: (vol) => set({ volume: vol, isMuted: vol === 0 }),
-  toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
+  setVolume: (vol) => {
+    savePref('playd_volume', vol);
+    savePref('playd_muted', vol === 0);
+    set({ volume: vol, isMuted: vol === 0 });
+  },
+  toggleMute: () => set((state) => {
+    savePref('playd_muted', !state.isMuted);
+    return { isMuted: !state.isMuted };
+  }),
   setQueue: (items) => set({ queue: items }),
   
   toggleMiniPlayer: () => set((state) => ({ isMiniPlayer: !state.isMiniPlayer })),
   toggleEq: () => set((state) => ({ isEqOpen: !state.isEqOpen })),
+  toggleQueue: () => set((state) => ({ isQueueOpen: !state.isQueueOpen })),
   togglePrefs: () => set((state) => ({ isPrefsOpen: !state.isPrefsOpen })),
   
-  setRepeatMode: (mode) => set({ repeatMode: mode }),
-  toggleShuffle: () => set((state) => ({ isShuffle: !state.isShuffle })),
+  setRepeatMode: (mode) => { savePref('playd_repeat', mode); set({ repeatMode: mode }); },
+  toggleShuffle: () => set((state) => {
+    savePref('playd_shuffle', !state.isShuffle);
+    return { isShuffle: !state.isShuffle };
+  }),
   
   setEqBand: (index, value) => set((state) => {
     const newBands = [...state.eqBands];

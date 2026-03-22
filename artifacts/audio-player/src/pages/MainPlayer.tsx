@@ -7,18 +7,14 @@ import { EqPanel } from '@/components/player/EqPanel';
 import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
 import { useEffect } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
+import { useAudioPlayer } from '@/hooks/use-audio-player';
 
 export default function MainPlayer() {
-  const { getStoredHandles, addFolder } = useFileSystem();
+  const { getStoredHandles } = useFileSystem();
+  const { isQueueOpen } = useAudioPlayer();
 
-  // On mount, check if we have stored handles that need permission
   useEffect(() => {
-    getStoredHandles().then(handles => {
-      if (handles.length > 0) {
-        // We have folders, but we wait for user interaction to request permission
-        // A subtle banner could go here
-      }
-    });
+    getStoredHandles().then(() => {});
   }, []);
 
   return (
@@ -29,7 +25,7 @@ export default function MainPlayer() {
       <div className="flex flex-1 overflow-hidden relative">
         <Sidebar />
         <TrackListPanel />
-        <QueuePanel />
+        {isQueueOpen && <QueuePanel />}
         
         {/* Floating Overlays */}
         <EqPanel />

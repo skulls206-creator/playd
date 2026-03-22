@@ -34,8 +34,24 @@ export function TrackListPanel() {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, play, setQueue, libraryFilter } = useAudioPlayer();
 
-  const [sortCol, setSortCol] = useState<SortCol>('artist');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [sortCol, setSortColRaw] = useState<SortCol>(
+    () => (localStorage.getItem('playd_sortCol') as SortCol | null) ?? 'artist'
+  );
+  const [sortDir, setSortDirRaw] = useState<SortDir>(
+    () => (localStorage.getItem('playd_sortDir') as SortDir | null) ?? 'asc'
+  );
+
+  const setSortCol = (col: SortCol) => {
+    localStorage.setItem('playd_sortCol', col);
+    setSortColRaw(col);
+  };
+  const setSortDir = (dir: SortDir | ((d: SortDir) => SortDir)) => {
+    setSortDirRaw(prev => {
+      const next = typeof dir === 'function' ? dir(prev) : dir;
+      localStorage.setItem('playd_sortDir', next);
+      return next;
+    });
+  };
 
   const handleSort = (col: SortCol) => {
     if (sortCol === col) {

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { 
   Play, Pause, SkipBack, SkipForward, 
-  Shuffle, Repeat, Repeat1, Volume2, VolumeX, SlidersHorizontal
+  Shuffle, Repeat, Repeat1, Volume2, VolumeX, SlidersHorizontal, ListMusic
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
@@ -18,9 +18,9 @@ function formatTime(seconds: number) {
 export function TransportBar() {
   const { 
     currentTrack, isPlaying, progress, duration, volume, isMuted,
-    repeatMode, isShuffle, isEqOpen,
+    repeatMode, isShuffle, isEqOpen, isQueueOpen,
     play, pause, togglePlay, next, prev, seek, setVolume, toggleMute,
-    setRepeatMode, toggleShuffle, toggleEq
+    setRepeatMode, toggleShuffle, toggleEq, toggleQueue
   } = useAudioPlayer();
 
   return (
@@ -96,10 +96,19 @@ export function TransportBar() {
 
       {/* Extras (Right) */}
       <div className="flex items-center justify-end gap-3 w-1/4 min-w-[200px]">
+        <Button
+          variant="ghost" size="icon"
+          className={clsx("h-8 w-8", isQueueOpen && "bg-primary/20 text-primary")}
+          onClick={toggleQueue}
+          title="Toggle Queue"
+        >
+          <ListMusic className="w-4 h-4" />
+        </Button>
         <Button 
           variant="ghost" size="icon" 
           className={clsx("h-8 w-8", isEqOpen && "bg-primary/20 text-primary")}
           onClick={toggleEq}
+          title="Equalizer"
         >
           <SlidersHorizontal className="w-4 h-4" />
         </Button>
