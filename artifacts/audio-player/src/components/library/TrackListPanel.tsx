@@ -4,6 +4,7 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChevronUp, ChevronDown, Music, Pause, Play } from 'lucide-react';
 import { clsx } from 'clsx';
+import { TrackContextMenu } from './TrackContextMenu';
 
 type SortCol = 'trackNumber' | 'title' | 'artist' | 'album' | 'duration' | 'year';
 type SortDir = 'asc' | 'desc';
@@ -225,65 +226,72 @@ export function TrackListPanel() {
               const isCurrent = currentTrack?.id === track.id;
               const isRowPlaying = isCurrent && isPlaying;
               return (
-                <div
+                <TrackContextMenu
                   key={track.id}
-                  onClick={() => { if (!isCurrent) playRow(track, idx); }}
-                  className={clsx(
-                    'flex items-center px-3 h-8 cursor-default select-none border-b border-border/10 group hover:bg-white/5',
-                    isCurrent && 'bg-primary/10 text-primary',
-                    !isCurrent && 'text-foreground/80',
-                  )}
+                  track={track}
+                  queueIndex={idx}
+                  onPlayNow={() => playRow(track, idx)}
                 >
-                  {/* # */}
-                  <div className="w-12 text-right pr-3 shrink-0 text-[11px] text-muted-foreground font-mono">
-                    {isCurrent ? (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                        className="text-primary hover:text-primary/70 transition-colors flex items-center justify-end w-full"
-                        title={isRowPlaying ? 'Pause' : 'Play'}
-                      >
-                        {isRowPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                      </button>
-                    ) : (
-                      realTrackNumber(track.trackNumber) ?? (idx + 1)
+                  <div
+                    onDoubleClick={() => playRow(track, idx)}
+                    onClick={() => { if (!isCurrent) playRow(track, idx); }}
+                    className={clsx(
+                      'flex items-center px-3 h-8 cursor-default select-none border-b border-border/10 group hover:bg-white/5',
+                      isCurrent && 'bg-primary/10 text-primary',
+                      !isCurrent && 'text-foreground/80',
                     )}
-                  </div>
+                  >
+                    {/* # */}
+                    <div className="w-12 text-right pr-3 shrink-0 text-[11px] text-muted-foreground font-mono">
+                      {isCurrent ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                          className="text-primary hover:text-primary/70 transition-colors flex items-center justify-end w-full"
+                          title={isRowPlaying ? 'Pause' : 'Play'}
+                        >
+                          {isRowPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                        </button>
+                      ) : (
+                        realTrackNumber(track.trackNumber) ?? (idx + 1)
+                      )}
+                    </div>
 
-                  {/* Title */}
-                  <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.title }}>
-                    <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
-                      {track.title}
-                    </span>
-                  </div>
+                    {/* Title */}
+                    <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.title }}>
+                      <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
+                        {track.title}
+                      </span>
+                    </div>
 
-                  {/* Artist */}
-                  <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
-                    <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
-                      {track.artist}
-                    </span>
-                  </div>
+                    {/* Artist */}
+                    <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
+                      <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
+                        {track.artist}
+                      </span>
+                    </div>
 
-                  {/* Album */}
-                  <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
-                    <span className="text-xs truncate block text-muted-foreground/70">
-                      {track.album || '—'}
-                    </span>
-                  </div>
+                    {/* Album */}
+                    <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
+                      <span className="text-xs truncate block text-muted-foreground/70">
+                        {track.album || '—'}
+                      </span>
+                    </div>
 
-                  {/* Year */}
-                  <div className="w-14 shrink-0 text-right pr-4">
-                    <span className="text-[11px] font-mono text-muted-foreground/50">
-                      {track.year || ''}
-                    </span>
-                  </div>
+                    {/* Year */}
+                    <div className="w-14 shrink-0 text-right pr-4">
+                      <span className="text-[11px] font-mono text-muted-foreground/50">
+                        {track.year || ''}
+                      </span>
+                    </div>
 
-                  {/* Duration */}
-                  <div className="w-14 shrink-0 text-right">
-                    <span className="text-[11px] font-mono text-muted-foreground/70">
-                      {formatDuration(track.duration ?? 0)}
-                    </span>
+                    {/* Duration */}
+                    <div className="w-14 shrink-0 text-right">
+                      <span className="text-[11px] font-mono text-muted-foreground/70">
+                        {formatDuration(track.duration ?? 0)}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                </TrackContextMenu>
               );
             })}
           </div>

@@ -41,6 +41,8 @@ interface PlayerState {
   setVolume: (vol: number) => void;
   toggleMute: () => void;
   setQueue: (items: QueueItem[]) => void;
+  addToQueueNext: (track: Track) => void;
+  addToQueueEnd: (track: Track) => void;
   toggleMiniPlayer: () => void;
   toggleEq: () => void;
   toggleQueue: () => void;
@@ -181,6 +183,20 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     return { isMuted: !state.isMuted };
   }),
   setQueue: (items) => set({ queue: items }),
+
+  addToQueueNext: (track) => set((state) => {
+    const insertAt = state.queueIndex + 1;
+    const newItem: QueueItem = { id: Date.now(), trackId: track.id, position: insertAt, track };
+    const before = state.queue.slice(0, insertAt);
+    const after  = state.queue.slice(insertAt);
+    const newQueue = [...before, newItem, ...after].map((qi, i) => ({ ...qi, position: i }));
+    return { queue: newQueue };
+  }),
+
+  addToQueueEnd: (track) => set((state) => {
+    const newItem: QueueItem = { id: Date.now(), trackId: track.id, position: state.queue.length, track };
+    return { queue: [...state.queue, newItem] };
+  }),
   
   toggleMiniPlayer: () => set((state) => ({ isMiniPlayer: !state.isMiniPlayer })),
   toggleEq: () => set((state) => ({ isEqOpen: !state.isEqOpen })),
