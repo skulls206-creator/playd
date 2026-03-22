@@ -451,46 +451,52 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
       {/* Column headers + track rows */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-        {/* Column headers — flat flex row; Title is flex-1 so Time is never squeezed off screen */}
-        <div className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none overflow-hidden">
-          {/* # */}
-          <div className="w-10 shrink-0 text-right pr-2">
-            <ColHeader col="trackNumber" label="#" extraClass="justify-end" />
+        {/* Column headers
+              Left section (flex-1 overflow-hidden): fixed-width resizable columns.
+              Right section (w-14 shrink-0): Time — always pinned, never pushed off. */}
+        <div className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none">
+          {/* Left: all resizable columns clipped as a group */}
+          <div className="flex items-center flex-1 min-w-0 overflow-hidden">
+            {/* # */}
+            <div className="w-10 shrink-0 text-right pr-2">
+              <ColHeader col="trackNumber" label="#" extraClass="justify-end" />
+            </div>
+            {/* Title — fixed resizable width */}
+            <div className="relative shrink-0 pr-3" style={{ width: colWidths.title }}>
+              <ColHeader col="title" label="Title" />
+              <ResizeHandle col="title" colWidths={colWidths} setColWidths={setColWidths} />
+            </div>
+            {/* Artist — desktop only */}
+            {!isMobile && (
+              <div className="relative shrink-0 pr-4" style={{ width: colWidths.artist }}>
+                <ColHeader col="artist" label="Artist" />
+                <ResizeHandle col="artist" colWidths={colWidths} setColWidths={setColWidths} />
+              </div>
+            )}
+            {/* Album — desktop only */}
+            {!isMobile && (
+              <div className="relative shrink-0 pr-4" style={{ width: colWidths.album }}>
+                <ColHeader col="album" label="Album" />
+                <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
+              </div>
+            )}
+            {/* Year — desktop only */}
+            {!isMobile && (
+              <div className="relative shrink-0 pr-4" style={{ width: colWidths.year }}>
+                <ColHeader col="year" label="Year" extraClass="justify-end" />
+                <ResizeHandle col="year" colWidths={colWidths} setColWidths={setColWidths} />
+              </div>
+            )}
           </div>
-          {/* Title — always flex-1, absorbs all remaining space */}
-          <div className="flex-1 min-w-0 relative pr-3">
-            <ColHeader col="title" label="Title" />
-          </div>
-          {/* Artist — desktop only */}
-          {!isMobile && (
-            <div className="relative shrink-0 pr-4" style={{ width: colWidths.artist }}>
-              <ColHeader col="artist" label="Artist" />
-              <ResizeHandle col="artist" colWidths={colWidths} setColWidths={setColWidths} />
-            </div>
-          )}
-          {/* Album — desktop only */}
-          {!isMobile && (
-            <div className="relative shrink-0 pr-4" style={{ width: colWidths.album }}>
-              <ColHeader col="album" label="Album" />
-              <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
-            </div>
-          )}
-          {/* Year — desktop only */}
-          {!isMobile && (
-            <div className="relative shrink-0 pr-4" style={{ width: colWidths.year }}>
-              <ColHeader col="year" label="Year" extraClass="justify-end" />
-              <ResizeHandle col="year" colWidths={colWidths} setColWidths={setColWidths} />
-            </div>
-          )}
-          {/* Time — last column, always visible, same flat flow as all others */}
-          <div className="w-14 shrink-0 text-right">
+          {/* Right: Time — outside clip section, always visible */}
+          <div className="w-14 shrink-0 text-right pl-1">
             <ColHeader col="duration" label="Time" extraClass="justify-end" />
           </div>
         </div>
 
         {/* Track rows */}
         <ScrollArea className="flex-1">
-          {/* w-full overrides Radix's internal display:table wrapper so flex-1 Title is constrained to viewport width */}
+          {/* w-full overrides Radix's internal display:table wrapper so row widths stay constrained */}
           <div className="w-full">
           {sorted.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
@@ -543,57 +549,60 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
                         !isCurrent && !isSelected && 'text-foreground/80 hover:bg-white/5',
                       )}
                     >
-                      {/* # */}
-                      <div className="w-10 text-right pr-2 shrink-0 text-[11px] text-muted-foreground font-mono">
-                        {isCurrent ? (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                            className="text-primary hover:text-primary/70 transition-colors flex items-center justify-end w-full"
-                            title={isRowPlaying ? 'Pause' : 'Play'}
-                          >
-                            {isRowPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                          </button>
-                        ) : (
-                          realTrackNumber(track.trackNumber) ?? (idx + 1)
+                      {/* Left: fixed-width resizable columns clipped as a group */}
+                      <div className="flex items-center flex-1 min-w-0 overflow-hidden">
+                        {/* # */}
+                        <div className="w-10 text-right pr-2 shrink-0 text-[11px] text-muted-foreground font-mono">
+                          {isCurrent ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                              className="text-primary hover:text-primary/70 transition-colors flex items-center justify-end w-full"
+                              title={isRowPlaying ? 'Pause' : 'Play'}
+                            >
+                              {isRowPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                            </button>
+                          ) : (
+                            realTrackNumber(track.trackNumber) ?? (idx + 1)
+                          )}
+                        </div>
+
+                        {/* Title — fixed resizable width, clips long text */}
+                        <div className="shrink-0 pr-3 overflow-hidden" style={{ width: colWidths.title }}>
+                          <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
+                            {track.title}
+                          </span>
+                        </div>
+
+                        {/* Artist — desktop only */}
+                        {!isMobile && (
+                          <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
+                            <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
+                              {track.artist || '—'}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Album — desktop only */}
+                        {!isMobile && (
+                          <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
+                            <span className="text-xs truncate block text-muted-foreground/60">
+                              {track.album || '—'}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Year — desktop only */}
+                        {!isMobile && (
+                          <div className="shrink-0 pr-4 overflow-hidden text-right" style={{ width: colWidths.year }}>
+                            <span className="text-[11px] font-mono text-muted-foreground/50 truncate block">
+                              {track.year || ''}
+                            </span>
+                          </div>
                         )}
                       </div>
 
-                      {/* Title — always flex-1, absorbs all remaining space; never pushes Time off screen */}
-                      <div className="flex-1 min-w-0 pr-3 overflow-hidden">
-                        <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
-                          {track.title}
-                        </span>
-                      </div>
-
-                      {/* Artist — desktop only */}
-                      {!isMobile && (
-                        <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
-                          <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
-                            {track.artist || '—'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Album — desktop only */}
-                      {!isMobile && (
-                        <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
-                          <span className="text-xs truncate block text-muted-foreground/60">
-                            {track.album || '—'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Year — desktop only */}
-                      {!isMobile && (
-                        <div className="shrink-0 text-right pr-4 overflow-hidden" style={{ width: colWidths.year }}>
-                          <span className="text-[11px] font-mono text-muted-foreground/50 truncate block">
-                            {track.year || ''}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Duration — last column in normal flow, always visible */}
-                      <div className="w-14 shrink-0 text-right">
+                      {/* Right: Duration — outside clip section, always pinned at right edge */}
+                      <div className="w-14 shrink-0 text-right pl-1">
                         {(track.duration ?? 0) > 0 ? (
                           <span className={clsx(
                             'text-[11px] font-mono',
