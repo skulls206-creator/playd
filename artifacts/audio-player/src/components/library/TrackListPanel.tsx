@@ -138,12 +138,14 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const dragCounterRef = useRef(0);
 
   const handleRescan = () => {
-    // webkitdirectory only works on desktop — use a plain audio multi-picker on mobile
-    const isMobile = window.innerWidth < 640;
-    if (isMobile) {
-      mobileFilesInputRef.current?.click();
-    } else {
+    // Feature-detect webkitdirectory support — works on desktop AND Android Chrome.
+    // Only falls back to plain file picker on browsers that truly don't support it (e.g. iOS Safari).
+    const probe = document.createElement('input');
+    probe.type = 'file';
+    if ('webkitdirectory' in probe) {
       folderInputRef.current?.click();
+    } else {
+      mobileFilesInputRef.current?.click();
     }
   };
 
