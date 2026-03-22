@@ -55,11 +55,13 @@ interface ResizeHandleProps {
 
 function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
   const dragging = useRef(false);
+  const [isActive, setIsActive] = useState(false);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     dragging.current = true;
+    setIsActive(true);
     const startX = e.clientX;
     const startW = colWidths[col];
 
@@ -71,6 +73,7 @@ function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
 
     const onUp = (ev: MouseEvent) => {
       dragging.current = false;
+      setIsActive(false);
       const newW = Math.max(COL_MIN[col], startW + ev.clientX - startX);
       localStorage.setItem(COL_LS[col], String(newW));
       document.removeEventListener('mousemove', onMove);
@@ -83,11 +86,23 @@ function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
 
   return (
     <div
-      className="absolute right-0 top-0 h-full w-[5px] cursor-col-resize group/handle flex items-center justify-center z-10"
+      className="absolute right-0 top-0 h-full w-[10px] cursor-col-resize group/handle flex items-center justify-center z-10"
       onMouseDown={onMouseDown}
       title="Drag to resize column"
     >
-      <div className="w-px h-3/4 bg-border/40 group-hover/handle:bg-primary/60 transition-colors" />
+      {/* Visible divider line — always shown, brightens on hover/drag */}
+      <div className={clsx(
+        'transition-all duration-150 rounded-full',
+        isActive
+          ? 'w-[2px] h-full bg-primary shadow-[0_0_6px_1px_hsl(var(--primary)/0.7)]'
+          : 'w-[1px] h-full bg-white/20 group-hover/handle:w-[2px] group-hover/handle:h-full group-hover/handle:bg-primary/80 group-hover/handle:shadow-[0_0_5px_1px_hsl(var(--primary)/0.5)]',
+      )} />
+      {/* Gripper dots — appear on hover to signal draggability */}
+      <div className="absolute flex flex-col gap-[3px] opacity-0 group-hover/handle:opacity-100 transition-opacity pointer-events-none">
+        {[0,1,2].map(i => (
+          <div key={i} className="w-[3px] h-[3px] rounded-full bg-primary/90" />
+        ))}
+      </div>
     </div>
   );
 }
