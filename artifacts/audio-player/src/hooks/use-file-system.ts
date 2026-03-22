@@ -8,6 +8,31 @@ const ART_STORE_KEY = 'track-art';
 const AUDIO_EXTS = /\.(mp3|flac|m4a|m4p|aac|wav|ogg|opus|webm|wma|aiff|aif|alac|mp4|3gp)$/i;
 
 /**
+ * Returns true if the file is likely audio and worth attempting to parse.
+ * Accepts:
+ *  1. Known audio/video extensions (AUDIO_EXTS)
+ *  2. Files whose MIME type starts with audio/ or video/
+ *  3. Files with NO extension at all (YouTube Music stores offline tracks
+ *     as extension-less blobs — music-metadata-browser can parse them by
+ *     reading the actual file header)
+ * Explicitly rejects common non-audio extensions to avoid wasting time on
+ * images, docs, etc. that happen to have no extension.
+ */
+const SKIP_EXTS = /\.(jpg|jpeg|png|gif|webp|bmp|svg|pdf|txt|xml|json|html|css|js|db|sqlite|ini|log|zip|rar|7z|exe|dll|lnk|url|nfo|cue|m3u|m3u8|pls|xspf)$/i;
+
+function isLikelyAudio(file: File): boolean {
+  if (AUDIO_EXTS.test(file.name)) return true;
+  if (file.type.startsWith('audio/')) return true;
+  if (file.type.startsWith('video/')) return true;
+  // No extension at all → try parsing (YouTube Music offline files)
+  if (!file.name.includes('.')) return true;
+  // Known non-audio extension → skip
+  if (SKIP_EXTS.test(file.name)) return false;
+  // Unknown extension → optimistically try
+  return true;
+}
+
+/**
  * In-memory store for File objects loaded via the webkitdirectory fallback.
  * Keys: `${folderPath}/${fileName}` (same convention as DB folderPath + fileName).
  * Lives for the browser session only — no persistence across reloads.
@@ -76,7 +101,7 @@ export function useFileSystem() {
       let count = 0;
 
       for (const { file, relativePath } of entries) {
-        if (!AUDIO_EXTS.test(file.name)) continue;
+        if (!isLikelyAudio(file)) continue;
         try {
           const metadata = await mm.parseBlob(file, { duration: true, skipCovers: false });
 
@@ -165,13 +190,13 @@ export function useFileSystem() {
         if (entry.kind === 'directory') {
           await walk(entry, `${path}/${entry.name}`);
         } else if (entry.kind === 'file') {
-          const ext = entry.name.includes('.')
-            ? '.' + entry.name.split('.').pop()!.toLowerCase()
-            : '(no ext)';
-          if (AUDIO_EXTS.test(entry.name)) {
-            const file = await entry.getFile();
+          const file = await entry.getFile();
+          if (isLikelyAudio(file)) {
             entries.push({ file, relativePath: `${path}/${entry.name}` });
           } else {
+            const ext = entry.name.includes('.')
+              ? '.' + entry.name.split('.').pop()!.toLowerCase()
+              : '(no ext)';
             skippedExts.push(ext);
           }
         }
@@ -189,17 +214,17 @@ export function useFileSystem() {
     const skippedExts: string[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const ext = file.name.includes('.')
-        ? '.' + file.name.split('.').pop()!.toLowerCase()
-        : '(no ext)';
-      if (AUDIO_EXTS.test(file.name)) {
+      if (isLikelyAudio(file)) {
         entries.push({ file, relativePath: file.webkitRelativePath || file.name });
       } else {
+        const ext = file.name.includes('.')
+          ? '.' + file.name.split('.').pop()!.toLowerCase()
+          : '(no ext)';
         skippedExts.push(ext);
       }
     }
     const rootName = entries[0]?.relativePath.split('/')[0]
-      || files[0]?.webkitRelativePath.split('/')[0]
+      || (files[0] as any)?.webkitRelativePath?.split('/')[0]
       || 'Imported';
     await processTracks(entries, rootName, skippedExts);
   };
