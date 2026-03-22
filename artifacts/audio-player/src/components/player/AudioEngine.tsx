@@ -106,10 +106,9 @@ export function AudioEngine() {
           console.error("Could not read local file (needs permission grant?)");
           return;
         }
-      } else if (currentTrack.source === 'subsonic') {
-        // Construct subsonic stream URL
-        // Requires user credentials which we'd normally pull from settings
-        src = `${currentTrack.folderPath}/rest/stream?id=${currentTrack.subsonicId}&v=1.16.1&c=web`; 
+      } else if (currentTrack.source === 'subsonic' && currentTrack.subsonicId && currentTrack.subsonicServerId) {
+        // Use server-side stream proxy so credentials never leave the backend
+        src = `/api/subsonic-servers/${currentTrack.subsonicServerId}/stream/${currentTrack.subsonicId}`;
       }
 
       if (src) {

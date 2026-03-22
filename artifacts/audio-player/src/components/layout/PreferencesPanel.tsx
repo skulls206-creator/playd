@@ -11,6 +11,7 @@ import {
   useDeleteEqPreset,
   getListEqPresetsQueryKey,
   getListSubsonicServersQueryKey,
+  getListTracksQueryKey,
   testSubsonicServer,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -63,6 +64,7 @@ export function PreferencesPanel() {
   const [editingServerId, setEditingServerId] = useState<number | null>(null);
   const [subsonicForm, setSubsonicForm] = useState<SubsonicFormState>(EMPTY_SUBSONIC);
   const [testResults, setTestResults] = useState<Record<number, { ok: boolean; msg: string } | 'loading'>>({});
+  const [syncStates, setSyncStates] = useState<Record<number, { status: 'idle' | 'syncing' | 'done' | 'error'; msg?: string }>>({});
 
   // EQ save form
   const [newPresetName, setNewPresetName] = useState('');
@@ -143,6 +145,19 @@ export function PreferencesPanel() {
       setTestResults(r => ({ ...r, [id]: { ok: result.success, msg: result.message ?? '' } }));
     } catch {
       setTestResults(r => ({ ...r, [id]: { ok: false, msg: 'Request failed' } }));
+    }
+  };
+
+  const handleSyncServer = async (id: number) => {
+    setSyncStates(s => ({ ...s, [id]: { status: 'syncing' } }));
+    try {
+      const resp = await fetch(`/api/subsonic-servers/${id}/sync`, { method: 'POST' });
+      const data = await resp.json() as any;
+      if (!resp.ok || !data.success) throw new Error(data.error ?? `HTTP ${resp.status}`);
+      setSyncStates(s => ({ ...s, [id]: { status: 'done', msg: `${data.upserted} tracks synced` } }));
+      await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    } catch (e: any) {
+      setSyncStates(s => ({ ...s, [id]: { status: 'error', msg: e?.message ?? 'Sync failed' } }));
     }
   };
 
@@ -344,6 +359,7 @@ export function PreferencesPanel() {
                 <div className="space-y-2">
                   {servers.map(server => {
                     const testResult = testResults[server.id];
+                    const syncState = syncStates[server.id];
                     return (
                       <div key={server.id} className="p-3 bg-black/20 rounded-md border border-border/20 group">
                         <div className="flex items-center gap-3">
@@ -354,6 +370,18 @@ export function PreferencesPanel() {
                             <div className="text-[11px] text-muted-foreground">User: {server.username}</div>
                           </div>
                           <div className="flex gap-1 shrink-0">
+                            <Button
+                              variant="ghost" size="sm" className="h-6 text-[10px] px-2"
+                              onClick={() => handleSyncServer(server.id)}
+                              disabled={syncState?.status === 'syncing'}
+                              title="Sync library from this server"
+                            >
+                              {syncState?.status === 'syncing'
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : <RefreshCw className="w-3 h-3" />
+                              }
+                              <span className="ml-1">Sync</span>
+                            </Button>
                             <Button
                               variant="ghost" size="sm" className="h-6 text-[10px] px-2"
                               onClick={() => handleTestServer(server.id)}
@@ -371,6 +399,18 @@ export function PreferencesPanel() {
                             </Button>
                           </div>
                         </div>
+                        {syncState && syncState.status !== 'idle' && syncState.status !== 'syncing' && (
+                          <div className={clsx(
+                            'mt-2 flex items-center gap-1.5 text-[11px] px-2 py-1 rounded',
+                            syncState.status === 'done' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                          )}>
+                            {syncState.status === 'done'
+                              ? <CheckCircle2 className="w-3.5 h-3.5" />
+                              : <XCircle className="w-3.5 h-3.5" />
+                            }
+                            {syncState.msg}
+                          </div>
+                        )}
                         {testResult && testResult !== 'loading' && (
                           <div className={clsx(
                             'mt-2 flex items-center gap-1.5 text-[11px] px-2 py-1 rounded',
