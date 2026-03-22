@@ -60,10 +60,10 @@ export function TransportBar() {
           </button>
         </div>
 
-        <div className="flex flex-col items-center px-6 pb-8 gap-6 overflow-y-auto max-h-[calc(80vh-2rem)]">
-          {/* Large album art */}
+        <div className="flex flex-col items-center px-6 pb-10 gap-5">
+          {/* Large album art — click to close */}
           <div
-            className="relative w-full max-w-xs aspect-square rounded-2xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.7)] cursor-pointer"
+            className="w-full max-w-xs aspect-square rounded-2xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.7)] cursor-pointer"
             onClick={toggleNowPlaying}
             title="Close"
           >
@@ -79,64 +79,9 @@ export function TransportBar() {
             <p className="text-xl font-bold truncate text-foreground">
               {currentTrack?.title || '—'}
             </p>
-            <p className="text-base text-primary truncate mt-0.5">
+            <p className="text-sm text-primary truncate mt-1">
               {currentTrack?.artist || '—'}
             </p>
-            {currentTrack?.album && currentTrack.album !== 'Unknown Album' && (
-              <p className="text-xs text-muted-foreground truncate mt-1">
-                {currentTrack.album}
-              </p>
-            )}
-          </div>
-
-          {/* Progress */}
-          <div className="w-full max-w-xs space-y-1">
-            <Slider
-              value={[progress]}
-              max={duration || 100}
-              step={0.1}
-              onValueChange={([val]) => seek(val)}
-              className="w-full"
-            />
-            <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60">
-              <span>{formatTime(progress)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="flex items-center gap-5">
-            <Button
-              variant="ghost" size="icon"
-              className={clsx('h-10 w-10', isShuffle && 'text-primary')}
-              onClick={toggleShuffle}
-            >
-              <Shuffle className="w-5 h-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-10 w-10" onClick={prev}>
-              <SkipBack className="w-6 h-6 fill-current" />
-            </Button>
-            <Button
-              variant="default" size="icon"
-              className="h-14 w-14 rounded-full bg-foreground text-background hover:bg-primary hover:scale-105 transition-all shadow-lg"
-              onClick={togglePlay}
-            >
-              {isPlaying
-                ? <Pause className="w-7 h-7 fill-current" />
-                : <Play className="w-7 h-7 fill-current ml-0.5" />}
-            </Button>
-            <Button variant="ghost" size="icon" className="h-10 w-10" onClick={next}>
-              <SkipForward className="w-6 h-6 fill-current" />
-            </Button>
-            <Button
-              variant="ghost" size="icon"
-              className={clsx('h-10 w-10', repeatMode !== 'off' && 'text-primary')}
-              onClick={() => setRepeatMode(repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off')}
-            >
-              {repeatMode === 'one'
-                ? <Repeat1 className="w-5 h-5" />
-                : <Repeat className="w-5 h-5" />}
-            </Button>
           </div>
         </div>
       </div>
