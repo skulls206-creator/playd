@@ -99,7 +99,7 @@ interface TrackListPanelProps {
 export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, libraryFilter, setLibraryFilter } = useAudioPlayer();
-  const { isScanning, rescanAll, getStoredHandles } = useFileSystem();
+  const { isScanning, scanProgress, rescanAll, getStoredHandles } = useFileSystem();
   const queryClient = useQueryClient();
 
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -237,8 +237,12 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
           <span className="hidden sm:inline">Refresh</span>
         </button>
 
-        {/* Active filter label + clear */}
-        {libraryFilter.type !== 'all' ? (
+        {/* Active filter label / scan status */}
+        {isScanning ? (
+          <span className="text-[10px] text-emerald-400 flex-1 truncate">
+            Scanning… {scanProgress > 0 ? `${scanProgress} found` : ''}
+          </span>
+        ) : libraryFilter.type !== 'all' ? (
           <div className="flex items-center gap-1 min-w-0 flex-1">
             <span className="text-[10px] text-primary/80 truncate">{libraryFilter.label}</span>
             <button
