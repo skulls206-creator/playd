@@ -17,19 +17,21 @@ const COL_LS: Record<string, string> = {
   title:  'playd_col_title',
   artist: 'playd_col_artist',
   album:  'playd_col_album',
+  year:   'playd_col_year',
 };
-const COL_DEFAULTS = { title: 260, artist: 160, album: 176 };
-const COL_MIN      = { title:  80, artist:  60, album:  60 };
+const COL_DEFAULTS = { title: 260, artist: 160, album: 176, year: 52 };
+const COL_MIN      = { title:  80, artist:  60, album:  60, year: 36 };
 
 function loadColWidths() {
   const load = (k: string, def: number) => {
     const s = localStorage.getItem(k);
-    return s ? Math.max(60, parseInt(s, 10)) : def;
+    return s ? Math.max(36, parseInt(s, 10)) : def;
   };
   return {
     title:  load(COL_LS.title,  COL_DEFAULTS.title),
     artist: load(COL_LS.artist, COL_DEFAULTS.artist),
     album:  load(COL_LS.album,  COL_DEFAULTS.album),
+    year:   load(COL_LS.year,   COL_DEFAULTS.year),
   };
 }
 
@@ -47,9 +49,9 @@ function realTrackNumber(n: number | null | undefined): number | null {
 
 // ─── Resize handle ───────────────────────────────────────────────────────────
 interface ResizeHandleProps {
-  col: 'title' | 'artist' | 'album';
-  colWidths: { title: number; artist: number; album: number };
-  setColWidths: React.Dispatch<React.SetStateAction<{ title: number; artist: number; album: number }>>;
+  col: 'title' | 'artist' | 'album' | 'year';
+  colWidths: { title: number; artist: number; album: number; year: number };
+  setColWidths: React.Dispatch<React.SetStateAction<{ title: number; artist: number; album: number; year: number }>>;
 }
 
 function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
@@ -452,7 +454,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
         {/* Column headers */}
         <div
           className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none"
-          style={isMobile ? undefined : { minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album }}
+          style={isMobile ? undefined : { minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album + colWidths.year }}
         >
           <div className="w-10 shrink-0 text-right pr-2">
             <ColHeader col="trackNumber" label="#" extraClass="justify-end" />
@@ -479,13 +481,14 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
               <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
             </div>
           )}
-          {/* Year — desktop only */}
+          {/* Year — desktop only, independently resizable */}
           {!isMobile && (
-            <div className="w-14 shrink-0 text-right pr-4">
+            <div className="relative shrink-0 pr-4" style={{ width: colWidths.year }}>
               <ColHeader col="year" label="Year" extraClass="justify-end" />
+              <ResizeHandle col="year" colWidths={colWidths} setColWidths={setColWidths} />
             </div>
           )}
-          {/* Duration — always visible */}
+          {/* Duration — always visible, fixed width, no handle */}
           <div className="w-12 shrink-0 text-right">
             <ColHeader col="duration" label="Time" extraClass="justify-end" />
           </div>
@@ -499,7 +502,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
               <p className="text-sm">No tracks yet — drop a folder here, or add one in Preferences</p>
             </div>
           ) : (
-            <div style={isMobile ? undefined : { minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album }}>
+            <div style={isMobile ? undefined : { minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album + colWidths.year }}>
               {sorted.map((track, idx) => {
                 const isCurrent  = currentTrack?.id === track.id;
                 const isSelected = selectedIds.has(track.id);
@@ -587,10 +590,10 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
                         </div>
                       )}
 
-                      {/* Year — desktop only */}
+                      {/* Year — desktop only, matches header width */}
                       {!isMobile && (
-                        <div className="w-14 shrink-0 text-right pr-4">
-                          <span className="text-[11px] font-mono text-muted-foreground/50">
+                        <div className="shrink-0 text-right pr-4 overflow-hidden" style={{ width: colWidths.year }}>
+                          <span className="text-[11px] font-mono text-muted-foreground/50 truncate block">
                             {track.year || ''}
                           </span>
                         </div>
