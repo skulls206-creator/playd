@@ -1,0 +1,17 @@
+packages:
+  "music-metadata-browser": "For extracting ID3/FLAC tags from local audio files entirely in the browser"
+  "idb-keyval": "For persisting FileSystemDirectoryHandle objects between sessions without complex IDB boilerplate"
+  "zustand": "For global lightweight audio player state management (current track, queue, volume, eq)"
+  "framer-motion": "For smooth transitions of the EQ panel, mini-player mode, and track list changes"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility to merge tailwind classes without style conflicts"
+  "date-fns": "For formatting timestamps and durations cleanly"
+
+images:
+  - path: "artifacts/audio-player/public/images/default-cover.png"
+    description: "A dark, minimalist, abstract placeholder album cover with subtle geometric shapes and a deep charcoal background"
+    aspect_ratio: "1:1"
+
+notes:
+  - "Assuming shadcn/ui components (Button, Slider, Dialog, ContextMenu, etc.) are available in @/components/ui/ as per the directory structure."
+  - "Using generated TanStack Query hooks from @workspace/api-client-react for all data persistence."

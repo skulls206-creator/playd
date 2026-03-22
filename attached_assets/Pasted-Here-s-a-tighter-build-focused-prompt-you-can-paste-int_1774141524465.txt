@@ -1,0 +1,234 @@
+Here’s a tighter, build-focused prompt you can paste into Replit AI so it actually scaffolds the app instead of “just writing a spec”.
+
+You are a senior full‑stack C++/UI engineer.
+Your task is to design and implement a modern, cross‑platform desktop audio player: a beautiful, minimalist but advanced alternative to foobar2000.
+
+Do not write a product brief or marketing text.
+Do not only describe features.
+Your primary goal is to plan and generate code (with file structure) for a real application.
+
+High-level goals
+Clone and surpass core capabilities of foobar2000 (format support, DSP, library, plugins) while using a much cleaner, modern UI.
+
+Prioritize: beauty, minimalism, responsiveness, low CPU/RAM usage.
+
+Ship as native desktop app (no Electron).
+
+You should:
+
+Propose a concrete tech stack and folder structure.
+
+Iteratively generate actual source files.
+
+Keep UX minimal by default, but unlockable power‑user features.
+
+Tech constraints (you choose specifics, but stick to spirit)
+Language: C++ for core playback/engine.
+
+UI toolkit: Qt or similar high‑quality cross‑platform toolkit.
+
+Audio backend: platform‑native (CoreAudio on macOS, WASAPI on Windows, PulseAudio/PipeWire on Linux) with bit‑perfect exclusive modes.
+
+DB: SQLite for library.
+
+Config/exports: JSON, M3U8, XSPF.
+
+If you think a different stack is significantly better, explain why, then proceed.
+
+Features to implement (MVP but rich)
+1. Audio format support & playback
+Category description: Robust playback engine that covers all common and audiophile formats with gapless, bit‑perfect output.
+
+Implement:
+
+Universal decoding
+
+Support MP3, AAC/M4A (incl. ALAC), Ogg Vorbis, Opus, FLAC, WAV, AIFF, APE, WMA at minimum.
+
+Design decoder abstraction so more formats (e.g. DSD) can be added later via plugins.
+​
+
+Bit‑perfect & high‑res output
+
+Up to at least 32‑bit / 384 kHz PCM.
+
+Exclusive / integer mode options on each OS to bypass system mixer when enabled, with fallback to shared mode.
+
+Gapless & crossfade
+
+Ensure true gapless playback (no added silence) for supported codecs.
+
+Add optional crossfade with configurable duration and curve.
+
+ReplayGain
+
+Read standard ReplayGain tags and apply sane default volume normalization per-track or per-album.
+
+For each, create core engine classes, configuration structs, and unit‑testable components.
+
+2. Network & streaming
+Category description: Modern network awareness so users can play from NAS, streams, and remote servers.
+
+Implement:
+
+Basic streaming
+
+Support HTTP(S) streams and simple M3U/PLS playlists.
+​
+
+Show basic now‑playing metadata from stream headers if available.
+
+Network file access
+
+Design an abstraction so files can be read from local disk and network sources (e.g. SMB/WebDAV/NFS) behind a common interface.
+
+Implement at least a pluggable “provider” interface and a local‑filesystem provider; stub others with TODOs.
+
+Future‑proof hooks
+
+Plan interfaces for later adding podcast feeds and Subsonic/OpenSubsonic servers, but for MVP just define the interfaces and data models.
+
+Focus here on architecture and interfaces, not full protocol coverage.
+
+3. User interface & customization
+Category description: A calm, minimalist UI that can expand for power users.
+
+Implement:
+
+Layout & theming
+
+Main window: sidebar (library/playlists), main content (albums/tracks), top/bottom playback bar.
+
+Built‑in light/dark themes with accent color support, theme represented as JSON for potential user themes later.
+
+Compact / mini player mode
+
+A very small window with cover art, title, play/pause, next, previous, volume.
+
+Toggleable via menu and shortcut.
+
+Keyboard/mouse shortcuts
+
+Central registry of actions and default keybindings.
+
+Ability to rebind at least the most common actions (play/pause, next, previous, seek, volume).
+
+Plugin / extension points
+
+Define a stable C++/plugin interface for adding:
+
+DSP modules
+
+Visualizations
+
+Library views / panels
+
+Implement a very simple example plugin (e.g. a dummy visualization).
+
+Keep visual density low: no dense toolbars, no clutter. Focus on typography, spacing, and a few core controls on screen.
+
+4. Audio management & organization
+Category description: Smart, scalable library that stays fast with large collections.
+
+Implement:
+
+Library scanning
+
+Recursive folder scanning with change detection (watcher where available).
+
+Store tracks, albums, artists in SQLite schema designed for tens of thousands of tracks.
+
+Tag reading & editing
+
+Read common tags via a metadata library (e.g. taglib).
+
+Simple tag editor UI for basic fields (title, artist, album, track, year, genre, artwork).
+
+Smart playlists
+
+Define a simple query language over tags (e.g. genre = "Rock" AND year >= 2000).
+
+Implement engine + UI for a few canned examples.
+
+Duplicate detection (basic)
+
+Identify potential duplicates by matching artist, title, duration; present a basic UI to review.
+
+5. Audio processing & enhancement
+Category description: Integrated, low‑latency DSP chain with sane defaults.
+
+Implement:
+
+DSP pipeline architecture
+
+A chain of processing nodes (EQ, gain, etc.) with a clear API for plugins.
+
+Ability to enable/disable modules per output device.
+
+Equalizer
+
+Implement at least a 10‑band graphic EQ initially, with presets (Flat, Bass boost, Vocal, etc.).
+
+ReplayGain & loudness workflow
+
+Integrate ReplayGain in the DSP chain.
+
+Provide hooks for future BS.1770 loudness normalization (no need to fully implement algorithm yet).
+​
+
+Tempo/pitch (stub)
+
+Design interfaces for independent tempo and pitch control and integrate them in the chain, but you may stub actual algorithms in MVP.
+
+6. Platform & architecture
+Category description: One codebase, native feel.
+
+Implement:
+
+Cross‑platform project setup
+
+Build system (CMake) targeting Windows, macOS, Linux.
+
+Separate core/ (engine, library, DSP) from ui/ (Qt windows, views) and platform/ (audio backends).
+
+Settings & data
+
+Store settings in JSON files under a per‑user config directory.
+
+Store library in a SQLite DB under an “AppData”‑style directory.
+
+Accessibility foundations
+
+Use toolkit accessibility APIs: accessible names/roles for controls, keyboard navigation, scalable fonts, and color contrast options aligned with WCAG 2.2 AA where practical.
+
+7. Privacy & user rights
+Category description: Respectful, local‑first behavior.
+
+Implement:
+
+No telemetry by default
+
+Do not send any analytics or usage data anywhere.
+
+If you scaffold telemetry hooks, keep them disabled and behind a config flag.
+
+Offline‑first
+
+Ensure the app works fully with local files and library without network.
+
+Network failures must not break local playback.
+
+Open, portable formats
+
+Playlist export/import: M3U8 and XSPF.
+
+Settings and hotkey layouts in human‑readable JSON.
+
+How to work
+First, restate the overall architecture (modules, folders, main classes) as a brief outline.
+
+Then start generating actual code files step by step (CMake config, core engine skeletons, minimal UI) with clear filenames and explanations of where each file goes.
+
+At each step, ensure code is compilable in isolation and indicate any external libraries and how they are integrated.
+
+Your output should be implementation‑oriented: concrete architecture + real code, not marketing or vague descriptions.

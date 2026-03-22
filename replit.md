@@ -91,6 +91,23 @@ Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used b
 
 Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
 
+### `artifacts/audio-player` (`@workspace/audio-player`)
+
+foobar2000-style audio player PWA. Served at `/`.
+
+- Three-panel layout: sidebar (library tree + playlists), queue panel, bottom transport bar
+- **Local mode**: File System Access API (`window.showDirectoryPicker()`), folder handles persisted in IndexedDB via `idb-keyval`, tags parsed by `music-metadata-browser`
+- **Subsonic mode**: connects to Subsonic/OpenSubsonic REST servers; streams audio via `/rest/stream`
+- Playback via HTML5 `<audio>` → Web Audio API pipeline (GainNode → 10× BiquadFilterNode for EQ)
+- Media Session API for OS media keys, lock screen controls, system transport widget
+- Web Notifications API for persistent now-playing notification
+- Custom right-click context menu (browser default suppressed app-wide)
+- 10-band EQ with 8 built-in presets seeded in DB
+- Smart playlists with query language (evaluated server-side)
+- Duplicate detection, tag editing, multi-column sort, keyboard shortcuts
+- State managed by Zustand; data fetched via React Query hooks from `@workspace/api-client-react`
+- Key packages: zustand, framer-motion, music-metadata-browser, idb-keyval, date-fns
+
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
