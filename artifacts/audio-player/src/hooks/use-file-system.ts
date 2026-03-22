@@ -21,7 +21,8 @@ function pickFilesViaInput(): Promise<FileList | null> {
     input.type = 'file';
     input.multiple = true;
     (input as any).webkitdirectory = true;
-    input.accept = '.mp3,.flac,.m4a,.aac,.wav,.ogg,.opus';
+    // NOTE: Do NOT set `accept` with webkitdirectory — it conflicts in Chrome/Edge
+    // and causes 0 files to be returned. We filter by extension in code instead.
 
     let settled = false;
     const settle = (value: FileList | null) => {
@@ -30,7 +31,7 @@ function pickFilesViaInput(): Promise<FileList | null> {
 
     input.addEventListener('change', () => settle(input.files));
     // Cancel detection: browser refocuses the window after the dialog closes
-    const onFocus = () => setTimeout(() => settle(null), 400);
+    const onFocus = () => setTimeout(() => settle(null), 500);
     window.addEventListener('focus', onFocus, { once: true });
     input.click();
   });
@@ -122,14 +123,18 @@ export function useFileSystem() {
       }
 
       await set(ART_STORE_KEY, artStore);
-      setScanStatus(`Saving ${tracks.length} tracks to library…`);
 
-      if (tracks.length > 0) {
-        await bulkUpsert.mutateAsync({ data: { tracks } });
+      if (tracks.length === 0) {
+        setScanStatus('No audio files found. Supported: MP3, FLAC, M4A, AAC, WAV, OGG, OPUS');
+        setTimeout(() => setScanStatus(''), 5000);
+        return;
       }
 
+      setScanStatus(`Saving ${tracks.length} tracks to library…`);
+      await bulkUpsert.mutateAsync({ data: { tracks } });
+
       await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-      setScanStatus(`Done — ${tracks.length} tracks imported`);
+      setScanStatus(`Done — ${tracks.length} tracks added`);
       setTimeout(() => setScanStatus(''), 3000);
     } catch (error) {
       console.error('Scan failed', error);
