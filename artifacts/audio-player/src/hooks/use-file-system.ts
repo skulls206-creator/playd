@@ -64,6 +64,7 @@ export function useFileSystem() {
   const processTracks = async (
     entries: Array<{ file: File; relativePath: string }>,
     rootName: string,
+    skippedExts?: string[],
   ) => {
     setIsScanning(true);
     setScanProgress(0);
@@ -125,8 +126,11 @@ export function useFileSystem() {
       await set(ART_STORE_KEY, artStore);
 
       if (tracks.length === 0) {
-        setScanStatus('No audio files found. Supported: MP3, FLAC, M4A, AAC, WAV, OGG, OPUS');
-        setTimeout(() => setScanStatus(''), 5000);
+        const extInfo = skippedExts && skippedExts.length > 0
+          ? ` Found: ${[...new Set(skippedExts)].slice(0, 6).join(', ')}`
+          : '';
+        setScanStatus(`No audio files found.${extInfo}`);
+        setTimeout(() => setScanStatus(''), 8000);
         return;
       }
 
@@ -148,6 +152,7 @@ export function useFileSystem() {
   // ── Scan via FileSystemDirectoryHandle (File System Access API) ──
   const scanFolder = async (dirHandle: FileSystemDirectoryHandle) => {
     const entries: Array<{ file: File; relativePath: string }> = [];
+    const skippedExts: string[] = [];
 
     const hasPermission = await verifyPermission(dirHandle);
     if (!hasPermission) {
@@ -159,30 +164,44 @@ export function useFileSystem() {
       for await (const entry of (handle as any).values()) {
         if (entry.kind === 'directory') {
           await walk(entry, `${path}/${entry.name}`);
-        } else if (entry.kind === 'file' && AUDIO_EXTS.test(entry.name)) {
-          const file = await entry.getFile();
-          entries.push({ file, relativePath: `${path}/${entry.name}` });
+        } else if (entry.kind === 'file') {
+          const ext = entry.name.includes('.')
+            ? '.' + entry.name.split('.').pop()!.toLowerCase()
+            : '(no ext)';
+          if (AUDIO_EXTS.test(entry.name)) {
+            const file = await entry.getFile();
+            entries.push({ file, relativePath: `${path}/${entry.name}` });
+          } else {
+            skippedExts.push(ext);
+          }
         }
       }
     }
 
     await walk(dirHandle, dirHandle.name);
-    await processTracks(entries, dirHandle.name);
+    await processTracks(entries, dirHandle.name, skippedExts);
   };
 
   // ── Scan via FileList (webkitdirectory fallback) ──
   const scanFileList = async (files: FileList) => {
     if (!files.length) return;
     const entries: Array<{ file: File; relativePath: string }> = [];
+    const skippedExts: string[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      const ext = file.name.includes('.')
+        ? '.' + file.name.split('.').pop()!.toLowerCase()
+        : '(no ext)';
       if (AUDIO_EXTS.test(file.name)) {
-        // webkitRelativePath: "FolderName/sub/file.mp3"
         entries.push({ file, relativePath: file.webkitRelativePath || file.name });
+      } else {
+        skippedExts.push(ext);
       }
     }
-    const rootName = entries[0]?.relativePath.split('/')[0] || 'Imported';
-    await processTracks(entries, rootName);
+    const rootName = entries[0]?.relativePath.split('/')[0]
+      || files[0]?.webkitRelativePath.split('/')[0]
+      || 'Imported';
+    await processTracks(entries, rootName, skippedExts);
   };
 
   // ── Load the bundled sample track from public/ (always available, no picker needed) ──
