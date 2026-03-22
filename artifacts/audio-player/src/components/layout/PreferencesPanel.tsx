@@ -41,7 +41,7 @@ const EMPTY_SUBSONIC: SubsonicFormState = { name: '', url: '', username: '', pas
 
 export function PreferencesPanel() {
   const { isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset } = useAudioPlayer();
-  const { loadSampleTrack, scanFileList, isScanning, scanStatus } = useFileSystem();
+  const { loadSampleTrack, scanFolder, scanFileList, isScanning, scanStatus } = useFileSystem();
 
   // Hidden file inputs — clicked directly by buttons to preserve browser user-gesture.
   // Dynamic input.click() inside async functions loses the gesture context in sandboxed
