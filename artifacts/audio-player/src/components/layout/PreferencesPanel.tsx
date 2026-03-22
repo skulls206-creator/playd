@@ -350,7 +350,7 @@ export function PreferencesPanel() {
                     <div key={name} className="flex items-center gap-3 px-3 py-2 bg-black/20 rounded-md group">
                       <FolderOpen className="w-4 h-4 text-primary/70 shrink-0" />
                       <span className="text-sm flex-1 truncate font-mono text-xs">{name}</span>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex gap-1">
                         <Button
                           variant="ghost" size="icon" className="h-6 w-6"
                           title="Re-import this folder"
