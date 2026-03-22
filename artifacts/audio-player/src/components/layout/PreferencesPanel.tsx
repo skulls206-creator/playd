@@ -642,7 +642,7 @@ export function PreferencesPanel() {
                 What's stored where
               </h3>
               <p className="text-xs text-muted-foreground leading-relaxed mb-4">
-                playd.music has no user accounts. Here's exactly what is or isn't shared across your devices.
+                Your library is tied to your account — sign in on any device and your metadata, playlists, and settings are already there. Local files stay on each device since the browser can't reach your hard drive remotely.
               </p>
 
               <div className="space-y-3">
