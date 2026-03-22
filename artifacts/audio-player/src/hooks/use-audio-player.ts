@@ -1,7 +1,17 @@
 import { create } from 'zustand';
 import type { Track, QueueItem, EqPreset } from '@workspace/api-client-react';
 
+export interface LibraryFilter {
+  type: 'all' | 'artist' | 'album' | 'playlist';
+  value?: string;
+  label?: string;
+}
+
 interface PlayerState {
+  // Library navigation
+  libraryFilter: LibraryFilter;
+  setLibraryFilter: (filter: LibraryFilter) => void;
+
   // Core Playback
   currentTrack: Track | null;
   isPlaying: boolean;
@@ -48,6 +58,9 @@ interface PlayerState {
 const DEFAULT_EQ = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 export const useAudioPlayer = create<PlayerState>((set, get) => ({
+  libraryFilter: { type: 'all' },
+  setLibraryFilter: (filter) => set({ libraryFilter: filter }),
+
   currentTrack: null,
   isPlaying: false,
   volume: 1,

@@ -1,4 +1,5 @@
 import { Sidebar } from '@/components/layout/Sidebar';
+import { TrackListPanel } from '@/components/library/TrackListPanel';
 import { QueuePanel } from '@/components/queue/QueuePanel';
 import { TransportBar } from '@/components/layout/TransportBar';
 import { AudioEngine } from '@/components/player/AudioEngine';
@@ -6,8 +7,6 @@ import { EqPanel } from '@/components/player/EqPanel';
 import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
 import { useEffect } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
-import { Button } from '@/components/ui/button';
-import { Music } from 'lucide-react';
 
 export default function MainPlayer() {
   const { getStoredHandles, addFolder } = useFileSystem();
@@ -29,6 +28,7 @@ export default function MainPlayer() {
       {/* Main Workspace */}
       <div className="flex flex-1 overflow-hidden relative">
         <Sidebar />
+        <TrackListPanel />
         <QueuePanel />
         
         {/* Floating Overlays */}
