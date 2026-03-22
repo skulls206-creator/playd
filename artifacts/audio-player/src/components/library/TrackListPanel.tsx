@@ -488,7 +488,9 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
               <ResizeHandle col="year" colWidths={colWidths} setColWidths={setColWidths} />
             </div>
           )}
-          {/* Duration — always visible, fixed width, no handle */}
+          {/* Spacer — absorbs remaining space so Time is pinned to the right */}
+          <div className="flex-1" />
+          {/* Duration — pinned to far right, fixed width, no handle */}
           <div className="w-12 shrink-0 text-right">
             <ColHeader col="duration" label="Time" extraClass="justify-end" />
           </div>
@@ -599,7 +601,10 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
                         </div>
                       )}
 
-                      {/* Duration — always visible */}
+                      {/* Spacer — pushes Duration to the far right */}
+                      <div className="flex-1" />
+
+                      {/* Duration — pinned to far right */}
                       <div className="w-12 shrink-0 text-right">
                         {(track.duration ?? 0) > 0 ? (
                           <span className={clsx(
