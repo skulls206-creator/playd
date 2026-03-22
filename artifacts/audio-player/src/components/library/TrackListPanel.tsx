@@ -444,7 +444,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
           )}
         >
           <Trash2 className="w-3 h-3" />
-          <span className="hidden sm:inline">{clearConfirm ? 'Confirm?' : 'Clear'}</span>
+          <span className={clearConfirm ? 'inline' : 'hidden sm:inline'}>{clearConfirm ? 'Confirm?' : 'Clear'}</span>
         </button>
       </div>
 
