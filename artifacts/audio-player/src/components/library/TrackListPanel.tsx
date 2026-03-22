@@ -490,6 +490,8 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
 
         {/* Track rows */}
         <ScrollArea className="flex-1">
+          {/* w-full overrides Radix's internal display:table wrapper so flex-1 Title is constrained to viewport width */}
+          <div className="w-full">
           {sorted.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
               <Music className="w-10 h-10 opacity-20" />
@@ -534,7 +536,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
                       }}
                       onClick={(e) => handleRowClick(e, track, idx)}
                       className={clsx(
-                        'flex items-center px-3 cursor-default select-none border-b border-border/10 group h-9',
+                        'flex items-center px-3 cursor-default select-none border-b border-border/10 group h-9 overflow-hidden',
                         isCurrent && isSelected  && 'bg-primary/15 text-primary',
                         isCurrent && !isSelected && 'bg-primary/10 text-primary',
                         !isCurrent && isSelected && 'bg-white/[0.07] text-foreground',
@@ -609,6 +611,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
               })}
             </div>
           )}
+          </div>
         </ScrollArea>
       </div>
 
