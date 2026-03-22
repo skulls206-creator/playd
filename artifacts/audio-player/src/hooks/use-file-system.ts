@@ -40,15 +40,16 @@ async function detectMimeType(file: File): Promise<string | undefined> {
 }
 
 /**
- * Always detect MIME type from magic bytes and wrap the file with the correct
- * type so music-metadata-browser picks the right parser. We override the
- * browser-supplied type because .opus files can arrive as 'video/ogg',
- * 'audio/opus', or '' depending on the browser/OS — all of which confuse the
- * parser. Magic bytes are authoritative.
+ * Always detect MIME type from magic bytes and return a File with the correct
+ * type so music-metadata-browser picks the right parser. We use File (not
+ * Blob) so the library can still read the filename/extension from .name —
+ * both the MIME type AND the .opus extension are needed for correct detection.
+ * We override the browser-supplied type because .opus files can arrive as
+ * 'video/ogg', 'audio/opus', or '' depending on the browser/OS.
  */
-async function withMimeType(file: File): Promise<Blob> {
+async function withMimeType(file: File): Promise<File> {
   const mime = await detectMimeType(file);
-  if (mime && mime !== file.type) return new Blob([file], { type: mime });
+  if (mime && mime !== file.type) return new File([file], file.name, { type: mime });
   return file;
 }
 

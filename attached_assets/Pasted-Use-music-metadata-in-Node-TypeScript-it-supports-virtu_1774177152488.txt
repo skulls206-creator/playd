@@ -1,0 +1,48 @@
+Use music-metadata in Node/TypeScript; it supports “virtually any audio and tag format”, including Ogg/Opus.�
+Prompt the assistant with something like (adjust paths as needed):
+Build a Node script that uses music-metadata to read .opus files in D:\Music\OpusTest. For each file, log common.title, common.artist, common.album, and common.track.no.
+Provide a minimal working example (so it doesn’t hallucinate)
+Drop this into your project yourself, then ask the AI to integrate it into your app:
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { parseFile } from "music-metadata";
+
+const MUSIC_DIR = "D:/Music/OpusTest";
+
+async function dumpOpusTags() {
+  const files = await readdir(MUSIC_DIR);
+  for (const f of files) {
+    if (!f.toLowerCase().endsWith(".opus")) continue;
+
+    const full = join(MUSIC_DIR, f);
+    try {
+      const metadata = await parseFile(full);
+      const { common } = metadata;
+      console.log({
+        file: f,
+        title: common.title,
+        artist: common.artist,
+        album: common.album,
+        track: common.track?.no,
+      });
+    } catch (e: any) {
+      console.error("Failed to read", f, e.message);
+    }
+  }
+}
+
+dumpOpusTags().catch(console.error);
+This uses music-metadata exactly as documented, just changing the path and logging the common fields.�
+Then tell the AI: “Use this exact pattern to read tags for each .opus file and feed those values into my React front‑end instead of the raw filename.”
+Check what’s actually inside your .opus files
+There’s a non‑zero chance the tags aren’t there the way you think. Many YouTube downloaders only set filenames, not embedded tags. Tools like opusinfo, ffprobe, or a tag editor (Foobar2000, Mp3tag) will show whether title/artist/track are really embedded as OpusTags.�
+You can confirm quickly by opening one of those .opus files in Foobar2000 and viewing/editing its tags; if Foobar and music-metadata both show blank artist/title, Explorer may be inferring from filename or a shell extension, not from real tags.�
+Give the AI hard constraints
+When you ask the AI assistant again, be very explicit:
+State the environment: “Node 20, TypeScript, Windows 11, local folder of Ogg/Opus files.”
+State the library: “Use the music-metadata npm package, not any other metadata library.”�
+Paste the working snippet above and say “Do not change this reading logic; just call this helper from the web server and return the data as JSON.”
+This removes most of the freedom it has to pick wrong libraries or mis-handle the format.
+Why Windows can “read it” but your app can’t
+Explorer uses a unified “properties” API and separate handlers per file type; some metadata is stored in the file (EXIF, ID3, OpusTags), some may be in sidecar or structured storage, but for audio tags like artist/title it is typically in the file itself.�
+Your app is currently not using any audio‑tag parser, so it is blind to the same structures Explorer is reading.
