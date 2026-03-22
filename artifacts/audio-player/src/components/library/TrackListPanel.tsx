@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useListTracks, getListTracksQueryKey, customFetch } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
@@ -199,6 +199,14 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
     () => (localStorage.getItem('playd_sortDir') as SortDir | null) ?? 'asc'
   );
   const [colWidths, setColWidths] = useState(loadColWidths);
+
+  // Detect narrow mobile portrait — hides Artist/Album/Year, lets Title flex
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   const setSortCol = (col: SortCol) => { localStorage.setItem('playd_sortCol', col); setSortColRaw(col); };
   const setSortDir = (dir: SortDir | ((d: SortDir) => SortDir)) => {
@@ -441,29 +449,43 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
       {/* Horizontally scrollable area — column headers + track rows scroll together */}
       <div className="flex-1 overflow-x-auto flex flex-col min-w-0">
 
-        {/* Column headers — always show all columns */}
+        {/* Column headers */}
         <div
           className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none"
-          style={{ minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album }}
+          style={isMobile ? undefined : { minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album }}
         >
           <div className="w-10 shrink-0 text-right pr-2">
             <ColHeader col="trackNumber" label="#" extraClass="justify-end" />
           </div>
-          <div className="relative shrink-0 pr-3" style={{ width: colWidths.title }}>
+          {/* Title — flex-1 on mobile, fixed-resizable on desktop */}
+          <div
+            className={isMobile ? 'flex-1 min-w-0 relative pr-3' : 'relative shrink-0 pr-3'}
+            style={isMobile ? undefined : { width: colWidths.title }}
+          >
             <ColHeader col="title" label="Title" />
-            <ResizeHandle col="title" colWidths={colWidths} setColWidths={setColWidths} />
+            {!isMobile && <ResizeHandle col="title" colWidths={colWidths} setColWidths={setColWidths} />}
           </div>
-          <div className="relative shrink-0 pr-4" style={{ width: colWidths.artist }}>
-            <ColHeader col="artist" label="Artist" />
-            <ResizeHandle col="artist" colWidths={colWidths} setColWidths={setColWidths} />
-          </div>
-          <div className="relative shrink-0 pr-4" style={{ width: colWidths.album }}>
-            <ColHeader col="album" label="Album" />
-            <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
-          </div>
-          <div className="w-14 shrink-0 text-right pr-4">
-            <ColHeader col="year" label="Year" extraClass="justify-end" />
-          </div>
+          {/* Artist — desktop only */}
+          {!isMobile && (
+            <div className="relative shrink-0 pr-4" style={{ width: colWidths.artist }}>
+              <ColHeader col="artist" label="Artist" />
+              <ResizeHandle col="artist" colWidths={colWidths} setColWidths={setColWidths} />
+            </div>
+          )}
+          {/* Album — desktop only */}
+          {!isMobile && (
+            <div className="relative shrink-0 pr-4" style={{ width: colWidths.album }}>
+              <ColHeader col="album" label="Album" />
+              <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
+            </div>
+          )}
+          {/* Year — desktop only */}
+          {!isMobile && (
+            <div className="w-14 shrink-0 text-right pr-4">
+              <ColHeader col="year" label="Year" extraClass="justify-end" />
+            </div>
+          )}
+          {/* Duration — always visible */}
           <div className="w-12 shrink-0 text-right">
             <ColHeader col="duration" label="Time" extraClass="justify-end" />
           </div>
@@ -477,7 +499,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
               <p className="text-sm">No tracks yet — drop a folder here, or add one in Preferences</p>
             </div>
           ) : (
-            <div style={{ minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album }}>
+            <div style={isMobile ? undefined : { minWidth: 228 + colWidths.title + colWidths.artist + colWidths.album }}>
               {sorted.map((track, idx) => {
                 const isCurrent  = currentTrack?.id === track.id;
                 const isSelected = selectedIds.has(track.id);
@@ -537,35 +559,44 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
                         )}
                       </div>
 
-                      {/* Title */}
-                      <div className="shrink-0 pr-3 overflow-hidden" style={{ width: colWidths.title }}>
+                      {/* Title — flex-1 on mobile, fixed-width on desktop */}
+                      <div
+                        className={isMobile ? 'flex-1 min-w-0 pr-3 overflow-hidden' : 'shrink-0 pr-3 overflow-hidden'}
+                        style={isMobile ? undefined : { width: colWidths.title }}
+                      >
                         <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
                           {track.title}
                         </span>
                       </div>
 
-                      {/* Artist */}
-                      <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
-                        <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
-                          {track.artist || '—'}
-                        </span>
-                      </div>
+                      {/* Artist — desktop only */}
+                      {!isMobile && (
+                        <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
+                          <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
+                            {track.artist || '—'}
+                          </span>
+                        </div>
+                      )}
 
-                      {/* Album */}
-                      <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
-                        <span className="text-xs truncate block text-muted-foreground/60">
-                          {track.album || '—'}
-                        </span>
-                      </div>
+                      {/* Album — desktop only */}
+                      {!isMobile && (
+                        <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
+                          <span className="text-xs truncate block text-muted-foreground/60">
+                            {track.album || '—'}
+                          </span>
+                        </div>
+                      )}
 
-                      {/* Year */}
-                      <div className="w-14 shrink-0 text-right pr-4">
-                        <span className="text-[11px] font-mono text-muted-foreground/50">
-                          {track.year || ''}
-                        </span>
-                      </div>
+                      {/* Year — desktop only */}
+                      {!isMobile && (
+                        <div className="w-14 shrink-0 text-right pr-4">
+                          <span className="text-[11px] font-mono text-muted-foreground/50">
+                            {track.year || ''}
+                          </span>
+                        </div>
+                      )}
 
-                      {/* Duration */}
+                      {/* Duration — always visible */}
                       <div className="w-12 shrink-0 text-right">
                         <span className="text-[11px] font-mono text-muted-foreground">
                           {formatDuration(track.duration ?? 0)}
