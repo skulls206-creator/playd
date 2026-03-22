@@ -19,16 +19,28 @@ import {
   Disc3,
   Copy,
   FolderOpen,
+  ListMusic,
 } from 'lucide-react';
 
 interface TrackContextMenuProps {
   track: Track;
+  selectedTracks?: Track[];
   queueIndex: number;
   children: ReactNode;
   onPlayNow: () => void;
+  onPlaySelected?: () => void;
+  onQueueSelected?: () => void;
 }
 
-export function TrackContextMenu({ track, queueIndex, children, onPlayNow }: TrackContextMenuProps) {
+export function TrackContextMenu({
+  track,
+  selectedTracks = [],
+  queueIndex,
+  children,
+  onPlayNow,
+  onPlaySelected,
+  onQueueSelected,
+}: TrackContextMenuProps) {
   const {
     addToQueueNext,
     addToQueueEnd,
@@ -37,6 +49,9 @@ export function TrackContextMenu({ track, queueIndex, children, onPlayNow }: Tra
     isQueueOpen,
     toggleQueue,
   } = useAudioPlayer();
+
+  const isMulti = selectedTracks.length > 1;
+  const count = selectedTracks.length;
 
   const handlePlayNext = () => {
     if (queue.length === 0) { onPlayNow(); return; }
@@ -75,6 +90,11 @@ export function TrackContextMenu({ track, queueIndex, children, onPlayNow }: Tra
     navigator.clipboard.writeText(path).catch(() => {});
   };
 
+  const handleQueueSelected = () => {
+    if (onQueueSelected) onQueueSelected();
+    if (!isQueueOpen) toggleQueue();
+  };
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
@@ -82,96 +102,140 @@ export function TrackContextMenu({ track, queueIndex, children, onPlayNow }: Tra
       <ContextMenuContent className="w-56 bg-zinc-900 border-zinc-700 text-zinc-100 shadow-2xl">
         {/* Track info header */}
         <div className="px-3 py-2 border-b border-zinc-700/60 mb-1">
-          <p className="text-xs font-semibold truncate text-zinc-100">{track.title}</p>
-          <p className="text-[10px] text-zinc-400 truncate">{track.artist || 'Unknown Artist'}</p>
+          {isMulti ? (
+            <>
+              <p className="text-xs font-semibold text-zinc-100">{count} tracks selected</p>
+              <p className="text-[10px] text-zinc-400 truncate">
+                {selectedTracks.slice(0, 3).map(t => t.title).join(', ')}
+                {count > 3 && `… +${count - 3} more`}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs font-semibold truncate text-zinc-100">{track.title}</p>
+              <p className="text-[10px] text-zinc-400 truncate">{track.artist || 'Unknown Artist'}</p>
+            </>
+          )}
         </div>
 
-        {/* Playback */}
-        <ContextMenuItem
-          onClick={onPlayNow}
-          className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
-        >
-          <Play className="w-3.5 h-3.5 text-[#FF3C00]" />
-          Play Now
-        </ContextMenuItem>
-
-        <ContextMenuSeparator className="bg-zinc-700/50" />
-
-        {/* Queue */}
-        <ContextMenuItem
-          onClick={handlePlayNext}
-          className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
-        >
-          <ListStart className="w-3.5 h-3.5 text-zinc-400" />
-          Play Next
-        </ContextMenuItem>
-        <ContextMenuItem
-          onClick={handleAddToEnd}
-          className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
-        >
-          <ListEnd className="w-3.5 h-3.5 text-zinc-400" />
-          Add to End of Queue
-        </ContextMenuItem>
-
-        <ContextMenuSeparator className="bg-zinc-700/50" />
-
-        {/* Navigation */}
-        {track.artist && (
-          <ContextMenuItem
-            onClick={handleGoToArtist}
-            className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
-          >
-            <User className="w-3.5 h-3.5 text-zinc-400" />
-            Go to Artist
-            <span className="ml-auto text-[10px] text-zinc-500 truncate max-w-[80px]">{track.artist}</span>
-          </ContextMenuItem>
-        )}
-        {track.album && (
-          <ContextMenuItem
-            onClick={handleGoToAlbum}
-            className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
-          >
-            <Disc3 className="w-3.5 h-3.5 text-zinc-400" />
-            Go to Album
-            <span className="ml-auto text-[10px] text-zinc-500 truncate max-w-[80px]">{track.album}</span>
-          </ContextMenuItem>
-        )}
-
-        <ContextMenuSeparator className="bg-zinc-700/50" />
-
-        {/* Copy */}
-        <ContextMenuSub>
-          <ContextMenuSubTrigger className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100 data-[state=open]:bg-white/8">
-            <Copy className="w-3.5 h-3.5 text-zinc-400" />
-            Copy
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-48 bg-zinc-900 border-zinc-700 text-zinc-100 shadow-2xl">
+        {/* Bulk actions when multiple selected */}
+        {isMulti ? (
+          <>
             <ContextMenuItem
-              onClick={handleCopyTitle}
-              className="gap-2 cursor-pointer text-xs focus:bg-white/8 focus:text-zinc-100"
+              onClick={onPlaySelected}
+              className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
             >
-              Title only
+              <Play className="w-3.5 h-3.5 text-[#FF3C00]" />
+              Play {count} tracks
+            </ContextMenuItem>
+
+            <ContextMenuItem
+              onClick={handleQueueSelected}
+              className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
+            >
+              <ListEnd className="w-3.5 h-3.5 text-zinc-400" />
+              Add {count} to end of queue
+            </ContextMenuItem>
+
+            <ContextMenuSeparator className="bg-zinc-700/50" />
+
+            <ContextMenuItem
+              onClick={onPlayNow}
+              className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100 text-zinc-400"
+            >
+              <ListMusic className="w-3.5 h-3.5 text-zinc-500" />
+              Play this track only
+            </ContextMenuItem>
+          </>
+        ) : (
+          <>
+            {/* Single track playback */}
+            <ContextMenuItem
+              onClick={onPlayNow}
+              className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
+            >
+              <Play className="w-3.5 h-3.5 text-[#FF3C00]" />
+              Play Now
+            </ContextMenuItem>
+
+            <ContextMenuSeparator className="bg-zinc-700/50" />
+
+            <ContextMenuItem
+              onClick={handlePlayNext}
+              className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
+            >
+              <ListStart className="w-3.5 h-3.5 text-zinc-400" />
+              Play Next
             </ContextMenuItem>
             <ContextMenuItem
-              onClick={handleCopyFull}
-              className="gap-2 cursor-pointer text-xs focus:bg-white/8 focus:text-zinc-100"
+              onClick={handleAddToEnd}
+              className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
             >
-              Artist – Title
+              <ListEnd className="w-3.5 h-3.5 text-zinc-400" />
+              Add to End of Queue
             </ContextMenuItem>
-            {track.source === 'local' && track.fileName && (
-              <>
-                <ContextMenuSeparator className="bg-zinc-700/50" />
+
+            <ContextMenuSeparator className="bg-zinc-700/50" />
+
+            {/* Navigation */}
+            {track.artist && (
+              <ContextMenuItem
+                onClick={handleGoToArtist}
+                className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
+              >
+                <User className="w-3.5 h-3.5 text-zinc-400" />
+                Go to Artist
+                <span className="ml-auto text-[10px] text-zinc-500 truncate max-w-[80px]">{track.artist}</span>
+              </ContextMenuItem>
+            )}
+            {track.album && (
+              <ContextMenuItem
+                onClick={handleGoToAlbum}
+                className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
+              >
+                <Disc3 className="w-3.5 h-3.5 text-zinc-400" />
+                Go to Album
+                <span className="ml-auto text-[10px] text-zinc-500 truncate max-w-[80px]">{track.album}</span>
+              </ContextMenuItem>
+            )}
+
+            <ContextMenuSeparator className="bg-zinc-700/50" />
+
+            {/* Copy */}
+            <ContextMenuSub>
+              <ContextMenuSubTrigger className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100 data-[state=open]:bg-white/8">
+                <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                Copy
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-48 bg-zinc-900 border-zinc-700 text-zinc-100 shadow-2xl">
                 <ContextMenuItem
-                  onClick={handleCopyFilePath}
+                  onClick={handleCopyTitle}
                   className="gap-2 cursor-pointer text-xs focus:bg-white/8 focus:text-zinc-100"
                 >
-                  <FolderOpen className="w-3 h-3 text-zinc-500" />
-                  File path
+                  Title only
                 </ContextMenuItem>
-              </>
-            )}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+                <ContextMenuItem
+                  onClick={handleCopyFull}
+                  className="gap-2 cursor-pointer text-xs focus:bg-white/8 focus:text-zinc-100"
+                >
+                  Artist – Title
+                </ContextMenuItem>
+                {track.source === 'local' && track.fileName && (
+                  <>
+                    <ContextMenuSeparator className="bg-zinc-700/50" />
+                    <ContextMenuItem
+                      onClick={handleCopyFilePath}
+                      className="gap-2 cursor-pointer text-xs focus:bg-white/8 focus:text-zinc-100"
+                    >
+                      <FolderOpen className="w-3 h-3 text-zinc-500" />
+                      File path
+                    </ContextMenuItem>
+                  </>
+                )}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          </>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   );

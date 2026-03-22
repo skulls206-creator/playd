@@ -4,9 +4,10 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, RefreshCw, Trash2, X } from 'lucide-react';
+import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, RefreshCw, Trash2, X, FolderInput } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
+import type { Track } from '@workspace/api-client-react';
 
 type SortCol = 'trackNumber' | 'title' | 'artist' | 'album' | 'duration' | 'year';
 type SortDir = 'asc' | 'desc';
@@ -98,12 +99,20 @@ interface TrackListPanelProps {
 
 export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
-  const { currentTrack, isPlaying, play, togglePlay, setQueue, libraryFilter, setLibraryFilter } = useAudioPlayer();
-  const { isScanning, scanProgress, rescanAll, getStoredHandles } = useFileSystem();
+  const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
+  const { isScanning, scanProgress, rescanAll, getStoredHandles, importDroppedItems } = useFileSystem();
   const queryClient = useQueryClient();
 
   const [clearConfirm, setClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+
+  // ── Multi-select ────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const lastClickedIdxRef = useRef<number>(-1);
+
+  // ── Drag-drop ────────────────────────────────────────────────────────────
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
 
   const handleRescan = async () => {
     const handles = await getStoredHandles();
@@ -119,6 +128,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
     try {
       await customFetch('/api/tracks/local', { method: 'DELETE' });
       queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+      setSelectedIds(new Set());
     } finally {
       setIsClearing(false);
     }
@@ -156,7 +166,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...filtered].sort((a, b) => {
-      const secondary = (x: any, y: any) => {
+      const secondary = (x: Track, y: Track) => {
         const ar = (x.artist || '').localeCompare(y.artist || '');
         if (ar !== 0) return ar;
         const al = (x.album || '').localeCompare(y.album || '');
@@ -177,11 +187,66 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
     });
   }, [filtered, sortCol, sortDir]);
 
-  const playRow = useCallback((track: any, idx: number) => {
+  const playRow = useCallback((track: Track, idx: number) => {
     const queue = sorted.map((t, i) => ({ id: i, trackId: t.id, position: i, track: t }));
     setQueue(queue);
     play(track, queue, idx);
   }, [sorted, setQueue, play]);
+
+  // ── Click handler with multi-select ─────────────────────────────────────
+  const handleRowClick = useCallback((e: React.MouseEvent, track: Track, idx: number) => {
+    if (e.metaKey || e.ctrlKey) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(track.id)) next.delete(track.id);
+        else next.add(track.id);
+        return next;
+      });
+    } else if (e.shiftKey && lastClickedIdxRef.current >= 0) {
+      const from = Math.min(lastClickedIdxRef.current, idx);
+      const to   = Math.max(lastClickedIdxRef.current, idx);
+      setSelectedIds(new Set(sorted.slice(from, to + 1).map(t => t.id)));
+    } else {
+      setSelectedIds(new Set([track.id]));
+    }
+    lastClickedIdxRef.current = idx;
+  }, [sorted]);
+
+  // ── Drag-and-drop handlers ───────────────────────────────────────────────
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current++;
+    if (dragCounterRef.current === 1) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) setIsDragOver(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    if (e.dataTransfer.items.length > 0) {
+      await importDroppedItems(e.dataTransfer.items);
+      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    }
+  };
+
+  // ── Computed selection data ──────────────────────────────────────────────
+  const selectedTracks = useMemo(
+    () => sorted.filter(t => selectedIds.has(t.id)),
+    [sorted, selectedIds]
+  );
+  const selectionDuration = selectedTracks.reduce((s, t) => s + (t.duration ?? 0), 0);
+  const totalDuration = sorted.reduce((s, t) => s + (t.duration ?? 0), 0);
 
   const SortIcon = ({ col }: { col: SortCol }) => {
     if (sortCol !== col) return <span className="w-3 inline-block" />;
@@ -190,7 +255,6 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
       : <ChevronDown className="w-3 h-3 inline ml-0.5 text-primary" />;
   };
 
-  // Column header button helper
   const ColHeader = ({ col, label, extraClass = '' }: { col: SortCol; label: string; extraClass?: string }) => (
     <button
       className={clsx(
@@ -206,7 +270,20 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   );
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-background min-w-0">
+    <div
+      className="flex-1 flex flex-col overflow-hidden bg-background min-w-0 relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* ── Drag-over overlay ──────────────────────────────────────────────── */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/70 border-2 border-dashed border-emerald-500/70 rounded pointer-events-none">
+          <FolderInput className="w-10 h-10 text-emerald-400 mb-2" />
+          <p className="text-sm text-emerald-300 font-medium">Drop music folders or files to import</p>
+        </div>
+      )}
 
       {/* ── Action toolbar ─────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 px-2 h-8 border-b border-border bg-black/20 shrink-0">
@@ -277,35 +354,24 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
 
       {/* Column headers */}
       <div className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none">
-        {/* # — fixed */}
         <div className="w-10 shrink-0 text-right pr-2">
           <ColHeader col="trackNumber" label="#" extraClass="justify-end" />
         </div>
-
-        {/* Title — resizable */}
         <div className="relative shrink-0 pr-3" style={{ width: colWidths.title }}>
           <ColHeader col="title" label="Title" />
           <ResizeHandle col="title" colWidths={colWidths} setColWidths={setColWidths} />
         </div>
-
-        {/* Artist — resizable, hidden on mobile */}
         <div className="relative shrink-0 pr-3 hidden sm:block" style={{ width: colWidths.artist }}>
           <ColHeader col="artist" label="Artist" />
           <ResizeHandle col="artist" colWidths={colWidths} setColWidths={setColWidths} />
         </div>
-
-        {/* Album — resizable, hidden on mobile */}
         <div className="relative shrink-0 pr-3 hidden sm:block" style={{ width: colWidths.album }}>
           <ColHeader col="album" label="Album" />
           <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
         </div>
-
-        {/* Year — hidden on mobile */}
         <div className="w-14 shrink-0 text-right pr-3 hidden sm:block">
           <ColHeader col="year" label="Year" extraClass="justify-end" />
         </div>
-
-        {/* Duration — fixed */}
         <div className="w-12 shrink-0 text-right">
           <ColHeader col="duration" label="Time" extraClass="justify-end" />
         </div>
@@ -316,28 +382,55 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
         {sorted.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
             <Music className="w-10 h-10 opacity-20" />
-            <p className="text-sm">No tracks yet — add a folder or sync a Subsonic server in Preferences</p>
+            <p className="text-sm">No tracks yet — drop a folder here, or add one in Preferences</p>
           </div>
         ) : (
           <div>
             {sorted.map((track, idx) => {
-              const isCurrent = currentTrack?.id === track.id;
+              const isCurrent  = currentTrack?.id === track.id;
+              const isSelected = selectedIds.has(track.id);
               const isRowPlaying = isCurrent && isPlaying;
+
+              // Build the context tracks: if right-clicked track is in selection
+              // and multiple are selected, expose the full selection; otherwise just this track.
+              const ctxTracks = isSelected && selectedIds.size > 1 ? selectedTracks : [track];
+
               return (
                 <TrackContextMenu
                   key={track.id}
                   track={track}
+                  selectedTracks={ctxTracks}
                   queueIndex={idx}
-                  onPlayNow={() => playRow(track, idx)}
+                  onPlayNow={() => {
+                    setSelectedIds(new Set([track.id]));
+                    playRow(track, idx);
+                  }}
+                  onPlaySelected={() => {
+                    if (ctxTracks.length > 1) {
+                      const queue = ctxTracks.map((t, i) => ({ id: i, trackId: t.id, position: i, track: t }));
+                      setQueue(queue);
+                      play(ctxTracks[0], queue, 0);
+                    } else {
+                      playRow(track, idx);
+                    }
+                  }}
+                  onQueueSelected={() => {
+                    ctxTracks.forEach(t => addToQueueEnd(t));
+                  }}
                 >
                   <div
-                    onDoubleClick={() => playRow(track, idx)}
-                    onClick={() => { if (!isCurrent) playRow(track, idx); }}
+                    onDoubleClick={() => {
+                      setSelectedIds(new Set([track.id]));
+                      playRow(track, idx);
+                    }}
+                    onClick={(e) => handleRowClick(e, track, idx)}
                     className={clsx(
-                      'flex items-center px-3 cursor-default select-none border-b border-border/10 group hover:bg-white/5',
+                      'flex items-center px-3 cursor-default select-none border-b border-border/10 group',
                       'h-11 sm:h-8',
-                      isCurrent && 'bg-primary/10 text-primary',
-                      !isCurrent && 'text-foreground/80',
+                      isCurrent && isSelected  && 'bg-primary/15 text-primary',
+                      isCurrent && !isSelected && 'bg-primary/10 text-primary',
+                      !isCurrent && isSelected && 'bg-white/[0.07] text-foreground',
+                      !isCurrent && !isSelected && 'text-foreground/80 hover:bg-white/5',
                     )}
                   >
                     {/* # */}
@@ -408,13 +501,19 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
       </ScrollArea>
 
       {/* Status bar */}
-      <div className="h-6 border-t border-border bg-black/20 flex items-center px-3 gap-4 shrink-0">
+      <div className="h-6 border-t border-border bg-black/20 flex items-center px-3 gap-4 shrink-0 select-none">
         <span className="text-[10px] text-muted-foreground">
-          {sorted.length} {sorted.length === 1 ? 'track' : 'tracks'}
-          {libraryFilter.type !== 'all' && ` — ${libraryFilter.label}`}
+          {selectedIds.size > 0 ? (
+            <>{selectedIds.size} selected · {sorted.length} tracks</>
+          ) : (
+            <>{sorted.length} {sorted.length === 1 ? 'track' : 'tracks'}
+              {libraryFilter.type !== 'all' && ` — ${libraryFilter.label}`}</>
+          )}
         </span>
         <span className="text-[10px] text-muted-foreground ml-auto">
-          {formatDuration(sorted.reduce((s, t) => s + (t.duration ?? 0), 0))}
+          {selectedIds.size > 0
+            ? formatDuration(selectionDuration)
+            : formatDuration(totalDuration)}
         </span>
       </div>
     </div>

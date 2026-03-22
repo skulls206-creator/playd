@@ -8,11 +8,13 @@ import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
 import { useEffect, useState } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 
 export default function MainPlayer() {
   const { getStoredHandles } = useFileSystem();
   const { isQueueOpen } = useAudioPlayer();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  useKeyboardShortcuts();
 
   useEffect(() => {
     getStoredHandles().then(() => {});

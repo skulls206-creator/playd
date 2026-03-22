@@ -1051,6 +1051,75 @@ export function useFileSystem() {
     }
   };
 
+  const importDroppedItems = async (items: DataTransferItemList): Promise<void> => {
+    if (!items.length) return;
+
+    // Try File System Access API first (Chrome/Edge) — gives us persistent directory handles
+    const fsApiAvailable = typeof (DataTransferItem.prototype as any).getAsFileSystemHandle === 'function';
+    if (fsApiAvailable) {
+      const itemArray = Array.from(items);
+      const dirHandles: FileSystemDirectoryHandle[] = [];
+      for (const item of itemArray) {
+        if (item.kind !== 'file') continue;
+        const handle = await (item as any).getAsFileSystemHandle() as FileSystemHandle | null;
+        if (!handle) continue;
+        if (handle.kind === 'directory') {
+          const dirHandle = handle as FileSystemDirectoryHandle;
+          dirHandles.push(dirHandle);
+          const existing = await getStoredHandles();
+          if (!existing.some(h => h.name === dirHandle.name)) {
+            await set('music-folders', [...existing, dirHandle]);
+          }
+        }
+      }
+      if (dirHandles.length > 0) {
+        for (const handle of dirHandles) await scanFolder(handle);
+        return;
+      }
+    }
+
+    // Fallback: webkitGetAsEntry — works everywhere for recursive directory reads
+    const fileEntries: Array<{ file: File; relativePath: string }> = [];
+    const rootEntries: FileSystemEntry[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind !== 'file') continue;
+      const entry = item.webkitGetAsEntry?.();
+      if (entry) rootEntries.push(entry);
+    }
+
+    async function traverseEntry(entry: FileSystemEntry, basePath: string): Promise<void> {
+      if (entry.isFile) {
+        await new Promise<void>((resolve) => {
+          (entry as FileSystemFileEntry).file((f) => {
+            if (isLikelyAudio(f)) {
+              fileEntries.push({ file: f, relativePath: `${basePath}/${f.name}` });
+            }
+            resolve();
+          }, () => resolve());
+        });
+      } else if (entry.isDirectory) {
+        const reader = (entry as FileSystemDirectoryEntry).createReader();
+        const subEntries = await new Promise<FileSystemEntry[]>((resolve, reject) =>
+          reader.readEntries(resolve, reject)
+        );
+        for (const sub of subEntries) {
+          await traverseEntry(sub, `${basePath}/${entry.name}`);
+        }
+      }
+    }
+
+    for (const entry of rootEntries) {
+      await traverseEntry(entry, entry.name);
+    }
+
+    if (fileEntries.length > 0) {
+      const rootName = fileEntries[0].relativePath.split('/')[0] || 'Dropped';
+      await processTracks(fileEntries, rootName);
+    }
+  };
+
   return {
     isScanning,
     scanProgress,
@@ -1061,6 +1130,7 @@ export function useFileSystem() {
     scanFolder,
     scanFileList,
     rescanAll,
+    importDroppedItems,
     getStoredHandles,
     verifyPermission,
     getFileFromPath,
