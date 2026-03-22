@@ -7,31 +7,164 @@ import { useQueryClient } from '@tanstack/react-query';
 const ART_STORE_KEY = 'track-art';
 const AUDIO_EXTS = /\.(mp3|flac|m4a|m4p|aac|wav|ogg|opus|webm|wma|aiff|aif|alac|mp4|3gp)$/i;
 
-/**
- * Detect audio MIME type by reading the file's magic bytes (first 12 bytes).
- * This lets us parse extension-less files (e.g. YouTube Music offline tracks).
- *
- * Signatures:
- *   OGG/Opus  → 4F 67 67 53          "OggS"
- *   WebM      → 1A 45 DF A3          EBML header
- *   MP3+ID3   → 49 44 33             "ID3"
- *   MP3 sync  → FF FB / FF F3 / FF F2
- *   FLAC      → 66 4C 61 43          "fLaC"
- *   WAV       → 52 49 46 46          "RIFF"
- *   MP4/M4A   → ?? ?? ?? ?? 66 74 79 70  "ftyp" at offset 4
- *   AAC ADTS  → FF F1 / FF F9
- */
+// ─── Native Vorbis Comment parser (OGG / Opus files) ────────────────────────
+// Bypasses music-metadata-browser entirely for these formats.
+// OGG Opus layout:
+//   Page 0 → "OpusHead" (ID header)
+//   Page 1 → "OpusTags" (Vorbis Comment header — contains metadata)
+//
+// Vorbis Comment wire format (after "OpusTags"):
+//   uint32le  vendor_string_length
+//   <bytes>   vendor_string
+//   uint32le  comment_count
+//   for each comment:
+//     uint32le  length
+//     <bytes>   "KEY=value"  (UTF-8)
+// ────────────────────────────────────────────────────────────────────────────
+
+function readLE32(b: Uint8Array, o: number): number {
+  return (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+}
+
+function readBE32(b: Uint8Array, o: number): number {
+  return ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
+}
+
+function decodeVorbisCommentPicture(
+  base64Val: string,
+): { mimeType: string; data: Uint8Array } | null {
+  try {
+    const raw = atob(base64Val);
+    const b = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) b[i] = raw.charCodeAt(i);
+    let o = 4; // skip picture_type
+    const mimeLen = readBE32(b, o); o += 4;
+    const mimeType = new TextDecoder().decode(b.subarray(o, o + mimeLen)); o += mimeLen;
+    const descLen = readBE32(b, o); o += 4 + descLen;
+    o += 16; // skip width, height, depth, color-count
+    const dataLen = readBE32(b, o); o += 4;
+    return { mimeType, data: b.subarray(o, o + dataLen) };
+  } catch {
+    return null;
+  }
+}
+
+interface VorbisTags {
+  title?: string;
+  artist?: string;
+  album?: string;
+  trackNumber?: number;
+  year?: number;
+  genre?: string;
+  albumArtDataUrl?: string;
+}
+
+function parseVorbisComments(bytes: Uint8Array): VorbisTags {
+  // Locate "OpusTags" magic bytes (the Opus comment header magic signature)
+  const magic = [0x4F, 0x70, 0x75, 0x73, 0x54, 0x61, 0x67, 0x73];
+  let offset = -1;
+  outer: for (let i = 0; i < bytes.length - 8; i++) {
+    for (let j = 0; j < 8; j++) {
+      if (bytes[i + j] !== magic[j]) continue outer;
+    }
+    offset = i + 8;
+    break;
+  }
+  if (offset < 0) return {};
+
+  if (offset + 8 > bytes.length) return {};
+
+  const vendorLen = readLE32(bytes, offset); offset += 4;
+  if (offset + vendorLen + 4 > bytes.length) return {};
+  offset += vendorLen;
+
+  const numComments = readLE32(bytes, offset); offset += 4;
+  if (numComments > 10000) return {}; // sanity check
+
+  const dec = new TextDecoder('utf-8');
+  const result: VorbisTags = {};
+
+  for (let i = 0; i < numComments; i++) {
+    if (offset + 4 > bytes.length) break;
+    const len = readLE32(bytes, offset); offset += 4;
+    if (offset + len > bytes.length) break;
+
+    const comment = dec.decode(bytes.subarray(offset, offset + len));
+    offset += len;
+
+    const eq = comment.indexOf('=');
+    if (eq < 0) continue;
+
+    const key = comment.slice(0, eq).toUpperCase();
+    const val = comment.slice(eq + 1);
+
+    if (key === 'TITLE') result.title = val;
+    else if (key === 'ARTIST') result.artist = val;
+    else if (key === 'ALBUMARTIST' && !result.artist) result.artist = val;
+    else if (key === 'ALBUM') result.album = val;
+    else if (key === 'TRACKNUMBER') {
+      const n = parseInt(val, 10);
+      if (!isNaN(n) && n > 0) result.trackNumber = n;
+    } else if (key === 'DATE' || key === 'YEAR') {
+      const y = parseInt(val.slice(0, 4), 10);
+      if (!isNaN(y) && y > 0) result.year = y;
+    } else if (key === 'GENRE') {
+      result.genre = val;
+    } else if (key === 'METADATA_BLOCK_PICTURE') {
+      const pic = decodeVorbisCommentPicture(val);
+      if (pic && !result.albumArtDataUrl) {
+        let bin = '';
+        for (let b = 0; b < pic.data.length; b++) bin += String.fromCharCode(pic.data[b]);
+        result.albumArtDataUrl = `data:${pic.mimeType};base64,${btoa(bin)}`;
+      }
+    }
+  }
+
+  return result;
+}
+
+// Read the last 65 KB of an Opus file to find the final OGG page's granule
+// position. For Opus, duration = granulePosition / 48000 seconds.
+async function getOpusDuration(file: File): Promise<number> {
+  try {
+    const TAIL = 65536;
+    const start = Math.max(0, file.size - TAIL);
+    const buf = await file.slice(start).arrayBuffer();
+    const b = new Uint8Array(buf);
+    let lastGranuleLo = 0;
+    let lastGranuleHi = 0;
+
+    for (let i = 0; i < b.length - 13; i++) {
+      if (b[i] === 0x4F && b[i + 1] === 0x67 && b[i + 2] === 0x67 && b[i + 3] === 0x53) {
+        const lo = readLE32(b, i + 6);
+        const hi = readLE32(b, i + 10);
+        if (hi !== 0xFFFFFFFF || lo !== 0xFFFFFFFF) {
+          lastGranuleLo = lo;
+          lastGranuleHi = hi;
+        }
+      }
+    }
+
+    if (lastGranuleHi === 0 && lastGranuleLo === 0) return 0;
+    const granule = lastGranuleHi * 4294967296 + lastGranuleLo;
+    return granule / 48000;
+  } catch {
+    return 0;
+  }
+}
+
+// ─── Detect MIME type from magic bytes ──────────────────────────────────────
 async function detectMimeType(file: File): Promise<string | undefined> {
   try {
     const buf = await file.slice(0, 12).arrayBuffer();
     const b = new Uint8Array(buf);
     if (b[0] === 0x4F && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return 'audio/ogg';
     if (b[0] === 0x1A && b[1] === 0x45 && b[2] === 0xDF && b[3] === 0xA3) return 'audio/webm';
-    if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33)                  return 'audio/mpeg'; // ID3
-    if ((b[0] === 0xFF) && (b[1] === 0xFB || b[1] === 0xF3 || b[1] === 0xF2)) return 'audio/mpeg';
+    if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33)                  return 'audio/mpeg';
+    if (b[0] === 0xFF && (b[1] === 0xFB || b[1] === 0xF3 || b[1] === 0xF2)) return 'audio/mpeg';
     if (b[0] === 0x66 && b[1] === 0x4C && b[2] === 0x61 && b[3] === 0x43) return 'audio/flac';
     if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return 'audio/wav';
-    if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return 'audio/mp4'; // ftyp
+    if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return 'audio/mp4';
     if (b[0] === 0xFF && (b[1] === 0xF1 || b[1] === 0xF9))                return 'audio/aac';
     return undefined;
   } catch {
@@ -39,33 +172,10 @@ async function detectMimeType(file: File): Promise<string | undefined> {
   }
 }
 
-/**
- * Always detect MIME type from magic bytes and return a File with the correct
- * type so music-metadata-browser picks the right parser. We use File (not
- * Blob) so the library can still read the filename/extension from .name —
- * both the MIME type AND the .opus extension are needed for correct detection.
- * We override the browser-supplied type because .opus files can arrive as
- * 'video/ogg', 'audio/opus', or '' depending on the browser/OS.
- */
-async function withMimeType(file: File): Promise<File> {
-  const mime = await detectMimeType(file);
-  if (mime && mime !== file.type) return new File([file], file.name, { type: mime });
-  return file;
-}
-
-/**
- * Parse artist and title from a YouTube Music filename.
- * Handles patterns like:
- *   "NF - HOPE-(p).opus"              → { artist: "NF",    title: "HOPE" }
- *   "Token - Cough Freestyle-(p).opus" → { artist: "Token", title: "Cough Freestyle" }
- *   "Just a Title.mp3"                 → { artist: "",      title: "Just a Title" }
- */
+// ─── Filename metadata fallback ──────────────────────────────────────────────
 function parseFilenameMetadata(fileName: string): { artist: string; title: string } {
-  // Strip extension
   let name = fileName.replace(/\.[^.]+$/, '');
-  // Strip YouTube Music's -(p) download marker (may have spaces around dash)
   name = name.replace(/\s*-\s*\(p\)\s*$/, '').trim();
-  // Try "Artist - Title" split on first occurrence of " - "
   const sep = name.indexOf(' - ');
   if (sep > 0) {
     return { artist: name.slice(0, sep).trim(), title: name.slice(sep + 3).trim() };
@@ -73,10 +183,7 @@ function parseFilenameMetadata(fileName: string): { artist: string; title: strin
   return { artist: '', title: name.trim() };
 }
 
-/**
- * Pull a vorbis/ID3 tag value by key from native tag blocks.
- * Useful when music-metadata-browser's common mapping misses a field.
- */
+// ─── music-metadata-browser helpers (for non-OGG formats) ───────────────────
 function nativeTag(native: mm.INativeTagDict | undefined, ...keys: string[]): string | undefined {
   if (!native) return undefined;
   for (const [, tagList] of Object.entries(native)) {
@@ -88,47 +195,27 @@ function nativeTag(native: mm.INativeTagDict | undefined, ...keys: string[]): st
   return undefined;
 }
 
-/**
- * Returns true if the file is likely audio and worth attempting to parse.
- * Accepts:
- *  1. Known audio/video extensions (AUDIO_EXTS)
- *  2. Files whose MIME type starts with audio/ or video/
- *  3. Files with NO extension at all (YouTube Music stores offline tracks
- *     as extension-less blobs — music-metadata-browser can parse them by
- *     reading the actual file header)
- * Explicitly rejects common non-audio extensions to avoid wasting time on
- * images, docs, etc. that happen to have no extension.
- */
+// ─── Audio file detection ────────────────────────────────────────────────────
 const SKIP_EXTS = /\.(jpg|jpeg|png|gif|webp|bmp|svg|pdf|txt|xml|json|html|css|js|db|sqlite|ini|log|zip|rar|7z|exe|dll|lnk|url|nfo|cue|m3u|m3u8|pls|xspf)$/i;
 
 function isLikelyAudio(file: File): boolean {
   if (AUDIO_EXTS.test(file.name)) return true;
   if (file.type.startsWith('audio/')) return true;
   if (file.type.startsWith('video/')) return true;
-  // No extension at all → try parsing (YouTube Music offline files)
   if (!file.name.includes('.')) return true;
-  // Known non-audio extension → skip
   if (SKIP_EXTS.test(file.name)) return false;
-  // Unknown extension → optimistically try
   return true;
 }
 
-/**
- * In-memory store for File objects loaded via the webkitdirectory fallback.
- * Keys: `${folderPath}/${fileName}` (same convention as DB folderPath + fileName).
- * Lives for the browser session only — no persistence across reloads.
- */
+// ─── In-memory file store (session-only, for playback) ──────────────────────
 const inMemoryFiles = new Map<string, File>();
 
-/** Open a webkitdirectory file-picker as a fallback when showDirectoryPicker is blocked. */
 function pickFilesViaInput(): Promise<FileList | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
     (input as any).webkitdirectory = true;
-    // NOTE: Do NOT set `accept` with webkitdirectory — it conflicts in Chrome/Edge
-    // and causes 0 files to be returned. We filter by extension in code instead.
 
     let settled = false;
     const settle = (value: FileList | null) => {
@@ -136,11 +223,15 @@ function pickFilesViaInput(): Promise<FileList | null> {
     };
 
     input.addEventListener('change', () => settle(input.files));
-    // Cancel detection: browser refocuses the window after the dialog closes
     const onFocus = () => setTimeout(() => settle(null), 500);
     window.addEventListener('focus', onFocus, { once: true });
     input.click();
   });
+}
+
+// ─── OGG extension check ─────────────────────────────────────────────────────
+function isOggFile(fileName: string): boolean {
+  return /\.(opus|ogg|oga)$/i.test(fileName);
 }
 
 export function useFileSystem() {
@@ -166,7 +257,6 @@ export function useFileSystem() {
     return artStore[`${folderPath}/${fileName}`] || null;
   };
 
-  // ── Core scan logic that works on any iterable of {file, relativePath} ──
   const processTracks = async (
     entries: Array<{ file: File; relativePath: string }>,
     rootName: string,
@@ -186,84 +276,113 @@ export function useFileSystem() {
         const fileName = parts[parts.length - 1];
         const folderPath = parts.slice(0, -1).join('/') || rootName;
 
-        // Store the File object in memory for session playback regardless
         inMemoryFiles.set(`${folderPath}/${fileName}`, file);
 
-        // Filename is always available as a last-resort fallback
         const fileMeta = parseFilenameMetadata(fileName);
 
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
-          const mime = await detectMimeType(file);
-          const metadata = await mm.parseBuffer(
-            uint8Array,
-            { mimeType: mime || file.type || undefined, path: file.name, size: file.size },
-            { duration: true, skipCovers: false }
-          );
+        if (isOggFile(fileName)) {
+          // ── Native Vorbis Comment parser ──────────────────────────────────
+          // Reads only the beginning of the file (tags are in the 2nd OGG page,
+          // typically within the first few KB). We cap at 2 MB to cover large
+          // embedded album art without loading entire audio streams into RAM.
+          try {
+            const tagSliceSize = Math.min(file.size, 2 * 1024 * 1024);
+            const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
+            const bytes = new Uint8Array(tagBuf);
+            const tags = parseVorbisComments(bytes);
+            const duration = await getOpusDuration(file);
 
-          // Album art → IndexedDB only (not sent to server)
-          if (metadata.common.picture?.length) {
-            const pic = metadata.common.picture[0];
-            const artBlob = new Blob([pic.data], { type: pic.format });
-            const dataUrl: string = await new Promise(resolve => {
-              const reader = new FileReader();
-              reader.onload = e => resolve(e.target?.result as string);
-              reader.readAsDataURL(artBlob);
+            const artKey = `${folderPath}/${fileName}`;
+            if (tags.albumArtDataUrl) {
+              artStore[artKey] = tags.albumArtDataUrl;
+            }
+
+            tracks.push({
+              title: tags.title || fileMeta.title || fileName,
+              artist: tags.artist || fileMeta.artist || '',
+              album: tags.album || 'Unknown Album',
+              year: tags.year ?? null,
+              genre: tags.genre ?? null,
+              duration: Math.round(duration),
+              trackNumber: tags.trackNumber ?? null,
+              fileName,
+              folderPath,
+              albumArtDataUrl: null,
+              source: 'local',
             });
-            artStore[relativePath] = dataUrl;
+          } catch (err) {
+            console.error(`[playd] vorbis parse error for "${fileName}":`, err);
+            tracks.push({
+              title: fileMeta.title || fileName,
+              artist: fileMeta.artist || '',
+              album: 'Unknown Album',
+              year: null, genre: null, duration: 0, trackNumber: null,
+              fileName, folderPath, albumArtDataUrl: null, source: 'local',
+            });
           }
+        } else {
+          // ── music-metadata-browser for MP3, FLAC, M4A, WAV, etc. ─────────
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const uint8Array = new Uint8Array(arrayBuffer);
+            const mime = await detectMimeType(file);
+            const metadata = await mm.parseBuffer(
+              uint8Array,
+              { mimeType: mime || file.type || undefined, path: file.name, size: file.size },
+              { duration: true, skipCovers: false },
+            );
 
-          // Artist: common → native vorbis ARTIST tag → filename parse → empty
-          const artist =
-            metadata.common.artist ||
-            (metadata.common.artists as string[] | undefined)?.[0] ||
-            nativeTag(metadata.native, 'ARTIST', 'artist') ||
-            fileMeta.artist ||
-            '';
+            if (metadata.common.picture?.length) {
+              const pic = metadata.common.picture[0];
+              const artBlob = new Blob([pic.data], { type: pic.format });
+              const dataUrl: string = await new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target?.result as string);
+                reader.readAsDataURL(artBlob);
+              });
+              artStore[relativePath] = dataUrl;
+            }
 
-          // Title: common → native tag → filename parse → raw file name
-          const title =
-            metadata.common.title ||
-            nativeTag(metadata.native, 'TITLE', 'title') ||
-            fileMeta.title ||
-            fileName;
+            const artist =
+              metadata.common.artist ||
+              (metadata.common.artists as string[] | undefined)?.[0] ||
+              nativeTag(metadata.native, 'ARTIST', 'artist') ||
+              fileMeta.artist || '';
 
-          tracks.push({
-            title,
-            artist,
-            album: metadata.common.album || nativeTag(metadata.native, 'ALBUM') || 'Unknown Album',
-            year: metadata.common.year || null,
-            genre: metadata.common.genre?.[0] || nativeTag(metadata.native, 'GENRE') || null,
-            duration: Math.round(metadata.format.duration || 0),
-            trackNumber: (() => {
-              const n = metadata.common.track?.no;
-              if (n && n > 0) return n;
-              const raw = nativeTag(metadata.native, 'TRACKNUMBER', 'tracknumber');
-              const parsed = raw ? parseInt(raw, 10) : NaN;
-              return isNaN(parsed) || parsed <= 0 ? null : parsed;
-            })(),
-            fileName,
-            folderPath,
-            albumArtDataUrl: null,
-            source: 'local',
-          });
-        } catch (err) {
-          // Metadata parse failed — fall back entirely to filename parsing.
-          console.warn(`[playd] metadata parse failed for "${fileName}":`, err);
-          tracks.push({
-            title: fileMeta.title || fileName,
-            artist: fileMeta.artist || '',
-            album: 'Unknown Album',
-            year: null,
-            genre: null,
-            duration: 0,
-            trackNumber: null,
-            fileName,
-            folderPath,
-            albumArtDataUrl: null,
-            source: 'local',
-          });
+            const title =
+              metadata.common.title ||
+              nativeTag(metadata.native, 'TITLE', 'title') ||
+              fileMeta.title || fileName;
+
+            tracks.push({
+              title,
+              artist,
+              album: metadata.common.album || nativeTag(metadata.native, 'ALBUM') || 'Unknown Album',
+              year: metadata.common.year || null,
+              genre: metadata.common.genre?.[0] || nativeTag(metadata.native, 'GENRE') || null,
+              duration: Math.round(metadata.format.duration || 0),
+              trackNumber: (() => {
+                const n = metadata.common.track?.no;
+                if (n && n > 0) return n;
+                const raw = nativeTag(metadata.native, 'TRACKNUMBER', 'tracknumber');
+                const parsed = raw ? parseInt(raw, 10) : NaN;
+                return isNaN(parsed) || parsed <= 0 ? null : parsed;
+              })(),
+              fileName,
+              folderPath,
+              albumArtDataUrl: null,
+              source: 'local',
+            });
+          } catch (err) {
+            console.error(`[playd] metadata parse error for "${fileName}":`, err);
+            tracks.push({
+              title: fileMeta.title || fileName,
+              artist: fileMeta.artist || '',
+              album: 'Unknown Album',
+              year: null, genre: null, duration: 0, trackNumber: null,
+              fileName, folderPath, albumArtDataUrl: null, source: 'local',
+            });
+          }
         }
 
         count++;
@@ -297,7 +416,6 @@ export function useFileSystem() {
     }
   };
 
-  // ── Scan via FileSystemDirectoryHandle (File System Access API) ──
   const scanFolder = async (dirHandle: FileSystemDirectoryHandle) => {
     const entries: Array<{ file: File; relativePath: string }> = [];
     const skippedExts: string[] = [];
@@ -330,10 +448,6 @@ export function useFileSystem() {
     await processTracks(entries, dirHandle.name, skippedExts);
   };
 
-  // ── Scan via FileList (webkitdirectory fallback) ──
-  // Accept EVERY file in the folder — no extension or MIME filtering at all.
-  // processTracks will try to parse each one; failures still get added with
-  // just the filename so nothing is silently dropped.
   const scanFileList = async (files: FileList) => {
     if (!files.length) return;
     const entries: Array<{ file: File; relativePath: string }> = [];
@@ -345,10 +459,8 @@ export function useFileSystem() {
     await processTracks(entries, rootName);
   };
 
-  // ── Load the bundled sample track from public/ (always available, no picker needed) ──
   const loadSampleTrack = async (): Promise<boolean> => {
     try {
-      // import.meta.env.BASE_URL respects the Vite base path (e.g. /audio-player/)
       const resp = await fetch(`${import.meta.env.BASE_URL}GRAHAM_-_Enough_For_Me.mp3`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
@@ -364,7 +476,6 @@ export function useFileSystem() {
     }
   };
 
-  // ── Import individual audio files (works in all iframe/sandbox contexts) ──
   const addFiles = async (): Promise<boolean> => {
     return new Promise(resolve => {
       const input = document.createElement('input');
@@ -392,9 +503,7 @@ export function useFileSystem() {
     });
   };
 
-  // ── Main entry: try File System Access API, fall back to file input ──
   const addFolder = async (): Promise<boolean> => {
-    // Try modern File System Access API first
     if (typeof (window as any).showDirectoryPicker === 'function') {
       try {
         const handle: FileSystemDirectoryHandle = await (window as any).showDirectoryPicker({ mode: 'read' });
@@ -405,26 +514,21 @@ export function useFileSystem() {
         await scanFolder(handle);
         return true;
       } catch (e: any) {
-        if (e?.name === 'AbortError') return false; // User cancelled — silent
-        // SecurityError, NotAllowedError, etc. — fall through to file input
+        if (e?.name === 'AbortError') return false;
         console.info('showDirectoryPicker unavailable, using file input fallback:', e?.name);
       }
     }
 
-    // Fallback: <input webkitdirectory> — works in all contexts including iframes
     const files = await pickFilesViaInput();
     if (!files || files.length === 0) return false;
     await scanFileList(files);
     return true;
   };
 
-  // ── Resolve a local file for playback ──
   const getFileFromPath = async (fileName: string, folderPath: string): Promise<File | null> => {
-    // 1. Check in-memory store (populated by webkitdirectory fallback)
     const memKey = `${folderPath}/${fileName}`;
     if (inMemoryFiles.has(memKey)) return inMemoryFiles.get(memKey)!;
 
-    // 2. Try FileSystemDirectoryHandle (File System Access API)
     try {
       const handles = await getStoredHandles();
       const rootFolderName = folderPath.split('/')[0];
