@@ -336,12 +336,12 @@ export function PreferencesPanel() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[11px]">Password {editingServerId && <span className="text-muted-foreground">(leave blank to keep)</span>}</Label>
+                      <Label className="text-[11px]">Password</Label>
                       <Input
                         type="password"
                         value={subsonicForm.password}
                         onChange={e => setSubsonicForm(f => ({ ...f, password: e.target.value }))}
-                        placeholder="••••••••"
+                        placeholder={editingServerId ? "Leave blank to keep saved password" : "••••••••"}
                         className="h-8 text-xs bg-black/20 border-border/50"
                         autoComplete="new-password"
                       />

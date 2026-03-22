@@ -61,9 +61,15 @@ router.patch("/subsonic-servers/:id", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateSubsonicServerBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  // Never overwrite a stored password with an empty string — the edit form
+  // leaves the password blank when the user hasn't changed it.
+  const updateData = { ...parsed.data, updatedAt: new Date() };
+  if (!updateData.password) delete (updateData as any).password;
+
   const [server] = await db
     .update(subsonicServersTable)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set(updateData)
     .where(eq(subsonicServersTable.id, params.data.id))
     .returning();
   if (!server) { res.status(404).json({ error: "Server not found" }); return; }
@@ -108,14 +114,14 @@ router.get("/subsonic-servers/:id/test", async (req, res): Promise<void> => {
 
 // ── SYNC ──────────────────────────────────────────────────────────────────────
 // POST /api/subsonic-servers/:id/sync
-// Multi-strategy catalog harvest that works on all Subsonic versions:
-//   1. getRandomSongs(500) — catches "loose" songs not in any album
-//   2. search3 with a-z queries (some servers) — fills remaining gaps
-//   3. getArtists → getArtist(id) → getAlbum(id) — complete album traversal
-// All three are merged and deduplicated by song ID.
+// Four-strategy catalog harvest, all deduped by song ID:
+//   1. getAlbumList2 paginated (alphabetical) → getAlbum per album  [PRIMARY]
+//   2. getSongs paginated (OpenSubsonic extension)                   [SUPPLEMENT]
+//   3. getArtists → getArtist → getAlbum traversal                  [FALLBACK]
+//   4. getRandomSongs(500) — catch loose/untagged tracks             [CATCH-ALL]
 
-async function subsonicFetch(url: string): Promise<any> {
-  const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+async function subsonicFetch(url: string, timeoutMs = 15000): Promise<any> {
+  const resp = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const data = await resp.json() as any;
   const sub = data["subsonic-response"];
@@ -133,29 +139,53 @@ router.post("/subsonic-servers/:id/sync", async (req, res): Promise<void> => {
   const songMap = new Map<string, any>(); // keyed by subsonic song id
 
   try {
-    // ── Strategy 1: getRandomSongs — returns up to 500 random songs ────────
-    // On many Subsonic builds this is the only reliable way to get loose songs.
+    // ── Strategy 1: getAlbumList2 paginated → getAlbum per album ──────────
+    // Most reliable complete-catalog traversal: paginates ALL albums in alpha
+    // order, then fetches every song from every album. Works on all versions.
     try {
-      const sub = await subsonicFetch(subsonicUrl(server, "getRandomSongs", { size: 500 }));
-      for (const s of sub.randomSongs?.song ?? []) songMap.set(String(s.id), s);
-      logger.info({ count: songMap.size }, "Strategy 1 (getRandomSongs) done");
+      const PAGE = 500;
+      let offset = 0;
+      const albumIds = new Set<string>();
+
+      while (true) {
+        const sub = await subsonicFetch(subsonicUrl(server, "getAlbumList2", {
+          type: "alphabeticalByName", size: PAGE, offset,
+        }));
+        const albums: any[] = sub.albumList2?.album ?? [];
+        if (albums.length === 0) break;
+        for (const a of albums) albumIds.add(String(a.id));
+        if (albums.length < PAGE) break;
+        offset += PAGE;
+      }
+
+      logger.info({ albumCount: albumIds.size }, "Strategy 1: albums found");
+
+      for (const albumId of albumIds) {
+        try {
+          const albumSub = await subsonicFetch(subsonicUrl(server, "getAlbum", { id: albumId }));
+          for (const s of albumSub.album?.song ?? []) songMap.set(String(s.id), s);
+        } catch { /* skip bad album */ }
+      }
+      logger.info({ count: songMap.size }, "Strategy 1 (getAlbumList2 paginated) done");
     } catch (e) {
-      logger.warn({ e }, "Strategy 1 (getRandomSongs) failed, continuing");
+      logger.warn({ e }, "Strategy 1 (getAlbumList2) failed, continuing");
     }
 
-    // ── Strategy 2: search3 with a-z single-char queries ─────────────────
-    // Some servers return songs when given a real query but not an empty one.
+    // ── Strategy 2: getSongs offset pagination (OpenSubsonic) ─────────────
     try {
-      const CHARS = "abcdefghijklmnopqrstuvwxyz0123456789".split("");
-      for (const ch of CHARS) {
-        const sub = await subsonicFetch(subsonicUrl(server, "search3", {
-          query: ch, songCount: 500, songOffset: 0, albumCount: 0, artistCount: 0,
-        }));
-        for (const s of sub.searchResult3?.song ?? []) songMap.set(String(s.id), s);
+      const PAGE = 500;
+      let offset = 0;
+      while (true) {
+        const sub = await subsonicFetch(subsonicUrl(server, "getSongs", { size: PAGE, offset }));
+        const songs: any[] = sub.songs?.song ?? [];
+        if (songs.length === 0) break;
+        for (const s of songs) songMap.set(String(s.id), s);
+        if (songs.length < PAGE) break;
+        offset += PAGE;
       }
-      logger.info({ count: songMap.size }, "Strategy 2 (search3 a-z) done");
+      logger.info({ count: songMap.size }, "Strategy 2 (getSongs paginated) done");
     } catch (e) {
-      logger.warn({ e }, "Strategy 2 (search3 a-z) failed, continuing");
+      logger.warn({ e }, "Strategy 2 (getSongs) failed or not supported, continuing");
     }
 
     // ── Strategy 3: getArtists → getArtist → getAlbum traversal ──────────
@@ -166,12 +196,10 @@ router.post("/subsonic-servers/:id/sync", async (req, res): Promise<void> => {
       for (const idx of indices) {
         for (const a of idx.artist ?? []) artistIds.push(String(a.id));
       }
-
       for (const artistId of artistIds) {
         try {
           const artistSub = await subsonicFetch(subsonicUrl(server, "getArtist", { id: artistId }));
-          const albums: any[] = artistSub.artist?.album ?? [];
-          for (const album of albums) {
+          for (const album of artistSub.artist?.album ?? []) {
             try {
               const albumSub = await subsonicFetch(subsonicUrl(server, "getAlbum", { id: String(album.id) }));
               for (const s of albumSub.album?.song ?? []) songMap.set(String(s.id), s);
@@ -182,6 +210,18 @@ router.post("/subsonic-servers/:id/sync", async (req, res): Promise<void> => {
       logger.info({ count: songMap.size }, "Strategy 3 (artist traversal) done");
     } catch (e) {
       logger.warn({ e }, "Strategy 3 (artist traversal) failed, continuing");
+    }
+
+    // ── Strategy 4: getRandomSongs — catch-all for untagged loose tracks ──
+    try {
+      // Call multiple times since it's a random sample, not paginated
+      for (let i = 0; i < 3; i++) {
+        const sub = await subsonicFetch(subsonicUrl(server, "getRandomSongs", { size: 500 }));
+        for (const s of sub.randomSongs?.song ?? []) songMap.set(String(s.id), s);
+      }
+      logger.info({ count: songMap.size }, "Strategy 4 (getRandomSongs x3) done");
+    } catch (e) {
+      logger.warn({ e }, "Strategy 4 (getRandomSongs) failed, continuing");
     }
 
     const allSongs = Array.from(songMap.values());
