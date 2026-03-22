@@ -17,10 +17,11 @@ import {
   GetPlaylistTracksResponse,
 } from "@workspace/api-zod";
 import type { SQL } from "drizzle-orm";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
-function parseSmartQuery(query: string, table: typeof tracksTable): SQL | undefined {
+function parseSmartQuery(query: string, table: typeof tracksTable, userId: number): SQL | undefined {
   const fieldMap: Record<string, typeof tracksTable.title | typeof tracksTable.artist | typeof tracksTable.album | typeof tracksTable.genre | typeof tracksTable.year | typeof tracksTable.duration | typeof tracksTable.rating> = {
     title: table.title,
     artist: table.artist,
@@ -31,7 +32,7 @@ function parseSmartQuery(query: string, table: typeof tracksTable): SQL | undefi
     rating: table.rating,
   };
 
-  const conditions: SQL[] = [];
+  const conditions: SQL[] = [eq(table.userId, userId)];
   const parts = query.split(/\bAND\b/i);
 
   for (const part of parts) {
@@ -73,28 +74,28 @@ function parseSmartQuery(query: string, table: typeof tracksTable): SQL | undefi
   return and(...conditions);
 }
 
-router.get("/playlists", async (_req, res): Promise<void> => {
-  const playlists = await db.select().from(playlistsTable).orderBy(playlistsTable.createdAt);
+router.get("/playlists", requireAuth, async (req, res): Promise<void> => {
+  const playlists = await db.select().from(playlistsTable).where(eq(playlistsTable.userId, req.userId!)).orderBy(playlistsTable.createdAt);
   res.json(ListPlaylistsResponse.parse(playlists));
 });
 
-router.post("/playlists", async (req, res): Promise<void> => {
+router.post("/playlists", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreatePlaylistBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [playlist] = await db.insert(playlistsTable).values(parsed.data).returning();
+  const [playlist] = await db.insert(playlistsTable).values({ ...parsed.data, userId: req.userId! }).returning();
   res.status(201).json(GetPlaylistResponse.parse(playlist));
 });
 
-router.get("/playlists/:id", async (req, res): Promise<void> => {
+router.get("/playlists/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetPlaylistParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [playlist] = await db.select().from(playlistsTable).where(eq(playlistsTable.id, params.data.id));
+  const [playlist] = await db.select().from(playlistsTable).where(and(eq(playlistsTable.id, params.data.id), eq(playlistsTable.userId, req.userId!)));
   if (!playlist) {
     res.status(404).json({ error: "Playlist not found" });
     return;
@@ -102,7 +103,7 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
   res.json(GetPlaylistResponse.parse(playlist));
 });
 
-router.patch("/playlists/:id", async (req, res): Promise<void> => {
+router.patch("/playlists/:id", requireAuth, async (req, res): Promise<void> => {
   const params = UpdatePlaylistParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -116,7 +117,7 @@ router.patch("/playlists/:id", async (req, res): Promise<void> => {
   const [playlist] = await db
     .update(playlistsTable)
     .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(playlistsTable.id, params.data.id))
+    .where(and(eq(playlistsTable.id, params.data.id), eq(playlistsTable.userId, req.userId!)))
     .returning();
   if (!playlist) {
     res.status(404).json({ error: "Playlist not found" });
@@ -125,10 +126,15 @@ router.patch("/playlists/:id", async (req, res): Promise<void> => {
   res.json(UpdatePlaylistResponse.parse(playlist));
 });
 
-router.delete("/playlists/:id", async (req, res): Promise<void> => {
+router.delete("/playlists/:id", requireAuth, async (req, res): Promise<void> => {
   const params = DeletePlaylistParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [playlist] = await db.select({ id: playlistsTable.id }).from(playlistsTable).where(and(eq(playlistsTable.id, params.data.id), eq(playlistsTable.userId, req.userId!)));
+  if (!playlist) {
+    res.status(404).json({ error: "Playlist not found" });
     return;
   }
   await db.delete(playlistTracksTable).where(eq(playlistTracksTable.playlistId, params.data.id));
@@ -136,23 +142,23 @@ router.delete("/playlists/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-router.get("/playlists/:id/tracks", async (req, res): Promise<void> => {
+router.get("/playlists/:id/tracks", requireAuth, async (req, res): Promise<void> => {
   const params = GetPlaylistTracksParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [playlist] = await db.select().from(playlistsTable).where(eq(playlistsTable.id, params.data.id));
+  const [playlist] = await db.select().from(playlistsTable).where(and(eq(playlistsTable.id, params.data.id), eq(playlistsTable.userId, req.userId!)));
   if (!playlist) {
     res.status(404).json({ error: "Playlist not found" });
     return;
   }
 
   if (playlist.query) {
-    const condition = parseSmartQuery(playlist.query, tracksTable);
+    const condition = parseSmartQuery(playlist.query, tracksTable, req.userId!);
     const tracks = condition
       ? await db.select().from(tracksTable).where(condition)
-      : await db.select().from(tracksTable);
+      : await db.select().from(tracksTable).where(eq(tracksTable.userId, req.userId!));
     res.json(GetPlaylistTracksResponse.parse(tracks));
     return;
   }
@@ -160,14 +166,14 @@ router.get("/playlists/:id/tracks", async (req, res): Promise<void> => {
   const rows = await db
     .select({ track: tracksTable })
     .from(playlistTracksTable)
-    .innerJoin(tracksTable, eq(tracksTable.id, playlistTracksTable.trackId))
+    .innerJoin(tracksTable, and(eq(tracksTable.id, playlistTracksTable.trackId), eq(tracksTable.userId, req.userId!)))
     .where(eq(playlistTracksTable.playlistId, params.data.id))
     .orderBy(playlistTracksTable.position);
 
   res.json(GetPlaylistTracksResponse.parse(rows.map((r) => r.track)));
 });
 
-router.post("/playlists/:id/tracks", async (req, res): Promise<void> => {
+router.post("/playlists/:id/tracks", requireAuth, async (req, res): Promise<void> => {
   const params = AddTrackToPlaylistParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -178,11 +184,15 @@ router.post("/playlists/:id/tracks", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const [playlist] = await db.select({ id: playlistsTable.id }).from(playlistsTable).where(and(eq(playlistsTable.id, params.data.id), eq(playlistsTable.userId, req.userId!)));
+  if (!playlist) {
+    res.status(404).json({ error: "Playlist not found" });
+    return;
+  }
   const existingRows = await db
     .select()
     .from(playlistTracksTable)
-    .where(eq(playlistTracksTable.playlistId, params.data.id))
-    .orderBy(playlistTracksTable.position);
+    .where(eq(playlistTracksTable.playlistId, params.data.id));
 
   const position = parsed.data.position ?? existingRows.length;
   const [row] = await db
@@ -192,10 +202,15 @@ router.post("/playlists/:id/tracks", async (req, res): Promise<void> => {
   res.status(201).json(row);
 });
 
-router.delete("/playlists/:id/tracks/:trackId", async (req, res): Promise<void> => {
+router.delete("/playlists/:id/tracks/:trackId", requireAuth, async (req, res): Promise<void> => {
   const params = RemoveTrackFromPlaylistParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [playlist] = await db.select({ id: playlistsTable.id }).from(playlistsTable).where(and(eq(playlistsTable.id, params.data.id), eq(playlistsTable.userId, req.userId!)));
+  if (!playlist) {
+    res.status(404).json({ error: "Playlist not found" });
     return;
   }
   await db

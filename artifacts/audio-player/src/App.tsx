@@ -1,12 +1,46 @@
+import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import MainPlayer from "@/pages/MainPlayer";
+import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/not-found";
 import { InstallPrompt } from "@/components/layout/InstallPrompt";
+import { useAuth } from "@/hooks/use-auth";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error: any) => {
+        if (error?.status === 401) return false;
+        return failureCount < 2;
+      },
+    },
+  },
+});
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, initialize } = useAuth();
+
+  useEffect(() => {
+    initialize();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="text-zinc-600 text-sm">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthPage />;
+  }
+
+  return <>{children}</>;
+}
 
 function Router() {
   return (
@@ -21,11 +55,13 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={150}>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <AuthGate>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+          <InstallPrompt />
+        </AuthGate>
         <Toaster />
-        <InstallPrompt />
       </TooltipProvider>
     </QueryClientProvider>
   );

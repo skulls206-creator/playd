@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { z } from "zod/v4";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -44,52 +45,50 @@ function subsonicUrl(server: typeof subsonicServersTable.$inferSelect, endpoint:
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 
-router.get("/subsonic-servers", async (_req, res): Promise<void> => {
-  const servers = await db.select().from(subsonicServersTable).orderBy(subsonicServersTable.createdAt);
+router.get("/subsonic-servers", requireAuth, async (req, res): Promise<void> => {
+  const servers = await db.select().from(subsonicServersTable).where(eq(subsonicServersTable.userId, req.userId!)).orderBy(subsonicServersTable.createdAt);
   res.json(ListSubsonicServersResponse.parse(servers.map(toPublic)));
 });
 
-router.post("/subsonic-servers", async (req, res): Promise<void> => {
+router.post("/subsonic-servers", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateSubsonicServerBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [server] = await db.insert(subsonicServersTable).values(parsed.data).returning();
+  const [server] = await db.insert(subsonicServersTable).values({ ...parsed.data, userId: req.userId! }).returning();
   res.status(201).json(toPublic(server));
 });
 
-router.patch("/subsonic-servers/:id", async (req, res): Promise<void> => {
+router.patch("/subsonic-servers/:id", requireAuth, async (req, res): Promise<void> => {
   const params = UpdateSubsonicServerParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateSubsonicServerBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  // Never overwrite a stored password with an empty string — the edit form
-  // leaves the password blank when the user hasn't changed it.
   const updateData = { ...parsed.data, updatedAt: new Date() };
   if (!updateData.password) delete (updateData as any).password;
 
   const [server] = await db
     .update(subsonicServersTable)
     .set(updateData)
-    .where(eq(subsonicServersTable.id, params.data.id))
+    .where(and(eq(subsonicServersTable.id, params.data.id), eq(subsonicServersTable.userId, req.userId!)))
     .returning();
   if (!server) { res.status(404).json({ error: "Server not found" }); return; }
   res.json(UpdateSubsonicServerResponse.parse(toPublic(server)));
 });
 
-router.delete("/subsonic-servers/:id", async (req, res): Promise<void> => {
+router.delete("/subsonic-servers/:id", requireAuth, async (req, res): Promise<void> => {
   const params = DeleteSubsonicServerParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  await db.delete(subsonicServersTable).where(eq(subsonicServersTable.id, params.data.id));
+  await db.delete(subsonicServersTable).where(and(eq(subsonicServersTable.id, params.data.id), eq(subsonicServersTable.userId, req.userId!)));
   res.sendStatus(204);
 });
 
 // ── TEST ──────────────────────────────────────────────────────────────────────
 
-router.get("/subsonic-servers/:id/test", async (req, res): Promise<void> => {
+router.get("/subsonic-servers/:id/test", requireAuth, async (req, res): Promise<void> => {
   const params = TestSubsonicServerParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const [server] = await db.select().from(subsonicServersTable).where(eq(subsonicServersTable.id, params.data.id));
+  const [server] = await db.select().from(subsonicServersTable).where(and(eq(subsonicServersTable.id, params.data.id), eq(subsonicServersTable.userId, req.userId!)));
   if (!server) { res.status(404).json({ error: "Server not found" }); return; }
 
   try {
@@ -113,12 +112,6 @@ router.get("/subsonic-servers/:id/test", async (req, res): Promise<void> => {
 });
 
 // ── SYNC ──────────────────────────────────────────────────────────────────────
-// POST /api/subsonic-servers/:id/sync
-// Four-strategy catalog harvest, all deduped by song ID:
-//   1. getAlbumList2 paginated (alphabetical) → getAlbum per album  [PRIMARY]
-//   2. getSongs paginated (OpenSubsonic extension)                   [SUPPLEMENT]
-//   3. getArtists → getArtist → getAlbum traversal                  [FALLBACK]
-//   4. getRandomSongs(500) — catch loose/untagged tracks             [CATCH-ALL]
 
 async function subsonicFetch(url: string, timeoutMs = 15000): Promise<any> {
   const resp = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
@@ -129,49 +122,43 @@ async function subsonicFetch(url: string, timeoutMs = 15000): Promise<any> {
   return sub;
 }
 
-router.post("/subsonic-servers/:id/sync", async (req, res): Promise<void> => {
+router.post("/subsonic-servers/:id/sync", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const userId = req.userId!;
 
-  const [server] = await db.select().from(subsonicServersTable).where(eq(subsonicServersTable.id, id));
+  const [server] = await db.select().from(subsonicServersTable).where(and(eq(subsonicServersTable.id, id), eq(subsonicServersTable.userId, userId)));
   if (!server) { res.status(404).json({ error: "Server not found" }); return; }
 
-  const songMap = new Map<string, any>(); // keyed by subsonic song id
+  const songMap = new Map<string, any>();
 
   try {
-    // ── Strategy 1: getAlbumList2 paginated → getAlbum per album ──────────
-    // Most reliable complete-catalog traversal: paginates ALL albums in alpha
-    // order, then fetches every song from every album. Works on all versions.
+    // Strategy 1: getAlbumList2 paginated
     try {
       const PAGE = 500;
       let offset = 0;
       const albumIds = new Set<string>();
-
       while (true) {
-        const sub = await subsonicFetch(subsonicUrl(server, "getAlbumList2", {
-          type: "alphabeticalByName", size: PAGE, offset,
-        }));
+        const sub = await subsonicFetch(subsonicUrl(server, "getAlbumList2", { type: "alphabeticalByName", size: PAGE, offset }));
         const albums: any[] = sub.albumList2?.album ?? [];
         if (albums.length === 0) break;
         for (const a of albums) albumIds.add(String(a.id));
         if (albums.length < PAGE) break;
         offset += PAGE;
       }
-
       logger.info({ albumCount: albumIds.size }, "Strategy 1: albums found");
-
       for (const albumId of albumIds) {
         try {
           const albumSub = await subsonicFetch(subsonicUrl(server, "getAlbum", { id: albumId }));
           for (const s of albumSub.album?.song ?? []) songMap.set(String(s.id), s);
-        } catch { /* skip bad album */ }
+        } catch { }
       }
-      logger.info({ count: songMap.size }, "Strategy 1 (getAlbumList2 paginated) done");
+      logger.info({ count: songMap.size }, "Strategy 1 done");
     } catch (e) {
-      logger.warn({ e }, "Strategy 1 (getAlbumList2) failed, continuing");
+      logger.warn({ e }, "Strategy 1 failed");
     }
 
-    // ── Strategy 2: getSongs offset pagination (OpenSubsonic) ─────────────
+    // Strategy 2: getSongs paginated
     try {
       const PAGE = 500;
       let offset = 0;
@@ -183,12 +170,12 @@ router.post("/subsonic-servers/:id/sync", async (req, res): Promise<void> => {
         if (songs.length < PAGE) break;
         offset += PAGE;
       }
-      logger.info({ count: songMap.size }, "Strategy 2 (getSongs paginated) done");
+      logger.info({ count: songMap.size }, "Strategy 2 done");
     } catch (e) {
-      logger.warn({ e }, "Strategy 2 (getSongs) failed or not supported, continuing");
+      logger.warn({ e }, "Strategy 2 failed");
     }
 
-    // ── Strategy 3: getArtists → getArtist → getAlbum traversal ──────────
+    // Strategy 3: getArtists traversal
     try {
       const artistsSub = await subsonicFetch(subsonicUrl(server, "getArtists"));
       const indices: any[] = artistsSub.artists?.index ?? [];
@@ -203,31 +190,29 @@ router.post("/subsonic-servers/:id/sync", async (req, res): Promise<void> => {
             try {
               const albumSub = await subsonicFetch(subsonicUrl(server, "getAlbum", { id: String(album.id) }));
               for (const s of albumSub.album?.song ?? []) songMap.set(String(s.id), s);
-            } catch { /* skip bad album */ }
+            } catch { }
           }
-        } catch { /* skip bad artist */ }
+        } catch { }
       }
-      logger.info({ count: songMap.size }, "Strategy 3 (artist traversal) done");
+      logger.info({ count: songMap.size }, "Strategy 3 done");
     } catch (e) {
-      logger.warn({ e }, "Strategy 3 (artist traversal) failed, continuing");
+      logger.warn({ e }, "Strategy 3 failed");
     }
 
-    // ── Strategy 4: getRandomSongs — catch-all for untagged loose tracks ──
+    // Strategy 4: getRandomSongs catch-all
     try {
-      // Call multiple times since it's a random sample, not paginated
       for (let i = 0; i < 3; i++) {
         const sub = await subsonicFetch(subsonicUrl(server, "getRandomSongs", { size: 500 }));
         for (const s of sub.randomSongs?.song ?? []) songMap.set(String(s.id), s);
       }
-      logger.info({ count: songMap.size }, "Strategy 4 (getRandomSongs x3) done");
+      logger.info({ count: songMap.size }, "Strategy 4 done");
     } catch (e) {
-      logger.warn({ e }, "Strategy 4 (getRandomSongs) failed, continuing");
+      logger.warn({ e }, "Strategy 4 failed");
     }
 
     const allSongs = Array.from(songMap.values());
-    logger.info({ total: allSongs.length }, "Sync: total unique songs harvested");
+    logger.info({ total: allSongs.length }, "Sync: total unique songs");
 
-    // ── Upsert all collected songs ─────────────────────────────────────────
     let upserted = 0;
     for (const song of allSongs) {
       const track = {
@@ -244,16 +229,17 @@ router.post("/subsonic-servers/:id/sync", async (req, res): Promise<void> => {
         source: "subsonic" as const,
         subsonicId: String(song.id),
         subsonicServerId: server.id,
+        userId,
       };
 
       const existing = await db
         .select({ id: tracksTable.id })
         .from(tracksTable)
-        .where(and(eq(tracksTable.subsonicId, String(song.id)), eq(tracksTable.subsonicServerId, server.id)))
+        .where(and(eq(tracksTable.userId, userId), eq(tracksTable.subsonicId, String(song.id)), eq(tracksTable.subsonicServerId, server.id)))
         .limit(1);
 
       if (existing.length > 0) {
-        await db.update(tracksTable).set({ ...track, updatedAt: new Date() }).where(eq(tracksTable.id, existing[0].id));
+        await db.update(tracksTable).set({ ...track, updatedAt: new Date() }).where(and(eq(tracksTable.id, existing[0].id), eq(tracksTable.userId, userId)));
       } else {
         await db.insert(tracksTable).values(track);
       }
@@ -269,28 +255,23 @@ router.post("/subsonic-servers/:id/sync", async (req, res): Promise<void> => {
 });
 
 // ── STREAM PROXY ──────────────────────────────────────────────────────────────
-// GET /api/subsonic-servers/:id/stream/:subsonicTrackId
-// Proxies the audio stream so credentials never leave the server.
 
-router.get("/subsonic-servers/:id/stream/:subsonicTrackId", async (req: Request, res: Response): Promise<void> => {
+router.get("/subsonic-servers/:id/stream/:subsonicTrackId", requireAuth, async (req: Request, res: Response): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const subsonicTrackId = req.params.subsonicTrackId;
-
   if (isNaN(id)) { res.status(400).end(); return; }
 
-  const [server] = await db.select().from(subsonicServersTable).where(eq(subsonicServersTable.id, id));
+  const [server] = await db.select().from(subsonicServersTable).where(and(eq(subsonicServersTable.id, id), eq(subsonicServersTable.userId, req.userId!)));
   if (!server) { res.status(404).end(); return; }
 
   try {
     const streamUrl = subsonicUrl(server, "stream", { id: subsonicTrackId, maxBitRate: 0 });
 
-    // Forward Range header for seek support
     const headers: Record<string, string> = {};
     if (req.headers.range) headers["Range"] = req.headers.range;
 
     const upstream = await fetch(streamUrl, { headers, signal: AbortSignal.timeout(10000) });
 
-    // Forward status + key headers
     res.status(upstream.status);
     const forward = ["content-type", "content-length", "content-range", "accept-ranges"];
     for (const h of forward) {
@@ -301,7 +282,6 @@ router.get("/subsonic-servers/:id/stream/:subsonicTrackId", async (req: Request,
 
     if (!upstream.body) { res.end(); return; }
 
-    // Pipe body
     const reader = upstream.body.getReader();
     const pump = async () => {
       while (true) {

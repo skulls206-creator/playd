@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, or, ilike, asc, desc, ne, like } from "drizzle-orm";
+import { eq, and, or, ilike, asc, desc, like } from "drizzle-orm";
 import { db, tracksTable } from "@workspace/db";
 import {
   CreateTrackBody,
@@ -13,6 +13,7 @@ import {
   BulkUpsertTracksBody,
   BulkUpsertTracksResponse,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -31,12 +32,13 @@ const SORT_COLUMNS_NUM: Record<string, typeof tracksTable.duration | typeof trac
   trackNumber: tracksTable.trackNumber,
 };
 
-router.get("/tracks", async (req, res): Promise<void> => {
+router.get("/tracks", requireAuth, async (req, res): Promise<void> => {
   const { search, artist, album, genre, sortBy = "artist", sortDir = "asc" } = req.query as Record<string, string>;
+  const userId = req.userId!;
 
   let query = db.select().from(tracksTable).$dynamic();
 
-  const conditions = [];
+  const conditions = [eq(tracksTable.userId, userId)];
   if (search) {
     conditions.push(
       or(
@@ -44,16 +46,14 @@ router.get("/tracks", async (req, res): Promise<void> => {
         ilike(tracksTable.artist, `%${search}%`),
         ilike(tracksTable.album, `%${search}%`),
         ilike(tracksTable.genre, `%${search}%`)
-      )
+      )!
     );
   }
   if (artist) conditions.push(ilike(tracksTable.artist, `%${artist}%`));
   if (album) conditions.push(ilike(tracksTable.album, `%${album}%`));
   if (genre) conditions.push(ilike(tracksTable.genre, `%${genre}%`));
 
-  if (conditions.length > 0) {
-    query = query.where(and(...conditions));
-  }
+  query = query.where(and(...conditions));
 
   const dirFn = sortDir === "desc" ? desc : asc;
   const textCol = SORT_COLUMNS[sortBy];
@@ -70,22 +70,23 @@ router.get("/tracks", async (req, res): Promise<void> => {
   res.json(ListTracksResponse.parse(tracks));
 });
 
-router.post("/tracks", async (req, res): Promise<void> => {
+router.post("/tracks", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateTrackBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [track] = await db.insert(tracksTable).values(parsed.data).returning();
+  const [track] = await db.insert(tracksTable).values({ ...parsed.data, userId: req.userId! }).returning();
   res.status(201).json(GetTrackResponse.parse(track));
 });
 
-router.post("/tracks/bulk", async (req, res): Promise<void> => {
+router.post("/tracks/bulk", requireAuth, async (req, res): Promise<void> => {
   const parsed = BulkUpsertTracksBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const userId = req.userId!;
 
   const results: (typeof tracksTable.$inferSelect)[] = [];
 
@@ -96,6 +97,7 @@ router.post("/tracks/bulk", async (req, res): Promise<void> => {
         .from(tracksTable)
         .where(
           and(
+            eq(tracksTable.userId, userId),
             eq(tracksTable.subsonicId, t.subsonicId),
             eq(tracksTable.subsonicServerId, t.subsonicServerId)
           )
@@ -105,12 +107,12 @@ router.post("/tracks/bulk", async (req, res): Promise<void> => {
       if (existing.length > 0) {
         const [updated] = await db
           .update(tracksTable)
-          .set({ ...t, updatedAt: new Date() })
-          .where(eq(tracksTable.id, existing[0].id))
+          .set({ ...t, userId, updatedAt: new Date() })
+          .where(and(eq(tracksTable.id, existing[0].id), eq(tracksTable.userId, userId)))
           .returning();
         results.push(updated);
       } else {
-        const [inserted] = await db.insert(tracksTable).values(t).returning();
+        const [inserted] = await db.insert(tracksTable).values({ ...t, userId }).returning();
         results.push(inserted);
       }
     } else {
@@ -119,6 +121,7 @@ router.post("/tracks/bulk", async (req, res): Promise<void> => {
         .from(tracksTable)
         .where(
           and(
+            eq(tracksTable.userId, userId),
             eq(tracksTable.folderPath, t.folderPath ?? ""),
             eq(tracksTable.fileName, t.fileName)
           )
@@ -128,12 +131,12 @@ router.post("/tracks/bulk", async (req, res): Promise<void> => {
       if (existing.length > 0) {
         const [updated] = await db
           .update(tracksTable)
-          .set({ ...t, updatedAt: new Date() })
-          .where(eq(tracksTable.id, existing[0].id))
+          .set({ ...t, userId, updatedAt: new Date() })
+          .where(and(eq(tracksTable.id, existing[0].id), eq(tracksTable.userId, userId)))
           .returning();
         results.push(updated);
       } else {
-        const [inserted] = await db.insert(tracksTable).values(t).returning();
+        const [inserted] = await db.insert(tracksTable).values({ ...t, userId }).returning();
         results.push(inserted);
       }
     }
@@ -142,32 +145,32 @@ router.post("/tracks/bulk", async (req, res): Promise<void> => {
   res.json(BulkUpsertTracksResponse.parse({ upserted: results.length, tracks: results }));
 });
 
-router.delete("/tracks/local", async (req, res): Promise<void> => {
-  await db.delete(tracksTable).where(eq(tracksTable.source, "local"));
+router.delete("/tracks/local", requireAuth, async (req, res): Promise<void> => {
+  await db.delete(tracksTable).where(and(eq(tracksTable.userId, req.userId!), eq(tracksTable.source, "local")));
   res.sendStatus(204);
 });
 
-router.delete("/tracks/subsonic", async (req, res): Promise<void> => {
-  await db.delete(tracksTable).where(eq(tracksTable.source, "subsonic"));
+router.delete("/tracks/subsonic", requireAuth, async (req, res): Promise<void> => {
+  await db.delete(tracksTable).where(and(eq(tracksTable.userId, req.userId!), eq(tracksTable.source, "subsonic")));
   res.sendStatus(204);
 });
 
-router.delete("/tracks/folder", async (req, res): Promise<void> => {
+router.delete("/tracks/folder", requireAuth, async (req, res): Promise<void> => {
   const { name } = req.query as Record<string, string>;
   if (!name) { res.status(400).json({ error: "folder name required" }); return; }
   await db.delete(tracksTable).where(
-    and(eq(tracksTable.source, "local"), like(tracksTable.folderPath, `${name}%`))
+    and(eq(tracksTable.userId, req.userId!), eq(tracksTable.source, "local"), like(tracksTable.folderPath, `${name}%`))
   );
   res.sendStatus(204);
 });
 
-router.get("/tracks/:id", async (req, res): Promise<void> => {
+router.get("/tracks/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetTrackParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [track] = await db.select().from(tracksTable).where(eq(tracksTable.id, params.data.id));
+  const [track] = await db.select().from(tracksTable).where(and(eq(tracksTable.id, params.data.id), eq(tracksTable.userId, req.userId!)));
   if (!track) {
     res.status(404).json({ error: "Track not found" });
     return;
@@ -175,7 +178,7 @@ router.get("/tracks/:id", async (req, res): Promise<void> => {
   res.json(GetTrackResponse.parse(track));
 });
 
-router.patch("/tracks/:id", async (req, res): Promise<void> => {
+router.patch("/tracks/:id", requireAuth, async (req, res): Promise<void> => {
   const params = UpdateTrackParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -189,7 +192,7 @@ router.patch("/tracks/:id", async (req, res): Promise<void> => {
   const [track] = await db
     .update(tracksTable)
     .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(tracksTable.id, params.data.id))
+    .where(and(eq(tracksTable.id, params.data.id), eq(tracksTable.userId, req.userId!)))
     .returning();
   if (!track) {
     res.status(404).json({ error: "Track not found" });
@@ -198,13 +201,13 @@ router.patch("/tracks/:id", async (req, res): Promise<void> => {
   res.json(UpdateTrackResponse.parse(track));
 });
 
-router.delete("/tracks/:id", async (req, res): Promise<void> => {
+router.delete("/tracks/:id", requireAuth, async (req, res): Promise<void> => {
   const params = DeleteTrackParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  await db.delete(tracksTable).where(eq(tracksTable.id, params.data.id));
+  await db.delete(tracksTable).where(and(eq(tracksTable.id, params.data.id), eq(tracksTable.userId, req.userId!)));
   res.sendStatus(204);
 });
 

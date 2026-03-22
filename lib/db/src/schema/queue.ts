@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const queuedTracksTable = pgTable("queued_tracks", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id"),
   trackId: integer("track_id").notNull(),
   position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

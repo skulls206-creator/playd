@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const playlistsTable = pgTable("playlists", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   query: text("query"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

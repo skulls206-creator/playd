@@ -2,12 +2,13 @@ import { useState, useMemo } from 'react';
 import { useListTracks, useListPlaylists } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
   Music2, ListMusic, Settings, Search,
-  Library, Disc3, User, ChevronDown, ChevronRight, X
+  Library, Disc3, User, ChevronDown, ChevronRight, X, LogOut
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -22,6 +23,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   const { data: playlists = [] } = useListPlaylists();
   const { isScanning } = useFileSystem();
   const { libraryFilter, setLibraryFilter, togglePrefs } = useAudioPlayer();
+  const { user, logout } = useAuth();
 
   const [search, setSearch] = useState('');
   const [openSections, setOpenSections] = useState<Record<NavSection, boolean>>({
@@ -204,7 +206,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
         </div>
       )}
 
-      <div className="p-2 border-t border-border mt-auto">
+      <div className="p-2 border-t border-border mt-auto space-y-0.5">
         <Button
           variant="ghost"
           className="w-full justify-start gap-2 h-7 text-xs text-muted-foreground hover:text-foreground"
@@ -213,6 +215,21 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
           <Settings className="w-3.5 h-3.5" />
           Preferences
         </Button>
+        <div className="flex items-center gap-1">
+          <div className="flex-1 flex items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground/60 truncate min-w-0">
+            <User className="w-3 h-3 shrink-0" />
+            <span className="truncate">{user?.displayName || user?.email}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 shrink-0 text-muted-foreground/60 hover:text-red-400"
+            title="Sign out"
+            onClick={logout}
+          >
+            <LogOut className="w-3 h-3" />
+          </Button>
+        </div>
       </div>
     </div>
   );

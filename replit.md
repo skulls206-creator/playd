@@ -96,17 +96,19 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 foobar2000-style audio player PWA. Served at `/`.
 
 - Three-panel layout: sidebar (library tree + playlists), queue panel, bottom transport bar
-- **Local mode**: File System Access API (`window.showDirectoryPicker()`), folder handles persisted in IndexedDB via `idb-keyval`, tags parsed by `music-metadata-browser`
-- **Subsonic mode**: connects to Subsonic/OpenSubsonic REST servers; streams audio via `/rest/stream`
+- **Auth**: JWT Bearer auth (bcryptjs hashes, jsonwebtoken signs). Token stored in `localStorage` under `playd_token`. `setAuthTokenGetter` wired in `api-client-react` so all React Query hooks include `Authorization: Bearer` automatically. `useAuth` zustand store handles init/login/register/logout. `AuthGate` in App.tsx blocks the app until auth is verified.
+- **Per-user isolation**: every DB table (tracks, playlists, eq_presets, subsonic_servers, queued_tracks) has a nullable `user_id` FK. All API queries filter by `req.userId` (set by `requireAuth` middleware). Users never see each other's data.
+- **Local mode**: File System Access API (`window.showDirectoryPicker()`), folder handles persisted in IndexedDB via `idb-keyval`, tags parsed by native TS parsers (ID3v2, FLAC, Vorbis, WAV)
+- **Subsonic mode**: connects to Subsonic/OpenSubsonic REST servers; streams audio via server-side proxy
 - Playback via HTML5 `<audio>` → Web Audio API pipeline (GainNode → 10× BiquadFilterNode for EQ)
 - Media Session API for OS media keys, lock screen controls, system transport widget
 - Web Notifications API for persistent now-playing notification
 - Custom right-click context menu (browser default suppressed app-wide)
-- 10-band EQ with 8 built-in presets seeded in DB
+- 10-band EQ with 8 built-in presets seeded in DB (per user)
 - Smart playlists with query language (evaluated server-side)
 - Duplicate detection, tag editing, multi-column sort, keyboard shortcuts
 - State managed by Zustand; data fetched via React Query hooks from `@workspace/api-client-react`
-- Key packages: zustand, framer-motion, music-metadata-browser, idb-keyval, date-fns
+- Key packages: zustand, framer-motion, idb-keyval, date-fns, bcryptjs, jsonwebtoken
 
 ### `scripts` (`@workspace/scripts`)
 
