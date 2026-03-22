@@ -164,9 +164,7 @@ export function TrackListPanel() {
                           : <Play className="w-3 h-3" />}
                       </button>
                     ) : (
-                      realTrackNumber(track.trackNumber) != null
-                        ? realTrackNumber(track.trackNumber)
-                        : <span className="opacity-30">{idx + 1}</span>
+                      realTrackNumber(track.trackNumber) ?? (idx + 1)
                     )}
                   </div>
                   {/* Title */}
