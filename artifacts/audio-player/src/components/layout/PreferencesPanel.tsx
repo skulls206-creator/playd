@@ -25,7 +25,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   FolderOpen, RefreshCw, Trash2, Plus, Server, CheckCircle2,
   XCircle, Loader2, ChevronDown, ChevronUp, Info, HardDrive,
-  Cloud, Database, Monitor, Save
+  Cloud, Database, Monitor, Save, FileMusic
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { get, del, set } from 'idb-keyval';
@@ -41,7 +41,7 @@ const EMPTY_SUBSONIC: SubsonicFormState = { name: '', url: '', username: '', pas
 
 export function PreferencesPanel() {
   const { isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset } = useAudioPlayer();
-  const { addFolder, scanFolder, verifyPermission, isScanning, scanStatus } = useFileSystem();
+  const { addFolder, addFiles, loadSampleTrack, scanFolder, verifyPermission, isScanning, scanStatus } = useFileSystem();
   const queryClient = useQueryClient();
 
   // Subsonic
@@ -99,6 +99,10 @@ export function PreferencesPanel() {
   const handleAddFolder = async () => {
     const ok = await addFolder();
     if (ok) loadLocalFolders();
+  };
+
+  const handleAddFiles = async () => {
+    await addFiles();
   };
 
   // Subsonic helpers
@@ -211,13 +215,22 @@ export function PreferencesPanel() {
                     Local Folders
                   </h3>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Music on this device, read via File System Access API
+                    Pick files or a folder to import. Use "Import Files" in sandboxed previews.
                   </p>
                 </div>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/50" onClick={handleAddFolder} disabled={isScanning}>
-                  <Plus className="w-3 h-3" />
-                  Add Folder
-                </Button>
+                <div className="flex gap-1.5 flex-wrap justify-end">
+                  <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-primary/70 hover:text-primary" onClick={loadSampleTrack} disabled={isScanning} title="Load the bundled demo track">
+                    Load Sample
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/50" onClick={handleAddFiles} disabled={isScanning} title="Pick individual audio files — works everywhere">
+                    <FileMusic className="w-3 h-3" />
+                    Import Files
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/50" onClick={handleAddFolder} disabled={isScanning} title="Pick a whole folder">
+                    <Plus className="w-3 h-3" />
+                    Add Folder
+                  </Button>
+                </div>
               </div>
 
               {isScanning && (
@@ -517,7 +530,7 @@ export function PreferencesPanel() {
                 What's stored where
               </h3>
               <p className="text-xs text-muted-foreground leading-relaxed mb-4">
-                foobarWeb has no user accounts. Here's exactly what is or isn't shared across your devices.
+                playd.music has no user accounts. Here's exactly what is or isn't shared across your devices.
               </p>
 
               <div className="space-y-3">
@@ -564,7 +577,7 @@ export function PreferencesPanel() {
             <Separator className="border-border/20" />
 
             <section>
-              <h3 className="text-sm font-semibold mb-2">About foobarWeb</h3>
+              <h3 className="text-sm font-semibold mb-2">About playd.music</h3>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 A foobar2000-inspired web audio player. Fully installable as a PWA.
                 Supports local files (Chrome / Edge via File System Access API),

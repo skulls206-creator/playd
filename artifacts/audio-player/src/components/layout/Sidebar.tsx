@@ -69,7 +69,7 @@ export function Sidebar() {
       <div className="p-4 border-b border-border space-y-4">
         <h1 className="text-xl font-bold tracking-tight text-primary flex items-center gap-2">
           <Music2 className="w-6 h-6" />
-          foobarWeb
+          playd.music
         </h1>
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />

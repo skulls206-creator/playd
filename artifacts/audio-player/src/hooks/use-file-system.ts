@@ -179,6 +179,52 @@ export function useFileSystem() {
     await processTracks(entries, rootName);
   };
 
+  // ── Load the bundled sample track from public/ (always available, no picker needed) ──
+  const loadSampleTrack = async (): Promise<boolean> => {
+    try {
+      const resp = await fetch('/GRAHAM_-_Enough_For_Me.mp3');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const blob = await resp.blob();
+      const fileName = 'GRAHAM_-_Enough_For_Me.mp3';
+      const file = new File([blob], fileName, { type: 'audio/mpeg' });
+      const relativePath = `Samples/${fileName}`;
+      inMemoryFiles.set(relativePath, file);
+      await processTracks([{ file, relativePath }], 'Samples');
+      return true;
+    } catch (e) {
+      console.error('Failed to load sample track', e);
+      return false;
+    }
+  };
+
+  // ── Import individual audio files (works in all iframe/sandbox contexts) ──
+  const addFiles = async (): Promise<boolean> => {
+    return new Promise(resolve => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.accept = '.mp3,.flac,.m4a,.aac,.wav,.ogg,.opus';
+
+      let settled = false;
+      const finish = (result: boolean) => {
+        if (!settled) { settled = true; resolve(result); }
+      };
+
+      input.addEventListener('change', async () => {
+        if (input.files && input.files.length > 0) {
+          await scanFileList(input.files);
+          finish(true);
+        } else {
+          finish(false);
+        }
+      });
+
+      const onFocus = () => setTimeout(() => finish(false), 500);
+      window.addEventListener('focus', onFocus, { once: true });
+      input.click();
+    });
+  };
+
   // ── Main entry: try File System Access API, fall back to file input ──
   const addFolder = async (): Promise<boolean> => {
     // Try modern File System Access API first
@@ -238,6 +284,8 @@ export function useFileSystem() {
     scanProgress,
     scanStatus,
     addFolder,
+    addFiles,
+    loadSampleTrack,
     scanFolder,
     getStoredHandles,
     verifyPermission,
