@@ -330,32 +330,35 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
           <span>Refresh</span>
         </button>
 
-        {/* Active filter label / scan status */}
-        {isScanning ? (
-          <span className="text-[10px] text-emerald-400 flex-1 truncate">
-            Scanning… {scanProgress > 0 ? `${scanProgress} found` : ''}
-          </span>
-        ) : scanStatus ? (
-          <span className={clsx(
-            'text-[10px] flex-1 truncate',
-            scanStatus.startsWith('✓') ? 'text-emerald-400' : 'text-red-400',
-          )}>
-            {scanStatus}
-          </span>
-        ) : libraryFilter.type !== 'all' ? (
-          <div className="flex items-center gap-1 min-w-0 flex-1">
-            <span className="text-[10px] text-primary/80 truncate">{libraryFilter.label}</span>
-            <button
-              onClick={() => setLibraryFilter({ type: 'all', value: '', label: 'All Songs' })}
-              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-              title="Show all songs"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        ) : (
-          <span className="text-[10px] text-muted-foreground/50 flex-1 truncate">All Songs</span>
-        )}
+        {/* Active filter label + scan status (always visible side-by-side) */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {libraryFilter.type !== 'all' ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[10px] text-primary/80">{libraryFilter.label}</span>
+              <button
+                onClick={() => setLibraryFilter({ type: 'all', value: '', label: 'All Songs' })}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Show all songs"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <span className="text-[10px] text-muted-foreground/50 shrink-0">All Songs</span>
+          )}
+          {isScanning ? (
+            <span className="text-[10px] text-emerald-400 truncate">
+              Scanning… {scanProgress > 0 ? `${scanProgress} found` : ''}
+            </span>
+          ) : scanStatus ? (
+            <span className={clsx(
+              'text-[10px] truncate font-medium',
+              scanStatus.startsWith('✓') ? 'text-emerald-400' : 'text-red-400',
+            )}>
+              {scanStatus}
+            </span>
+          ) : null}
+        </div>
 
         {/* Clear Library */}
         <button

@@ -13,6 +13,7 @@ import {
   getListSubsonicServersQueryKey,
   getListTracksQueryKey,
   testSubsonicServer,
+  customFetch,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -100,7 +101,7 @@ export function PreferencesPanel() {
       `Remove "${folderName}" from saved folders?\n\nThis will also delete all its tracks from your library — you'll need to re-import to get them back.`
     );
     if (!ok) return;
-    await fetch(`/api/tracks/folder?name=${encodeURIComponent(folderName)}`, { method: 'DELETE' });
+    await customFetch(`/api/tracks/folder?name=${encodeURIComponent(folderName)}`, { method: 'DELETE' });
     await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
     const updated = localFolders.filter(n => n !== folderName);
     await set('local-folder-names', updated);
@@ -111,7 +112,7 @@ export function PreferencesPanel() {
     if (!confirm('Remove all local tracks from the library? Subsonic tracks are kept. You can re-import anytime.')) return;
     setClearingLibrary(true);
     try {
-      await fetch('/api/tracks/local', { method: 'DELETE' });
+      await customFetch('/api/tracks/local', { method: 'DELETE' });
       await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
     } finally {
       setClearingLibrary(false);
@@ -122,7 +123,7 @@ export function PreferencesPanel() {
     if (!confirm('Remove all Subsonic-synced tracks from the library? Local tracks are kept. Re-sync from the server to restore.')) return;
     setClearingSubsonic(true);
     try {
-      await fetch('/api/tracks/subsonic', { method: 'DELETE' });
+      await customFetch('/api/tracks/subsonic', { method: 'DELETE' });
       await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
     } finally {
       setClearingSubsonic(false);
