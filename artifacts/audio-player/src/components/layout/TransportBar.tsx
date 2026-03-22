@@ -1,6 +1,7 @@
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
+import { useTrackArt } from '@/hooks/use-track-art';
 import {
   Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Volume2, VolumeX,
@@ -22,6 +23,10 @@ export function TransportBar() {
     togglePlay, next, prev, seek, setVolume, toggleMute,
     setRepeatMode, toggleShuffle, toggleEq, toggleQueue, togglePrefs
   } = useAudioPlayer();
+
+  const artUrl = useTrackArt(currentTrack ?? null);
+  const defaultCover = `${import.meta.env.BASE_URL}images/default-cover.png`;
+  const coverSrc = artUrl || defaultCover;
 
   const progressPct = duration ? (progress / duration) * 100 : 0;
 
@@ -46,7 +51,7 @@ export function TransportBar() {
           {/* Album art */}
           <div className="w-10 h-10 bg-black/40 rounded-sm overflow-hidden border border-white/5 shrink-0">
             <img
-              src={currentTrack?.albumArtDataUrl || `${import.meta.env.BASE_URL}images/default-cover.png`}
+              src={coverSrc}
               alt="Cover"
               className="w-full h-full object-cover"
             />
@@ -112,7 +117,7 @@ export function TransportBar() {
         <div className="flex items-center gap-3 w-1/4 min-w-[160px]">
           <div className="w-12 h-12 bg-black/40 rounded-sm overflow-hidden border border-white/5 shrink-0">
             <img
-              src={currentTrack?.albumArtDataUrl || `${import.meta.env.BASE_URL}images/default-cover.png`}
+              src={coverSrc}
               alt="Cover"
               className="w-full h-full object-cover"
             />

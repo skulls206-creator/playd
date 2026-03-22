@@ -1,5 +1,17 @@
 import { create } from 'zustand';
+import { get } from 'idb-keyval';
 import type { Track, QueueItem, EqPreset } from '@workspace/api-client-react';
+
+const ART_STORE_KEY = 'track-art';
+
+async function resolveArtUrl(track: Track): Promise<string | null> {
+  if (track.albumArtDataUrl) return track.albumArtDataUrl;
+  if (track.source === 'local' && track.fileName && track.folderPath) {
+    const store: Record<string, string> | undefined = await get(ART_STORE_KEY);
+    return store?.[`${track.folderPath}/${track.fileName}`] ?? null;
+  }
+  return null;
+}
 
 export interface LibraryFilter {
   type: 'all' | 'artist' | 'album' | 'playlist';
@@ -106,9 +118,14 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
         title: nextTrack.title,
         artist: nextTrack.artist,
         album: nextTrack.album,
-        artwork: nextTrack.albumArtDataUrl ? [
-          { src: nextTrack.albumArtDataUrl, sizes: '512x512', type: 'image/png' }
-        ] : []
+        artwork: [],
+      });
+      resolveArtUrl(nextTrack).then(url => {
+        if (url && navigator.mediaSession.metadata) {
+          navigator.mediaSession.metadata.artwork = [
+            { src: url, sizes: '512x512', type: 'image/jpeg' },
+          ];
+        }
       });
     }
 
