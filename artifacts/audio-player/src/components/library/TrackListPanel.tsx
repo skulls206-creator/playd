@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useListTracks } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -8,6 +8,28 @@ import { clsx } from 'clsx';
 type SortCol = 'trackNumber' | 'title' | 'artist' | 'album' | 'duration' | 'year';
 type SortDir = 'asc' | 'desc';
 
+// ─── Column width persistence ────────────────────────────────────────────────
+const COL_LS: Record<string, string> = {
+  title:  'playd_col_title',
+  artist: 'playd_col_artist',
+  album:  'playd_col_album',
+};
+const COL_DEFAULTS = { title: 260, artist: 160, album: 176 };
+const COL_MIN      = { title:  80, artist:  60, album:  60 };
+
+function loadColWidths() {
+  const load = (k: string, def: number) => {
+    const s = localStorage.getItem(k);
+    return s ? Math.max(60, parseInt(s, 10)) : def;
+  };
+  return {
+    title:  load(COL_LS.title,  COL_DEFAULTS.title),
+    artist: load(COL_LS.artist, COL_DEFAULTS.artist),
+    album:  load(COL_LS.album,  COL_DEFAULTS.album),
+  };
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatDuration(secs: number): string {
   if (!secs) return '—';
   const m = Math.floor(secs / 60);
@@ -15,23 +37,61 @@ function formatDuration(secs: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-const COLS: { key: SortCol; label: string; className: string }[] = [
-  { key: 'trackNumber', label: '#',      className: 'w-12 text-right pr-3 shrink-0' },
-  { key: 'title',       label: 'Title',  className: 'flex-1 min-w-0' },
-  { key: 'artist',      label: 'Artist', className: 'w-40 shrink-0' },
-  { key: 'album',       label: 'Album',  className: 'w-44 shrink-0' },
-  { key: 'year',        label: 'Year',   className: 'w-14 text-right shrink-0' },
-  { key: 'duration',    label: 'Time',   className: 'w-14 text-right shrink-0' },
-];
-
 function realTrackNumber(n: number | null | undefined): number | null {
   if (n == null || n <= 0) return null;
   return n;
 }
 
+// ─── Resize handle ───────────────────────────────────────────────────────────
+interface ResizeHandleProps {
+  col: 'title' | 'artist' | 'album';
+  colWidths: { title: number; artist: number; album: number };
+  setColWidths: React.Dispatch<React.SetStateAction<{ title: number; artist: number; album: number }>>;
+}
+
+function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
+  const dragging = useRef(false);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging.current = true;
+    const startX = e.clientX;
+    const startW = colWidths[col];
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const newW = Math.max(COL_MIN[col], startW + ev.clientX - startX);
+      setColWidths(prev => ({ ...prev, [col]: newW }));
+    };
+
+    const onUp = (ev: MouseEvent) => {
+      dragging.current = false;
+      const newW = Math.max(COL_MIN[col], startW + ev.clientX - startX);
+      localStorage.setItem(COL_LS[col], String(newW));
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [col, colWidths, setColWidths]);
+
+  return (
+    <div
+      className="absolute right-0 top-0 h-full w-[5px] cursor-col-resize group/handle flex items-center justify-center z-10"
+      onMouseDown={onMouseDown}
+      title="Drag to resize column"
+    >
+      <div className="w-px h-3/4 bg-border/40 group-hover/handle:bg-primary/60 transition-colors" />
+    </div>
+  );
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 export function TrackListPanel() {
   const { data: allTracks = [] } = useListTracks();
-  const { currentTrack, isPlaying, play, pause, togglePlay, setQueue, libraryFilter } = useAudioPlayer();
+  const { currentTrack, isPlaying, play, togglePlay, setQueue, libraryFilter } = useAudioPlayer();
 
   const [sortCol, setSortColRaw] = useState<SortCol>(
     () => (localStorage.getItem('playd_sortCol') as SortCol | null) ?? 'artist'
@@ -39,11 +99,9 @@ export function TrackListPanel() {
   const [sortDir, setSortDirRaw] = useState<SortDir>(
     () => (localStorage.getItem('playd_sortDir') as SortDir | null) ?? 'asc'
   );
+  const [colWidths, setColWidths] = useState(loadColWidths);
 
-  const setSortCol = (col: SortCol) => {
-    localStorage.setItem('playd_sortCol', col);
-    setSortColRaw(col);
-  };
+  const setSortCol = (col: SortCol) => { localStorage.setItem('playd_sortCol', col); setSortColRaw(col); };
   const setSortDir = (dir: SortDir | ((d: SortDir) => SortDir)) => {
     setSortDirRaw(prev => {
       const next = typeof dir === 'function' ? dir(prev) : dir;
@@ -53,15 +111,10 @@ export function TrackListPanel() {
   };
 
   const handleSort = (col: SortCol) => {
-    if (sortCol === col) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortCol(col);
-      setSortDir('asc');
-    }
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
   };
 
-  // Apply library filter
   const filtered = useMemo(() => {
     if (libraryFilter.type === 'all') return allTracks;
     if (libraryFilter.type === 'artist') return allTracks.filter(t => t.artist === libraryFilter.value);
@@ -69,11 +122,9 @@ export function TrackListPanel() {
     return allTracks;
   }, [allTracks, libraryFilter]);
 
-  // Sort
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...filtered].sort((a, b) => {
-      // Secondary sorts for natural music ordering
       const secondary = (x: any, y: any) => {
         const ar = (x.artist || '').localeCompare(y.artist || '');
         if (ar !== 0) return ar;
@@ -81,7 +132,6 @@ export function TrackListPanel() {
         if (al !== 0) return al;
         return (x.trackNumber || 9999) - (y.trackNumber || 9999);
       };
-
       let cmp = 0;
       switch (sortCol) {
         case 'trackNumber': cmp = ((realTrackNumber(a.trackNumber) ?? 9999) - (realTrackNumber(b.trackNumber) ?? 9999)); break;
@@ -109,24 +159,57 @@ export function TrackListPanel() {
       : <ChevronDown className="w-3 h-3 inline ml-0.5 text-primary" />;
   };
 
+  // Column header button helper
+  const ColHeader = ({ col, label, extraClass = '' }: { col: SortCol; label: string; extraClass?: string }) => (
+    <button
+      className={clsx(
+        'flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors w-full',
+        sortCol === col && 'text-primary',
+        extraClass,
+      )}
+      onClick={() => handleSort(col)}
+    >
+      {label}
+      <SortIcon col={col} />
+    </button>
+  );
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background min-w-0">
       {/* Column headers */}
       <div className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none">
-        {COLS.map(col => (
-          <button
-            key={col.key}
-            className={clsx(
-              'flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors',
-              col.className,
-              sortCol === col.key && 'text-primary'
-            )}
-            onClick={() => handleSort(col.key)}
-          >
-            {col.label}
-            <SortIcon col={col.key} />
-          </button>
-        ))}
+        {/* # — fixed */}
+        <div className="w-12 shrink-0 text-right pr-3">
+          <ColHeader col="trackNumber" label="#" extraClass="justify-end" />
+        </div>
+
+        {/* Title — resizable */}
+        <div className="relative shrink-0 pr-3" style={{ width: colWidths.title }}>
+          <ColHeader col="title" label="Title" />
+          <ResizeHandle col="title" colWidths={colWidths} setColWidths={setColWidths} />
+        </div>
+
+        {/* Artist — resizable */}
+        <div className="relative shrink-0 pr-3" style={{ width: colWidths.artist }}>
+          <ColHeader col="artist" label="Artist" />
+          <ResizeHandle col="artist" colWidths={colWidths} setColWidths={setColWidths} />
+        </div>
+
+        {/* Album — resizable */}
+        <div className="relative shrink-0 pr-3" style={{ width: colWidths.album }}>
+          <ColHeader col="album" label="Album" />
+          <ResizeHandle col="album" colWidths={colWidths} setColWidths={setColWidths} />
+        </div>
+
+        {/* Year — fixed */}
+        <div className="w-14 shrink-0 text-right pr-3">
+          <ColHeader col="year" label="Year" extraClass="justify-end" />
+        </div>
+
+        {/* Duration — fixed */}
+        <div className="w-14 shrink-0 text-right">
+          <ColHeader col="duration" label="Time" extraClass="justify-end" />
+        </div>
       </div>
 
       {/* Track rows */}
@@ -146,12 +229,12 @@ export function TrackListPanel() {
                   key={track.id}
                   onClick={() => { if (!isCurrent) playRow(track, idx); }}
                   className={clsx(
-                    'flex items-center px-3 h-8 gap-0 cursor-default select-none border-b border-border/10 group hover:bg-white/5',
+                    'flex items-center px-3 h-8 cursor-default select-none border-b border-border/10 group hover:bg-white/5',
                     isCurrent && 'bg-primary/10 text-primary',
-                    !isCurrent && 'text-foreground/80'
+                    !isCurrent && 'text-foreground/80',
                   )}
                 >
-                  {/* # — shows play/pause toggle for active track, track number otherwise */}
+                  {/* # */}
                   <div className="w-12 text-right pr-3 shrink-0 text-[11px] text-muted-foreground font-mono">
                     {isCurrent ? (
                       <button
@@ -159,38 +242,41 @@ export function TrackListPanel() {
                         className="text-primary hover:text-primary/70 transition-colors flex items-center justify-end w-full"
                         title={isRowPlaying ? 'Pause' : 'Play'}
                       >
-                        {isRowPlaying
-                          ? <Pause className="w-3 h-3" />
-                          : <Play className="w-3 h-3" />}
+                        {isRowPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                       </button>
                     ) : (
                       realTrackNumber(track.trackNumber) ?? (idx + 1)
                     )}
                   </div>
+
                   {/* Title */}
-                  <div className="flex-1 min-w-0 pr-4">
+                  <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.title }}>
                     <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
                       {track.title}
                     </span>
                   </div>
+
                   {/* Artist */}
-                  <div className="w-40 shrink-0 pr-4">
+                  <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.artist }}>
                     <span className="text-xs truncate block text-muted-foreground group-hover:text-foreground/70 transition-colors">
                       {track.artist}
                     </span>
                   </div>
+
                   {/* Album */}
-                  <div className="w-44 shrink-0 pr-4">
+                  <div className="shrink-0 pr-4 overflow-hidden" style={{ width: colWidths.album }}>
                     <span className="text-xs truncate block text-muted-foreground/70">
                       {track.album || '—'}
                     </span>
                   </div>
+
                   {/* Year */}
                   <div className="w-14 shrink-0 text-right pr-4">
                     <span className="text-[11px] font-mono text-muted-foreground/50">
                       {track.year || ''}
                     </span>
                   </div>
+
                   {/* Duration */}
                   <div className="w-14 shrink-0 text-right">
                     <span className="text-[11px] font-mono text-muted-foreground/70">

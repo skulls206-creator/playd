@@ -381,6 +381,186 @@ async function getMp3Duration(file: File): Promise<number> {
   }
 }
 
+// ─── Native FLAC parser ──────────────────────────────────────────────────────
+// FLAC uses metadata blocks: 1 byte (is_last<<7 | block_type) + 3 bytes length
+// Block types: STREAMINFO=0, VORBIS_COMMENT=4, PICTURE=6
+// VORBIS_COMMENT block has the SAME wire format as OGG Vorbis Comments
+// (but WITHOUT the "OpusTags" magic prefix — the comment data starts directly).
+// STREAMINFO is 34 bytes of bit-packed fields containing sample_rate and total_samples.
+// ────────────────────────────────────────────────────────────────────────────
+
+function parseFlacPictureBlock(b: Uint8Array): string | null {
+  try {
+    let o = 4; // skip picture_type
+    const mimeLen = readBE32(b, o); o += 4;
+    const mimeType = new TextDecoder().decode(b.subarray(o, o + mimeLen)); o += mimeLen;
+    const descLen = readBE32(b, o); o += 4 + descLen;
+    o += 16; // skip width, height, depth, color-count
+    const dataLen = readBE32(b, o); o += 4;
+    const imgData = b.subarray(o, o + dataLen);
+    const b64 = btoa(Array.from(imgData, (x: number) => String.fromCharCode(x)).join(''));
+    return `data:${mimeType};base64,${b64}`;
+  } catch { return null; }
+}
+
+function parseFlacVorbisCommentBlock(b: Uint8Array): VorbisTags {
+  // Same format as OGG Vorbis Comments, but starts immediately with the vendor string
+  // (no "OpusTags" magic — the block IS the comment header data)
+  let offset = 0;
+  if (offset + 4 > b.length) return {};
+  const vendorLen = readLE32(b, offset); offset += 4;
+  if (offset + vendorLen + 4 > b.length) return {};
+  offset += vendorLen;
+  const numComments = readLE32(b, offset); offset += 4;
+  if (numComments > 10000) return {};
+
+  const dec = new TextDecoder('utf-8');
+  const result: VorbisTags = {};
+
+  for (let i = 0; i < numComments; i++) {
+    if (offset + 4 > b.length) break;
+    const len = readLE32(b, offset); offset += 4;
+    if (offset + len > b.length) break;
+    const comment = dec.decode(b.subarray(offset, offset + len));
+    offset += len;
+    const eq = comment.indexOf('=');
+    if (eq < 0) continue;
+    const key = comment.slice(0, eq).toUpperCase();
+    const val = comment.slice(eq + 1);
+    if (key === 'TITLE') result.title = val;
+    else if (key === 'ARTIST') result.artist = val;
+    else if (key === 'ALBUMARTIST' && !result.artist) result.artist = val;
+    else if (key === 'ALBUM') result.album = val;
+    else if (key === 'TRACKNUMBER') { const n = parseInt(val, 10); if (!isNaN(n) && n > 0) result.trackNumber = n; }
+    else if (key === 'DATE' || key === 'YEAR') { const y = parseInt(val.slice(0, 4), 10); if (!isNaN(y)) result.year = y; }
+    else if (key === 'GENRE') result.genre = val;
+  }
+  return result;
+}
+
+interface FlacData { tags: VorbisTags; duration: number; albumArtDataUrl?: string }
+
+function parseFlac(bytes: Uint8Array): FlacData {
+  const result: FlacData = { tags: {}, duration: 0 };
+  // Verify "fLaC" magic
+  if (bytes[0] !== 0x66 || bytes[1] !== 0x4C || bytes[2] !== 0x61 || bytes[3] !== 0x43) return result;
+
+  let pos = 4;
+  while (pos + 4 <= bytes.length) {
+    const header = bytes[pos];
+    const isLast = (header & 0x80) !== 0;
+    const blockType = header & 0x7F;
+    const blockLen = (bytes[pos+1] << 16) | (bytes[pos+2] << 8) | bytes[pos+3];
+    pos += 4;
+    if (pos + blockLen > bytes.length) break;
+
+    const block = bytes.subarray(pos, pos + blockLen);
+
+    if (blockType === 0 && blockLen >= 18) {
+      // STREAMINFO — extract sample_rate (20 bits) and total_samples (36 bits)
+      // Bit layout (from byte 10): [20-bit samplerate][3-bit ch][5-bit bps][36-bit total_samples]
+      const sampleRate = ((block[10] << 12) | (block[11] << 4) | (block[12] >> 4)) >>> 0;
+      const tsHi = block[13] & 0x0F;
+      const tsLo = readBE32(block, 14);
+      const totalSamples = tsHi * 0x100000000 + tsLo;
+      if (sampleRate > 0 && totalSamples > 0) {
+        result.duration = totalSamples / sampleRate;
+      }
+    } else if (blockType === 4) {
+      // VORBIS_COMMENT
+      result.tags = parseFlacVorbisCommentBlock(block);
+    } else if (blockType === 6 && !result.albumArtDataUrl) {
+      // PICTURE
+      result.albumArtDataUrl = parseFlacPictureBlock(block) ?? undefined;
+    }
+
+    pos += blockLen;
+    if (isLast) break;
+  }
+
+  return result;
+}
+
+// ─── Native WAV parser ───────────────────────────────────────────────────────
+// RIFF/WAVE: "RIFF" + uint32le size + "WAVE" + chunks
+// Relevant chunks:
+//   "fmt " — audio format, sample rate, byte_rate → used for duration
+//   "data" — audio data size → duration = size / byte_rate
+//   "LIST" + "INFO" — RIFF INFO tags (INAM, IART, IPRD, ITRK, ICRD, IGNR)
+//   "id3 " / "ID3 " — embedded ID3v2 tag (reuse parseID3v2)
+// ────────────────────────────────────────────────────────────────────────────
+
+interface WavData { tags: VorbisTags; duration: number; albumArtDataUrl?: string }
+
+function parseWav(bytes: Uint8Array): WavData {
+  const result: WavData = { tags: {}, duration: 0 };
+  const dec = new TextDecoder('latin1');
+
+  const id = dec.decode(bytes.subarray(0, 4));
+  const riff = dec.decode(bytes.subarray(8, 12));
+  if (id !== 'RIFF' || riff !== 'WAVE') return result;
+
+  let byteRate = 0;
+  let dataSize = 0;
+  let pos = 12;
+
+  while (pos + 8 <= bytes.length) {
+    const chunkId = dec.decode(bytes.subarray(pos, pos + 4));
+    const chunkSize = readLE32(bytes, pos + 4);
+    pos += 8;
+    if (pos + chunkSize > bytes.length + 1) break; // allow 1 byte for odd padding
+
+    const chunk = bytes.subarray(pos, pos + chunkSize);
+
+    if (chunkId === 'fmt ') {
+      // Audio format chunk: byte_rate at offset 8 (uint32 LE)
+      if (chunk.length >= 12) {
+        byteRate = readLE32(chunk, 8);
+      }
+    } else if (chunkId === 'data') {
+      dataSize = chunkSize;
+      if (byteRate > 0) {
+        result.duration = dataSize / byteRate;
+      }
+    } else if (chunkId === 'LIST' && chunk.length >= 4) {
+      const listType = dec.decode(chunk.subarray(0, 4));
+      if (listType === 'INFO') {
+        let lPos = 4;
+        while (lPos + 8 <= chunk.length) {
+          const tagId = dec.decode(chunk.subarray(lPos, lPos + 4));
+          const tagSize = readLE32(chunk, lPos + 4);
+          lPos += 8;
+          if (lPos + tagSize > chunk.length) break;
+          const rawVal = dec.decode(chunk.subarray(lPos, lPos + tagSize)).replace(/\0.*$/, '').trim();
+          if (rawVal) {
+            if (tagId === 'INAM') result.tags.title = rawVal;
+            else if (tagId === 'IART') result.tags.artist = rawVal;
+            else if (tagId === 'IPRD') result.tags.album = rawVal;
+            else if (tagId === 'IGNR') result.tags.genre = rawVal;
+            else if (tagId === 'ITRK') { const n = parseInt(rawVal, 10); if (!isNaN(n) && n > 0) result.tags.trackNumber = n; }
+            else if (tagId === 'ICRD') { const y = parseInt(rawVal.slice(0, 4), 10); if (!isNaN(y)) result.tags.year = y; }
+          }
+          lPos += tagSize + (tagSize % 2); // pad to even
+        }
+      }
+    } else if ((chunkId === 'id3 ' || chunkId === 'ID3 ') && !result.tags.title) {
+      // Embedded ID3v2 — reuse our parser
+      const id3 = parseID3v2(chunk);
+      if (id3.title) result.tags.title = id3.title;
+      if (id3.artist) result.tags.artist = id3.artist;
+      if (id3.album) result.tags.album = id3.album;
+      if (id3.trackNumber) result.tags.trackNumber = id3.trackNumber;
+      if (id3.year) result.tags.year = id3.year;
+      if (id3.genre) result.tags.genre = id3.genre;
+      if (id3.albumArtDataUrl) result.albumArtDataUrl = id3.albumArtDataUrl;
+    }
+
+    pos += chunkSize + (chunkSize % 2); // RIFF chunks are padded to even byte boundaries
+  }
+
+  return result;
+}
+
 // ─── Detect MIME type from magic bytes ──────────────────────────────────────
 async function detectMimeType(file: File): Promise<string | undefined> {
   try {
@@ -458,12 +638,10 @@ function pickFilesViaInput(): Promise<FileList | null> {
 }
 
 // ─── Format routing helpers ──────────────────────────────────────────────────
-function isOggFile(fileName: string): boolean {
-  return /\.(opus|ogg|oga)$/i.test(fileName);
-}
-function isMp3File(fileName: string): boolean {
-  return /\.mp3$/i.test(fileName);
-}
+function isOggFile(fileName: string): boolean  { return /\.(opus|ogg|oga)$/i.test(fileName); }
+function isMp3File(fileName: string): boolean  { return /\.mp3$/i.test(fileName); }
+function isFlacFile(fileName: string): boolean { return /\.flac$/i.test(fileName); }
+function isWavFile(fileName: string): boolean  { return /\.(wav|wave)$/i.test(fileName); }
 
 export function useFileSystem() {
   const [isScanning, setIsScanning] = useState(false);
@@ -550,6 +728,52 @@ export function useFileSystem() {
               year: null, genre: null, duration: 0, trackNumber: null,
               fileName, folderPath, albumArtDataUrl: null, source: 'local',
             });
+          }
+        } else if (isFlacFile(fileName)) {
+          // ── Native FLAC parser ────────────────────────────────────────────
+          try {
+            const tagSliceSize = Math.min(file.size, 4 * 1024 * 1024);
+            const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
+            const flac = parseFlac(new Uint8Array(tagBuf));
+            const artKey = `${folderPath}/${fileName}`;
+            if (flac.albumArtDataUrl) artStore[artKey] = flac.albumArtDataUrl;
+            tracks.push({
+              title: flac.tags.title || fileMeta.title || fileName,
+              artist: flac.tags.artist || fileMeta.artist || '',
+              album: flac.tags.album || 'Unknown Album',
+              year: flac.tags.year ?? null,
+              genre: flac.tags.genre ?? null,
+              duration: Math.round(flac.duration),
+              trackNumber: flac.tags.trackNumber ?? null,
+              fileName, folderPath, albumArtDataUrl: null, source: 'local',
+            });
+          } catch (err) {
+            console.error(`[playd] flac parse error for "${fileName}":`, err);
+            tracks.push({ title: fileMeta.title || fileName, artist: fileMeta.artist || '', album: 'Unknown Album',
+              year: null, genre: null, duration: 0, trackNumber: null, fileName, folderPath, albumArtDataUrl: null, source: 'local' });
+          }
+        } else if (isWavFile(fileName)) {
+          // ── Native WAV parser ─────────────────────────────────────────────
+          try {
+            const tagSliceSize = Math.min(file.size, 4 * 1024 * 1024);
+            const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
+            const wav = parseWav(new Uint8Array(tagBuf));
+            const artKey = `${folderPath}/${fileName}`;
+            if (wav.albumArtDataUrl) artStore[artKey] = wav.albumArtDataUrl;
+            tracks.push({
+              title: wav.tags.title || fileMeta.title || fileName,
+              artist: wav.tags.artist || fileMeta.artist || '',
+              album: wav.tags.album || 'Unknown Album',
+              year: wav.tags.year ?? null,
+              genre: wav.tags.genre ?? null,
+              duration: Math.round(wav.duration),
+              trackNumber: wav.tags.trackNumber ?? null,
+              fileName, folderPath, albumArtDataUrl: null, source: 'local',
+            });
+          } catch (err) {
+            console.error(`[playd] wav parse error for "${fileName}":`, err);
+            tracks.push({ title: fileMeta.title || fileName, artist: fileMeta.artist || '', album: 'Unknown Album',
+              year: null, genre: null, duration: 0, trackNumber: null, fileName, folderPath, albumArtDataUrl: null, source: 'local' });
           }
         } else if (isMp3File(fileName)) {
           // ── Native ID3v2 parser for MP3 files ─────────────────────────────
