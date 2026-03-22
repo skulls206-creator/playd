@@ -4,7 +4,7 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderPlus, Trash2, X, FolderInput } from 'lucide-react';
+import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
 import type { Track } from '@workspace/api-client-react';
@@ -115,7 +115,14 @@ interface TrackListPanelProps {
 export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
-  const { isScanning, scanProgress, scanStatus, addFolder, importDroppedItems } = useFileSystem();
+  const { isScanning, scanProgress, scanStatus, scanFileList, importDroppedItems } = useFileSystem();
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) await scanFileList(files);
+    e.target.value = '';
+  };
   const queryClient = useQueryClient();
 
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -129,8 +136,8 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
 
-  const handleRescan = async () => {
-    await addFolder();
+  const handleRescan = () => {
+    folderInputRef.current?.click();
   };
 
   const handleClearLibrary = async () => {
@@ -289,6 +296,15 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      {/* Hidden folder picker — same pattern as Preferences, reliable in all contexts */}
+      <input
+        ref={folderInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        {...{ webkitdirectory: '', multiple: true } as any}
+        onChange={handleFolderInputChange}
+      />
+
       {/* ── Drag-over overlay ──────────────────────────────────────────────── */}
       {isDragOver && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/70 border-2 border-dashed border-emerald-500/70 rounded pointer-events-none">
@@ -322,7 +338,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
               : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
           )}
         >
-          <FolderPlus className="w-3 h-3" />
+          <FolderOpen className="w-3 h-3" />
           <span>{isScanning ? 'Importing…' : 'Add Folder'}</span>
         </button>
 
