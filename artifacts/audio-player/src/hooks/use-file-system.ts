@@ -101,7 +101,13 @@ export function useFileSystem() {
       let count = 0;
 
       for (const { file, relativePath } of entries) {
-        if (!isLikelyAudio(file)) continue;
+        const parts = relativePath.split('/');
+        const fileName = parts[parts.length - 1];
+        const folderPath = parts.slice(0, -1).join('/') || rootName;
+
+        // Store the File object in memory for session playback regardless
+        inMemoryFiles.set(`${folderPath}/${fileName}`, file);
+
         try {
           const metadata = await mm.parseBlob(file, { duration: true, skipCovers: false });
 
@@ -117,17 +123,8 @@ export function useFileSystem() {
             artStore[relativePath] = dataUrl;
           }
 
-          // Parse folderPath from relativePath
-          const parts = relativePath.split('/');
-          const fileName = parts[parts.length - 1];
-          const folderPath = parts.slice(0, -1).join('/') || rootName;
-
-          // Store file in memory for session playback — keyed by the same
-          // pattern that getFileFromPath uses: "folderPath/fileName"
-          inMemoryFiles.set(`${folderPath}/${fileName}`, file);
-
           tracks.push({
-            title: metadata.common.title || file.name.replace(/\.[^/.]+$/, ''),
+            title: metadata.common.title || file.name || fileName,
             artist: metadata.common.artist || 'Unknown Artist',
             album: metadata.common.album || 'Unknown Album',
             year: metadata.common.year || null,
@@ -139,13 +136,27 @@ export function useFileSystem() {
             albumArtDataUrl: null,
             source: 'local',
           });
-
-          count++;
-          setScanProgress(count);
-          setScanStatus(`Scanning ${rootName}… (${count} tracks found)`);
-        } catch (e) {
-          console.warn('Failed to parse', file.name, e);
+        } catch {
+          // Can't read audio metadata — add as a bare file entry anyway.
+          // The user said their folder is all music, so trust them.
+          tracks.push({
+            title: file.name || fileName,
+            artist: '',
+            album: '',
+            year: null,
+            genre: null,
+            duration: 0,
+            trackNumber: null,
+            fileName,
+            folderPath,
+            albumArtDataUrl: null,
+            source: 'local',
+          });
         }
+
+        count++;
+        setScanProgress(count);
+        setScanStatus(`Scanning ${rootName}… (${count} files loaded)`);
       }
 
       await set(ART_STORE_KEY, artStore);
@@ -208,25 +219,18 @@ export function useFileSystem() {
   };
 
   // ── Scan via FileList (webkitdirectory fallback) ──
+  // Accept EVERY file in the folder — no extension or MIME filtering at all.
+  // processTracks will try to parse each one; failures still get added with
+  // just the filename so nothing is silently dropped.
   const scanFileList = async (files: FileList) => {
     if (!files.length) return;
     const entries: Array<{ file: File; relativePath: string }> = [];
-    const skippedExts: string[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      if (isLikelyAudio(file)) {
-        entries.push({ file, relativePath: file.webkitRelativePath || file.name });
-      } else {
-        const ext = file.name.includes('.')
-          ? '.' + file.name.split('.').pop()!.toLowerCase()
-          : '(no ext)';
-        skippedExts.push(ext);
-      }
+      entries.push({ file, relativePath: (file as any).webkitRelativePath || file.name });
     }
-    const rootName = entries[0]?.relativePath.split('/')[0]
-      || (files[0] as any)?.webkitRelativePath?.split('/')[0]
-      || 'Imported';
-    await processTracks(entries, rootName, skippedExts);
+    const rootName = entries[0]?.relativePath.split('/')[0] || 'Imported';
+    await processTracks(entries, rootName);
   };
 
   // ── Load the bundled sample track from public/ (always available, no picker needed) ──
