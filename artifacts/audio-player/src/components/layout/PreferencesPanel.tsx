@@ -41,7 +41,7 @@ const EMPTY_SUBSONIC: SubsonicFormState = { name: '', url: '', username: '', pas
 
 export function PreferencesPanel() {
   const { isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset } = useAudioPlayer();
-  const { loadSampleTrack, scanFolder, scanFileList, isScanning, scanStatus } = useFileSystem();
+  const { loadSampleTrack, scanFileList, isScanning, scanStatus } = useFileSystem();
 
   // Hidden file inputs — clicked directly by buttons to preserve browser user-gesture.
   // Dynamic input.click() inside async functions loses the gesture context in sandboxed
@@ -61,8 +61,8 @@ export function PreferencesPanel() {
   const createPreset = useCreateEqPreset();
   const deletePreset = useDeleteEqPreset();
 
-  // Local folders state (from IndexedDB)
-  const [localFolders, setLocalFolders] = useState<FileSystemDirectoryHandle[]>([]);
+  // Local folders — stored as plain name strings (webkitdirectory gives no persistent handle)
+  const [localFolders, setLocalFolders] = useState<string[]>([]);
   const [scanningFolderName, setScanningFolderName] = useState<string | null>(null);
   const [clearingLibrary, setClearingLibrary] = useState(false);
 
@@ -84,30 +84,25 @@ export function PreferencesPanel() {
   }, [isPrefsOpen]);
 
   const loadLocalFolders = async () => {
-    const handles: FileSystemDirectoryHandle[] = (await get('music-folders')) || [];
-    setLocalFolders(handles);
+    const names: string[] = (await get('local-folder-names')) || [];
+    setLocalFolders(names);
   };
 
-  const handleRescanFolder = async (handle: FileSystemDirectoryHandle) => {
-    setScanningFolderName(handle.name);
-    try {
-      await scanFolder(handle);
-    } finally {
-      setScanningFolderName(null);
-    }
+  const handleRescanFolder = (folderName: string) => {
+    // webkitdirectory gives no persistent handle — re-import triggers the same picker
+    setScanningFolderName(folderName);
+    folderInputRef.current?.click();
   };
 
-  const handleRemoveFolder = async (handle: FileSystemDirectoryHandle) => {
+  const handleRemoveFolder = async (folderName: string) => {
     const ok = confirm(
-      `Remove "${handle.name}" from saved folders?\n\nThis will also delete all its tracks from your library — you'll need to re-import to get them back.`
+      `Remove "${folderName}" from saved folders?\n\nThis will also delete all its tracks from your library — you'll need to re-import to get them back.`
     );
     if (!ok) return;
-    // Delete tracks for this folder from the DB
-    await fetch(`/api/tracks/folder?name=${encodeURIComponent(handle.name)}`, { method: 'DELETE' });
+    await fetch(`/api/tracks/folder?name=${encodeURIComponent(folderName)}`, { method: 'DELETE' });
     await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-    // Remove the folder handle from IndexedDB
-    const updated = localFolders.filter(h => h.name !== handle.name);
-    await set('music-folders', updated);
+    const updated = localFolders.filter(n => n !== folderName);
+    await set('local-folder-names', updated);
     setLocalFolders(updated);
   };
 
@@ -132,10 +127,19 @@ export function PreferencesPanel() {
   const onFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
+      // Derive the root folder name from the first file's relative path
+      const rootName =
+        (files[0] as any).webkitRelativePath?.split('/')?.[0] ||
+        files[0].name;
       await scanFileList(files);
-      loadLocalFolders();
+      // Save folder name to IndexedDB so it shows in the list
+      const existing: string[] = (await get('local-folder-names')) || [];
+      if (!existing.includes(rootName)) {
+        await set('local-folder-names', [...existing, rootName]);
+      }
+      setScanningFolderName(null);
+      await loadLocalFolders();
     }
-    // Reset so the same folder can be re-picked
     e.target.value = '';
   };
 
@@ -324,23 +328,23 @@ export function PreferencesPanel() {
 
               {localFolders.length === 0 ? (
                 <div className="text-xs text-muted-foreground text-center py-5 border border-dashed border-border/30 rounded-md space-y-1 px-3">
-                  <p>No persistent folder saved.</p>
-                  <p className="text-[10px] opacity-70">Use <strong>Add Folder</strong> to import — your tracks are saved to the library even without a stored folder. Re-import each session for local playback.</p>
+                  <p>No folder imported yet.</p>
+                  <p className="text-[10px] opacity-70">Use <strong>Add Folder</strong> to import — tracks are saved to the library. Re-import each session to enable local playback.</p>
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  {localFolders.map(handle => (
-                    <div key={handle.name} className="flex items-center gap-3 px-3 py-2 bg-black/20 rounded-md group">
+                  {localFolders.map(name => (
+                    <div key={name} className="flex items-center gap-3 px-3 py-2 bg-black/20 rounded-md group">
                       <FolderOpen className="w-4 h-4 text-primary/70 shrink-0" />
-                      <span className="text-sm flex-1 truncate font-mono text-xs">{handle.name}</span>
+                      <span className="text-sm flex-1 truncate font-mono text-xs">{name}</span>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
                           variant="ghost" size="icon" className="h-6 w-6"
-                          title="Rescan this folder"
-                          disabled={scanningFolderName === handle.name}
-                          onClick={() => handleRescanFolder(handle)}
+                          title="Re-import this folder"
+                          disabled={isScanning}
+                          onClick={() => handleRescanFolder(name)}
                         >
-                          {scanningFolderName === handle.name
+                          {scanningFolderName === name && isScanning
                             ? <Loader2 className="w-3 h-3 animate-spin" />
                             : <RefreshCw className="w-3 h-3" />
                           }
@@ -348,7 +352,7 @@ export function PreferencesPanel() {
                         <Button
                           variant="ghost" size="icon" className="h-6 w-6 hover:text-destructive"
                           title="Remove folder from library"
-                          onClick={() => handleRemoveFolder(handle)}
+                          onClick={() => handleRemoveFolder(name)}
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>
