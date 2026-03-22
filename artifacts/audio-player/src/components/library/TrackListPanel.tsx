@@ -115,7 +115,7 @@ interface TrackListPanelProps {
 export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
-  const { isScanning, scanProgress, scanStatus, rescanAll, importDroppedItems } = useFileSystem();
+  const { isScanning, scanProgress, scanStatus, addFolder, importDroppedItems } = useFileSystem();
   const queryClient = useQueryClient();
 
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -130,7 +130,10 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const dragCounterRef = useRef(0);
 
   const handleRescan = async () => {
-    await rescanAll();
+    // Open the directory picker and do a full fresh scan — same as Add Folder.
+    // This reliably re-imports all songs even after clearing the library or
+    // after a page reload where stored permission handles have expired.
+    await addFolder();
     queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
   };
 
