@@ -153,6 +153,234 @@ async function getOpusDuration(file: File): Promise<number> {
   }
 }
 
+// ─── Native ID3v2 parser (MP3 files) ────────────────────────────────────────
+// Supports ID3v2.2, ID3v2.3, ID3v2.4.
+// ────────────────────────────────────────────────────────────────────────────
+
+const ID3_GENRES: Record<number, string> = {
+  0:'Blues',1:'Classic Rock',2:'Country',3:'Dance',4:'Disco',5:'Funk',
+  6:'Grunge',7:'Hip-Hop',8:'Jazz',9:'Metal',10:'New Age',11:'Oldies',
+  12:'Other',13:'Pop',14:'R&B',15:'Rap',16:'Reggae',17:'Rock',
+  18:'Techno',19:'Industrial',20:'Alternative',21:'Ska',22:'Death Metal',
+  23:'Pranks',24:'Soundtrack',25:'Euro-Techno',26:'Ambient',27:'Trip-Hop',
+  28:'Vocal',29:'Jazz+Funk',30:'Fusion',31:'Trance',32:'Classical',
+  33:'Instrumental',34:'Acid',35:'House',36:'Game',37:'Sound Clip',
+  38:'Gospel',39:'Noise',40:'AlternRock',41:'Bass',42:'Soul',43:'Punk',
+  44:'Space',45:'Meditative',46:'Instrumental Pop',47:'Instrumental Rock',
+  48:'Ethnic',49:'Gothic',50:'Darkwave',51:'Techno-Industrial',52:'Electronic',
+  53:'Pop-Folk',54:'Eurodance',55:'Dream',56:'Southern Rock',57:'Comedy',
+  58:'Cult',59:'Gangsta',60:'Top 40',61:'Christian Rap',62:'Pop/Funk',
+  63:'Jungle',64:'Native American',65:'Cabaret',66:'New Wave',67:'Psychadelic',
+  68:'Rave',69:'Showtunes',70:'Trailer',71:'Lo-Fi',72:'Tribal',73:'Acid Punk',
+  74:'Acid Jazz',75:'Polka',76:'Retro',77:'Musical',78:'Rock & Roll',79:'Hard Rock',
+};
+
+function decodeSynchsafeInt(b: Uint8Array, offset: number): number {
+  return ((b[offset] & 0x7F) << 21) | ((b[offset+1] & 0x7F) << 14) |
+         ((b[offset+2] & 0x7F) << 7)  |  (b[offset+3] & 0x7F);
+}
+
+function decodeID3Text(b: Uint8Array): string {
+  if (b.length === 0) return '';
+  const enc = b[0];
+  const data = b.subarray(1);
+  let text = '';
+  try {
+    if (enc === 1) text = new TextDecoder('utf-16').decode(data);
+    else if (enc === 2) text = new TextDecoder('utf-16be').decode(data);
+    else if (enc === 3) text = new TextDecoder('utf-8').decode(data);
+    else text = new TextDecoder('latin1').decode(data);
+  } catch {
+    text = new TextDecoder('utf-8', { fatal: false }).decode(data);
+  }
+  // Strip null terminators and everything after
+  const nul = text.indexOf('\0');
+  return nul >= 0 ? text.slice(0, nul) : text;
+}
+
+interface ID3Tags {
+  title?: string;
+  artist?: string;
+  album?: string;
+  trackNumber?: number;
+  year?: number;
+  genre?: string;
+  albumArtDataUrl?: string;
+  id3Size: number; // bytes consumed by ID3 tag (for duration calc)
+}
+
+function parseID3v2(bytes: Uint8Array): ID3Tags {
+  const result: ID3Tags = { id3Size: 0 };
+  if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return result;
+
+  const major = bytes[3];
+  const flags = bytes[5];
+  const tagSize = decodeSynchsafeInt(bytes, 6);
+  result.id3Size = tagSize + 10;
+
+  let pos = 10;
+
+  // Skip extended header (ID3v2.3+)
+  if (major >= 3 && (flags & 0x40)) {
+    const extSize = major === 4
+      ? decodeSynchsafeInt(bytes, pos)
+      : readBE32(bytes, pos);
+    pos += extSize;
+  }
+
+  const end = Math.min(10 + tagSize, bytes.length);
+  const isV22 = major === 2;
+  const hdSize = isV22 ? 6 : 10;
+
+  while (pos + hdSize <= end) {
+    let fid: string, fsize: number, fstart: number;
+
+    if (isV22) {
+      fid = String.fromCharCode(bytes[pos], bytes[pos+1], bytes[pos+2]);
+      fsize = (bytes[pos+3] << 16) | (bytes[pos+4] << 8) | bytes[pos+5];
+      fstart = pos + 6;
+    } else {
+      fid = String.fromCharCode(bytes[pos], bytes[pos+1], bytes[pos+2], bytes[pos+3]);
+      fsize = major === 4
+        ? decodeSynchsafeInt(bytes, pos + 4)
+        : readBE32(bytes, pos + 4);
+      fstart = pos + 10;
+    }
+
+    if (fsize === 0 || bytes[pos] === 0) break;
+    if (fstart + fsize > end) break;
+
+    const fd = bytes.subarray(fstart, fstart + fsize);
+
+    if (fid === 'TIT2' || fid === 'TT2') result.title = decodeID3Text(fd);
+    else if (fid === 'TPE1' || fid === 'TP1') result.artist = decodeID3Text(fd);
+    else if (fid === 'TALB' || fid === 'TAL') result.album = decodeID3Text(fd);
+    else if (fid === 'TRCK' || fid === 'TRK') {
+      const n = parseInt(decodeID3Text(fd).split('/')[0], 10);
+      if (!isNaN(n) && n > 0) result.trackNumber = n;
+    } else if (fid === 'TYER' || fid === 'TYE' || fid === 'TDRC') {
+      const y = parseInt(decodeID3Text(fd).slice(0, 4), 10);
+      if (!isNaN(y) && y > 0) result.year = y;
+    } else if (fid === 'TCON' || fid === 'TCO') {
+      let g = decodeID3Text(fd);
+      const m = g.match(/^\((\d+)\)/);
+      if (m) g = ID3_GENRES[parseInt(m[1], 10)] || g;
+      result.genre = g.replace(/^\(.*?\)/, '').trim() || g;
+    } else if ((fid === 'APIC' || fid === 'PIC') && !result.albumArtDataUrl) {
+      try {
+        let p = 0;
+        const enc = fd[p++];
+        let mimeType: string;
+        if (isV22) {
+          // PIC: 3-char format code
+          mimeType = String.fromCharCode(fd[p], fd[p+1], fd[p+2]) === 'PNG'
+            ? 'image/png' : 'image/jpeg';
+          p += 3;
+        } else {
+          // APIC: null-terminated MIME type
+          let mEnd = p;
+          while (mEnd < fd.length && fd[mEnd] !== 0) mEnd++;
+          mimeType = new TextDecoder('latin1').decode(fd.subarray(p, mEnd)) || 'image/jpeg';
+          p = mEnd + 1;
+        }
+        p++; // skip picture type byte
+        // Skip description (null-terminated, encoding-aware)
+        if (enc === 1 || enc === 2) {
+          while (p + 1 < fd.length && !(fd[p] === 0 && fd[p+1] === 0)) p += 2;
+          p += 2;
+        } else {
+          while (p < fd.length && fd[p] !== 0) p++;
+          p++;
+        }
+        const imgData = fd.subarray(p);
+        if (imgData.length > 0) {
+          const b64 = btoa(Array.from(imgData, (x: number) => String.fromCharCode(x)).join(''));
+          result.albumArtDataUrl = `data:${mimeType};base64,${b64}`;
+        }
+      } catch { /* skip broken art */ }
+    }
+
+    pos = fstart + fsize;
+  }
+
+  return result;
+}
+
+// Estimate MP3 duration from Xing/Info VBR header or CBR frame header.
+// Reads only the first ~4 KB so it's very fast.
+async function getMp3Duration(file: File): Promise<number> {
+  try {
+    const head = new Uint8Array(await file.slice(0, 4096).arrayBuffer());
+
+    // Find the first sync frame (FF Ex or FF Fx) after any ID3 tag
+    let pos = 0;
+    // Skip ID3v2 tag if present
+    if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {
+      const id3size = decodeSynchsafeInt(head, 6) + 10;
+      pos = id3size;
+    }
+
+    // Scan for MPEG sync word
+    for (; pos < head.length - 4; pos++) {
+      if (head[pos] === 0xFF && (head[pos+1] & 0xE0) === 0xE0) {
+        const h = (head[pos] << 24) | (head[pos+1] << 16) | (head[pos+2] << 8) | head[pos+3];
+
+        const versionBits = (h >> 19) & 3;
+        const layerBits   = (h >> 17) & 3;
+        const bitrateBits = (h >> 12) & 15;
+        const srBits      = (h >> 10) & 3;
+
+        if (versionBits === 1 || layerBits === 0 || bitrateBits === 0 ||
+            bitrateBits === 15 || srBits === 3) { continue; }
+
+        const BITRATES: Record<string, number[]> = {
+          'V1L1': [0,32,64,96,128,160,192,224,256,288,320,352,384,416,448],
+          'V1L2': [0,32,48,56,64,80,96,112,128,160,192,224,256,320,384],
+          'V1L3': [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320],
+          'V2L1': [0,32,48,56,64,80,96,112,128,144,160,176,192,224,256],
+          'V2L3': [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160],
+        };
+        const SAMPLERATES: Record<number, number[]> = {
+          3:[44100,48000,32000], 2:[22050,24000,16000], 0:[11025,12000,8000],
+        };
+
+        const ver = versionBits === 3 ? 'V1' : 'V2';
+        const lay = `L${4 - layerBits}`;
+        const brKey = `${ver}${lay}`;
+        const brArr = BITRATES[brKey] || BITRATES['V1L3'];
+        const bitrate = brArr[bitrateBits] * 1000; // bps
+        const sampleRate = (SAMPLERATES[versionBits] || SAMPLERATES[3])[srBits];
+
+        if (!bitrate || !sampleRate) continue;
+
+        // Check for Xing/Info VBR header inside this frame
+        const sideInfoSize = (versionBits === 3)
+          ? ((h >> 6) & 3 ? 17 : 32)  // mono vs stereo MPEG1
+          : ((h >> 6) & 3 ? 9 : 17);   // MPEG2
+        const xingOff = pos + 4 + sideInfoSize;
+        if (xingOff + 8 <= head.length) {
+          const xingId = String.fromCharCode(head[xingOff], head[xingOff+1], head[xingOff+2], head[xingOff+3]);
+          if (xingId === 'Xing' || xingId === 'Info') {
+            const xflags = readBE32(head, xingOff + 4);
+            if (xflags & 1) { // FRAMES flag set
+              const frameCount = readBE32(head, xingOff + 8);
+              const samplesPerFrame = lay === 'L1' ? 384 : 1152;
+              return (frameCount * samplesPerFrame) / sampleRate;
+            }
+          }
+        }
+
+        // CBR estimate: (file_size - id3_header) / bytes_per_second
+        const audioBytes = file.size - pos;
+        return (audioBytes * 8) / bitrate;
+      }
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
 // ─── Detect MIME type from magic bytes ──────────────────────────────────────
 async function detectMimeType(file: File): Promise<string | undefined> {
   try {
@@ -229,9 +457,12 @@ function pickFilesViaInput(): Promise<FileList | null> {
   });
 }
 
-// ─── OGG extension check ─────────────────────────────────────────────────────
+// ─── Format routing helpers ──────────────────────────────────────────────────
 function isOggFile(fileName: string): boolean {
   return /\.(opus|ogg|oga)$/i.test(fileName);
+}
+function isMp3File(fileName: string): boolean {
+  return /\.mp3$/i.test(fileName);
 }
 
 export function useFileSystem() {
@@ -320,8 +551,46 @@ export function useFileSystem() {
               fileName, folderPath, albumArtDataUrl: null, source: 'local',
             });
           }
+        } else if (isMp3File(fileName)) {
+          // ── Native ID3v2 parser for MP3 files ─────────────────────────────
+          try {
+            // Read only up to 10 MB for tag parsing — covers even large APIC art
+            const tagSliceSize = Math.min(file.size, 10 * 1024 * 1024);
+            const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
+            const bytes = new Uint8Array(tagBuf);
+            const tags = parseID3v2(bytes);
+            const duration = await getMp3Duration(file);
+
+            const artKey = `${folderPath}/${fileName}`;
+            if (tags.albumArtDataUrl) {
+              artStore[artKey] = tags.albumArtDataUrl;
+            }
+
+            tracks.push({
+              title: tags.title || fileMeta.title || fileName,
+              artist: tags.artist || fileMeta.artist || '',
+              album: tags.album || 'Unknown Album',
+              year: tags.year ?? null,
+              genre: tags.genre ?? null,
+              duration: Math.round(duration),
+              trackNumber: tags.trackNumber ?? null,
+              fileName,
+              folderPath,
+              albumArtDataUrl: null,
+              source: 'local',
+            });
+          } catch (err) {
+            console.error(`[playd] id3 parse error for "${fileName}":`, err);
+            tracks.push({
+              title: fileMeta.title || fileName,
+              artist: fileMeta.artist || '',
+              album: 'Unknown Album',
+              year: null, genre: null, duration: 0, trackNumber: null,
+              fileName, folderPath, albumArtDataUrl: null, source: 'local',
+            });
+          }
         } else {
-          // ── music-metadata-browser for MP3, FLAC, M4A, WAV, etc. ─────────
+          // ── music-metadata-browser for FLAC, M4A, WAV, etc. ──────────────
           try {
             const arrayBuffer = await file.arrayBuffer();
             const uint8Array = new Uint8Array(arrayBuffer);
