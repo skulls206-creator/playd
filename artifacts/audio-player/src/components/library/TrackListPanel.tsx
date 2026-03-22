@@ -499,9 +499,10 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
           {/* w-full overrides Radix's internal display:table wrapper so row widths stay constrained */}
           <div className="w-full">
           {sorted.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
+            <div className="flex flex-col items-center justify-center text-center text-muted-foreground gap-3 py-24 px-6">
               <Music className="w-10 h-10 opacity-20" />
-              <p className="text-sm">No tracks yet — drop a folder here, or add one in Preferences</p>
+              <p className="text-sm font-medium">No tracks yet</p>
+              <p className="text-xs opacity-60 leading-relaxed max-w-[220px]">Add a folder in Preferences to get started</p>
             </div>
           ) : (
             <div>
