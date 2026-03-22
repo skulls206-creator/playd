@@ -346,10 +346,16 @@ export async function customFetch<T = unknown>(
     headers.set("accept", DEFAULT_JSON_ACCEPT);
   }
 
-  // Attach bearer token when an auth getter is configured and no
-  // Authorization header has been explicitly provided.
-  if (_authTokenGetter && !headers.has("authorization")) {
-    const token = await _authTokenGetter();
+  // Attach bearer token when no Authorization header has been explicitly provided.
+  // First try the registered getter, then fall back to the well-known localStorage key
+  // so auth works even if setAuthTokenGetter was never called (e.g. after HMR reset).
+  if (!headers.has("authorization")) {
+    let token: string | null = null;
+    if (_authTokenGetter) {
+      token = await _authTokenGetter();
+    } else {
+      try { token = localStorage.getItem("playd_token"); } catch { /* non-browser env */ }
+    }
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
     }

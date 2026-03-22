@@ -1,4 +1,6 @@
-const CACHE_NAME = 'playd-v1';
+const CACHE_VERSION = 'playd-v3';
+const SHELL_CACHE   = `${CACHE_VERSION}-shell`;
+const ASSET_CACHE   = `${CACHE_VERSION}-assets`;
 
 const PRECACHE_ASSETS = [
   './',
@@ -8,47 +10,45 @@ const PRECACHE_ASSETS = [
 // Install: pre-cache the shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS))
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(PRECACHE_ASSETS))
   );
   self.skipWaiting();
 });
 
-// Activate: clean old caches
+// Activate: purge ALL old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys
+          .filter((key) => key !== SHELL_CACHE && key !== ASSET_CACHE)
+          .map((key) => caches.delete(key))
       )
     )
   );
   self.clients.claim();
 });
 
-// Fetch strategy:
-// - API calls → network only (never cache)
-// - Navigation requests → network first, fall back to cached index.html
-// - Static assets (JS/CSS/fonts/images) → cache first, then network
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET and cross-origin requests
+  // Skip non-GET and cross-origin
   if (request.method !== 'GET' || url.origin !== location.origin) return;
 
-  // API calls: network only
+  // API calls → network only, never cache
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(request));
     return;
   }
 
-  // Navigation: network first, offline fallback to shell
+  // Navigation → network first, offline fallback to cached shell
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((res) => {
           const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          caches.open(SHELL_CACHE).then((cache) => cache.put(request, clone));
           return res;
         })
         .catch(() => caches.match('./') || caches.match('./index.html'))
@@ -56,17 +56,35 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: cache first
+  // JS / CSS bundles → network first so code changes always land immediately.
+  // Falls back to cache only when offline.
+  const isBundle = /\.(js|css|ts|jsx|tsx|mjs)(\?.*)?$/.test(url.pathname);
+  if (isBundle) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(ASSET_CACHE).then((cache) => cache.put(request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Everything else (images, fonts, audio) → cache first, update in background
   event.respondWith(
     caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((res) => {
+      const networkFetch = fetch(request).then((res) => {
         if (res.ok) {
           const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          caches.open(ASSET_CACHE).then((cache) => cache.put(request, clone));
         }
         return res;
       });
+      return cached || networkFetch;
     })
   );
 });
