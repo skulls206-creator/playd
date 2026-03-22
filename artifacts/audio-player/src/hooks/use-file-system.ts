@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { get, set } from 'idb-keyval';
-import * as mm from 'music-metadata-browser';
 import { useBulkUpsertTracks, getListTracksQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -561,24 +560,6 @@ function parseWav(bytes: Uint8Array): WavData {
   return result;
 }
 
-// ─── Detect MIME type from magic bytes ──────────────────────────────────────
-async function detectMimeType(file: File): Promise<string | undefined> {
-  try {
-    const buf = await file.slice(0, 12).arrayBuffer();
-    const b = new Uint8Array(buf);
-    if (b[0] === 0x4F && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return 'audio/ogg';
-    if (b[0] === 0x1A && b[1] === 0x45 && b[2] === 0xDF && b[3] === 0xA3) return 'audio/webm';
-    if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33)                  return 'audio/mpeg';
-    if (b[0] === 0xFF && (b[1] === 0xFB || b[1] === 0xF3 || b[1] === 0xF2)) return 'audio/mpeg';
-    if (b[0] === 0x66 && b[1] === 0x4C && b[2] === 0x61 && b[3] === 0x43) return 'audio/flac';
-    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return 'audio/wav';
-    if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return 'audio/mp4';
-    if (b[0] === 0xFF && (b[1] === 0xF1 || b[1] === 0xF9))                return 'audio/aac';
-    return undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 // ─── Filename metadata fallback ──────────────────────────────────────────────
 function parseFilenameMetadata(fileName: string): { artist: string; title: string } {
@@ -591,16 +572,136 @@ function parseFilenameMetadata(fileName: string): { artist: string; title: strin
   return { artist: '', title: name.trim() };
 }
 
-// ─── music-metadata-browser helpers (for non-OGG formats) ───────────────────
-function nativeTag(native: mm.INativeTagDict | undefined, ...keys: string[]): string | undefined {
-  if (!native) return undefined;
-  for (const [, tagList] of Object.entries(native)) {
-    for (const key of keys) {
-      const hit = tagList.find(t => t.id.toUpperCase() === key.toUpperCase());
-      if (hit?.value) return String(hit.value);
+// ─── Native M4A / MP4 atom parser ───────────────────────────────────────────
+// Parses MPEG-4 container atoms to extract iTunes metadata and duration.
+// Covers M4A, M4P, AAC wrapped in MP4, ALAC, and generic MP4 audio.
+// ────────────────────────────────────────────────────────────────────────────
+
+interface M4ATags {
+  title?: string;
+  artist?: string;
+  album?: string;
+  year?: number;
+  genre?: string;
+  trackNumber?: number;
+  albumArtDataUrl?: string;
+  duration: number;
+}
+
+function parseM4A(bytes: Uint8Array): M4ATags {
+  const result: M4ATags = { duration: 0 };
+  const dec = new TextDecoder('utf-8');
+
+  function readAtoms(buf: Uint8Array, base: number, limit: number, cb: (type: string, data: Uint8Array, abs: number) => void) {
+    let pos = base;
+    while (pos + 8 <= limit) {
+      let size = readBE32(buf, pos);
+      const type = String.fromCharCode(buf[pos+4], buf[pos+5], buf[pos+6], buf[pos+7]);
+      let headerSize = 8;
+      if (size === 1) {
+        // Extended size (64-bit) — skip high word, use low word only (files < 4 GB)
+        size = readBE32(buf, pos + 12);
+        headerSize = 16;
+      }
+      if (size < headerSize || pos + size > limit) break;
+      cb(type, buf.subarray(pos + headerSize, pos + size), pos);
+      pos += size;
     }
   }
-  return undefined;
+
+  function findAtom(buf: Uint8Array, base: number, limit: number, target: string): Uint8Array | null {
+    let found: Uint8Array | null = null;
+    readAtoms(buf, base, limit, (type, data) => { if (type === target) found = data; });
+    return found;
+  }
+
+  // Walk top-level atoms
+  readAtoms(bytes, 0, bytes.length, (type, data, abs) => {
+    if (type === 'moov') {
+      // ── Duration from mvhd ──
+      const mvhd = findAtom(bytes, abs + 8, abs + 8 + data.length, 'mvhd');
+      if (mvhd && mvhd.length >= 20) {
+        const ver = mvhd[0];
+        if (ver === 0) {
+          const ts = readBE32(mvhd, 12);
+          const dur = readBE32(mvhd, 16);
+          if (ts > 0) result.duration = dur / ts;
+        } else if (ver === 1 && mvhd.length >= 28) {
+          const ts = readBE32(mvhd, 20);
+          const durHi = readBE32(mvhd, 24);
+          const durLo = mvhd.length >= 32 ? readBE32(mvhd, 28) : 0;
+          if (ts > 0) result.duration = (durHi * 4294967296 + durLo) / ts;
+        }
+      }
+
+      // ── iTunes metadata from udta.meta.ilst ──
+      const udta = findAtom(bytes, abs + 8, abs + 8 + data.length, 'udta');
+      if (!udta) return;
+
+      // meta has a 4-byte version+flags before its children
+      const metaRaw = findAtom(udta, 0, udta.length, 'meta');
+      if (!metaRaw || metaRaw.length < 4) return;
+      const meta = metaRaw.subarray(4);
+
+      const ilst = findAtom(meta, 0, meta.length, 'ilst');
+      if (!ilst) return;
+
+      function readDataAtom(container: Uint8Array): Uint8Array | null {
+        return findAtom(container, 0, container.length, 'data');
+      }
+
+      function textValue(container: Uint8Array): string | undefined {
+        const d = readDataAtom(container);
+        if (!d || d.length < 8) return undefined;
+        const text = dec.decode(d.subarray(8)).trim();
+        return text || undefined;
+      }
+
+      const ID3_GENRES_M4A: Record<number, string> = {
+        1:'Blues',2:'Classic Rock',3:'Country',4:'Dance',5:'Disco',6:'Funk',
+        7:'Grunge',8:'Hip-Hop',9:'Jazz',10:'Metal',11:'New Age',12:'Oldies',
+        13:'Other',14:'Pop',15:'R&B',16:'Rap',17:'Reggae',18:'Rock',
+        19:'Techno',20:'Industrial',21:'Alternative',22:'Ska',23:'Death Metal',
+        24:'Pranks',25:'Soundtrack',32:'Classical',33:'Instrumental',40:'AlternRock',
+        42:'Soul',52:'Electronic',255:'None',
+      };
+
+      readAtoms(ilst, 0, ilst.length, (tag, tagData) => {
+        if (tag === '\u00a9nam') result.title = textValue(tagData);
+        else if (tag === '\u00a9ART' || tag === 'aART') {
+          const v = textValue(tagData); if (v && !result.artist) result.artist = v;
+        }
+        else if (tag === '\u00a9alb') result.album = textValue(tagData);
+        else if (tag === '\u00a9day') {
+          const v = textValue(tagData);
+          if (v) { const y = parseInt(v.slice(0, 4), 10); if (!isNaN(y) && y > 0) result.year = y; }
+        }
+        else if (tag === '\u00a9gen') result.genre = textValue(tagData);
+        else if (tag === 'gnre') {
+          const d = readDataAtom(tagData);
+          if (d && d.length >= 10) { const idx = (d[8] << 8) | d[9]; result.genre = ID3_GENRES_M4A[idx] || undefined; }
+        }
+        else if (tag === 'trkn') {
+          const d = readDataAtom(tagData);
+          if (d && d.length >= 12) { const n = (d[10] << 8) | d[11]; if (n > 0) result.trackNumber = n; }
+        }
+        else if (tag === 'covr' && !result.albumArtDataUrl) {
+          const d = readDataAtom(tagData);
+          if (d && d.length > 8) {
+            const flags = (d[1] << 16) | (d[2] << 8) | d[3];
+            const mime = flags === 14 ? 'image/png' : 'image/jpeg';
+            const imgBytes = d.subarray(8);
+            try {
+              const b64 = btoa(Array.from(imgBytes, (x: number) => String.fromCharCode(x)).join(''));
+              result.albumArtDataUrl = `data:${mime};base64,${b64}`;
+            } catch { /* skip large art */ }
+          }
+        }
+      });
+    }
+  });
+
+  return result;
 }
 
 // ─── Audio file detection ────────────────────────────────────────────────────
@@ -814,60 +915,28 @@ export function useFileSystem() {
             });
           }
         } else {
-          // ── music-metadata-browser for FLAC, M4A, WAV, etc. ──────────────
+          // ── Native M4A/MP4 atom parser for M4A, AAC, ALAC, MP4, etc. ─────
           try {
-            const arrayBuffer = await file.arrayBuffer();
-            const uint8Array = new Uint8Array(arrayBuffer);
-            const mime = await detectMimeType(file);
-            const metadata = await mm.parseBuffer(
-              uint8Array,
-              { mimeType: mime || file.type || undefined, path: file.name, size: file.size },
-              { duration: true, skipCovers: false },
-            );
-
-            if (metadata.common.picture?.length) {
-              const pic = metadata.common.picture[0];
-              const artBlob = new Blob([pic.data], { type: pic.format });
-              const dataUrl: string = await new Promise(resolve => {
-                const reader = new FileReader();
-                reader.onload = e => resolve(e.target?.result as string);
-                reader.readAsDataURL(artBlob);
-              });
-              artStore[relativePath] = dataUrl;
-            }
-
-            const artist =
-              metadata.common.artist ||
-              (metadata.common.artists as string[] | undefined)?.[0] ||
-              nativeTag(metadata.native, 'ARTIST', 'artist') ||
-              fileMeta.artist || '';
-
-            const title =
-              metadata.common.title ||
-              nativeTag(metadata.native, 'TITLE', 'title') ||
-              fileMeta.title || fileName;
-
+            const sliceSize = Math.min(file.size, 8 * 1024 * 1024);
+            const tagBuf = await file.slice(0, sliceSize).arrayBuffer();
+            const m4a = parseM4A(new Uint8Array(tagBuf));
+            const artKey = `${folderPath}/${fileName}`;
+            if (m4a.albumArtDataUrl) artStore[artKey] = m4a.albumArtDataUrl;
             tracks.push({
-              title,
-              artist,
-              album: metadata.common.album || nativeTag(metadata.native, 'ALBUM') || 'Unknown Album',
-              year: metadata.common.year || null,
-              genre: metadata.common.genre?.[0] || nativeTag(metadata.native, 'GENRE') || null,
-              duration: Math.round(metadata.format.duration || 0),
-              trackNumber: (() => {
-                const n = metadata.common.track?.no;
-                if (n && n > 0) return n;
-                const raw = nativeTag(metadata.native, 'TRACKNUMBER', 'tracknumber');
-                const parsed = raw ? parseInt(raw, 10) : NaN;
-                return isNaN(parsed) || parsed <= 0 ? null : parsed;
-              })(),
+              title: m4a.title || fileMeta.title || fileName,
+              artist: m4a.artist || fileMeta.artist || '',
+              album: m4a.album || 'Unknown Album',
+              year: m4a.year ?? null,
+              genre: m4a.genre ?? null,
+              duration: Math.round(m4a.duration),
+              trackNumber: m4a.trackNumber ?? null,
               fileName,
               folderPath,
               albumArtDataUrl: null,
               source: 'local',
             });
           } catch (err) {
-            console.error(`[playd] metadata parse error for "${fileName}":`, err);
+            console.error(`[playd] m4a parse error for "${fileName}":`, err);
             tracks.push({
               title: fileMeta.title || fileName,
               artist: fileMeta.artist || '',

@@ -3,6 +3,10 @@ import { setAuthTokenGetter } from "@workspace/api-client-react";
 
 const TOKEN_KEY = "playd_token";
 
+// Wire the token getter immediately at module load — never relies on initialize() being called first.
+// This ensures customFetch always has access to the token even before React mounts.
+setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
+
 export interface AuthUser {
   id: number;
   email: string;
@@ -41,8 +45,6 @@ export const useAuth = create<AuthState>((set, get) => ({
   isAuthenticated: false,
 
   initialize: async () => {
-    setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
-
     const stored = localStorage.getItem(TOKEN_KEY);
     if (!stored) {
       set({ isLoading: false, isAuthenticated: false });
