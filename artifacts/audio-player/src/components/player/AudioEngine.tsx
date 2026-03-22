@@ -1,23 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useNowPlayingNotification } from '@/hooks/use-now-playing-notification';
-import { customFetch } from '@workspace/api-client-react';
-
-// ── Subsonic stream URL builder ───────────────────────────────────────────────
-interface _SubsonicCfg { url: string; username: string; password: string }
-const _subsonicConfigCache: Record<number, _SubsonicCfg> = {};
-
-async function getSubsonicStreamSrc(serverId: number, subsonicId: string): Promise<string> {
-  let cfg = _subsonicConfigCache[serverId];
-  if (!cfg) {
-    cfg = await customFetch<_SubsonicCfg>(`/api/subsonic-servers/${serverId}/config`);
-    _subsonicConfigCache[serverId] = cfg;
-  }
-  const base = cfg.url.replace(/\/$/, '');
-  const params = new URLSearchParams({ v: '1.16.1', c: 'playd', f: 'json', u: cfg.username, p: cfg.password, id: subsonicId, maxBitRate: '0' });
-  return `${base}/rest/stream?${params}`;
-}
 
 const FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
@@ -123,13 +107,6 @@ export function AudioEngine() {
           objectUrlRef.current = src;
         } else {
           console.error("Could not read local file (needs permission grant?)");
-          return;
-        }
-      } else if (currentTrack.source === 'subsonic' && currentTrack.subsonicId && currentTrack.subsonicServerId) {
-        try {
-          src = await getSubsonicStreamSrc(currentTrack.subsonicServerId, currentTrack.subsonicId);
-        } catch (e) {
-          console.error('Could not build Subsonic stream URL', e);
           return;
         }
       }

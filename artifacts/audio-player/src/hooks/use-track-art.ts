@@ -6,7 +6,6 @@ const ART_STORE_KEY = 'track-art';
 
 /**
  * Resolves album art for a track.
- * - Subsonic tracks carry their art URL directly in the track object.
  * - Local tracks have art stored in IndexedDB (extracted during import).
  * Returns null while loading, then the data URL or null if no art found.
  */
