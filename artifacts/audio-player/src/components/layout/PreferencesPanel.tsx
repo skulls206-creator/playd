@@ -98,6 +98,14 @@ export function PreferencesPanel() {
   };
 
   const handleRemoveFolder = async (handle: FileSystemDirectoryHandle) => {
+    const ok = confirm(
+      `Remove "${handle.name}" from saved folders?\n\nThis will also delete all its tracks from your library — you'll need to re-import to get them back.`
+    );
+    if (!ok) return;
+    // Delete tracks for this folder from the DB
+    await fetch(`/api/tracks/folder?name=${encodeURIComponent(handle.name)}`, { method: 'DELETE' });
+    await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    // Remove the folder handle from IndexedDB
     const updated = localFolders.filter(h => h.name !== handle.name);
     await set('music-folders', updated);
     setLocalFolders(updated);
