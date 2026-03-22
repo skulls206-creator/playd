@@ -1,8 +1,10 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { useListTracks } from '@workspace/api-client-react';
+import { useListTracks, getListTracksQueryKey, customFetch } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
+import { useFileSystem } from '@/hooks/use-file-system';
+import { useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronUp, ChevronDown, Music, Pause, Play, Menu } from 'lucide-react';
+import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, RefreshCw, Trash2, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
 
@@ -96,7 +98,31 @@ interface TrackListPanelProps {
 
 export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
-  const { currentTrack, isPlaying, play, togglePlay, setQueue, libraryFilter } = useAudioPlayer();
+  const { currentTrack, isPlaying, play, togglePlay, setQueue, libraryFilter, setLibraryFilter } = useAudioPlayer();
+  const { isScanning, rescanAll, getStoredHandles } = useFileSystem();
+  const queryClient = useQueryClient();
+
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const handleRescan = async () => {
+    const handles = await getStoredHandles();
+    if (handles.length === 0) return;
+    await rescanAll();
+    queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+  };
+
+  const handleClearLibrary = async () => {
+    if (!clearConfirm) { setClearConfirm(true); setTimeout(() => setClearConfirm(false), 3000); return; }
+    setClearConfirm(false);
+    setIsClearing(true);
+    try {
+      await customFetch('/api/tracks/local', { method: 'DELETE' });
+      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   const [sortCol, setSortColRaw] = useState<SortCol>(
     () => (localStorage.getItem('playd_sortCol') as SortCol | null) ?? 'artist'
@@ -181,12 +207,13 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background min-w-0">
-      {/* Column headers */}
-      <div className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none">
-        {/* Mobile: hamburger to open sidebar */}
+
+      {/* ── Action toolbar ─────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 px-2 h-8 border-b border-border bg-black/20 shrink-0">
+        {/* Mobile hamburger */}
         {onMenuOpen && (
           <button
-            className="sm:hidden mr-2 text-muted-foreground hover:text-foreground transition-colors"
+            className="sm:hidden mr-1 text-muted-foreground hover:text-foreground transition-colors"
             onClick={onMenuOpen}
             title="Open library"
           >
@@ -194,6 +221,58 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
           </button>
         )}
 
+        {/* Active filter label + clear */}
+        {libraryFilter.type !== 'all' ? (
+          <div className="flex items-center gap-1 min-w-0 flex-1">
+            <span className="text-[10px] text-primary/80 truncate">{libraryFilter.label}</span>
+            <button
+              onClick={() => setLibraryFilter({ type: 'all', value: '', label: 'All Songs' })}
+              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              title="Show all songs"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/50 flex-1 truncate">All Songs</span>
+        )}
+
+        {/* Refresh Folders */}
+        <button
+          onClick={handleRescan}
+          disabled={isScanning}
+          title="Rescan all added folders"
+          className={clsx(
+            'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
+            isScanning
+              ? 'text-primary/50 cursor-not-allowed'
+              : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+          )}
+        >
+          <RefreshCw className={clsx('w-3 h-3', isScanning && 'animate-spin')} />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
+
+        {/* Clear Library */}
+        <button
+          onClick={handleClearLibrary}
+          disabled={isClearing}
+          title={clearConfirm ? 'Click again to confirm clear' : 'Clear local library'}
+          className={clsx(
+            'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
+            clearConfirm
+              ? 'text-red-400 bg-red-950/40 hover:bg-red-950/60'
+              : 'text-muted-foreground hover:text-red-400 hover:bg-white/5',
+            isClearing && 'opacity-50 cursor-not-allowed',
+          )}
+        >
+          <Trash2 className="w-3 h-3" />
+          <span className="hidden sm:inline">{clearConfirm ? 'Confirm?' : 'Clear'}</span>
+        </button>
+      </div>
+
+      {/* Column headers */}
+      <div className="flex items-center px-3 h-8 border-b border-border bg-black/30 shrink-0 select-none">
         {/* # — fixed */}
         <div className="w-10 shrink-0 text-right pr-2">
           <ColHeader col="trackNumber" label="#" extraClass="justify-end" />

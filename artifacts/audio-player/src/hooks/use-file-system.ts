@@ -1043,6 +1043,14 @@ export function useFileSystem() {
     }
   };
 
+  const rescanAll = async (): Promise<void> => {
+    const handles = await getStoredHandles();
+    if (handles.length === 0) return;
+    for (const handle of handles) {
+      await scanFolder(handle);
+    }
+  };
+
   return {
     isScanning,
     scanProgress,
@@ -1052,6 +1060,7 @@ export function useFileSystem() {
     loadSampleTrack,
     scanFolder,
     scanFileList,
+    rescanAll,
     getStoredHandles,
     verifyPermission,
     getFileFromPath,
