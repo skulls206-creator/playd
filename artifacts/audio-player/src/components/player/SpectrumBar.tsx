@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { sharedAnalyserRef } from './AudioEngine';
 
-const BARS = 32;
+const BARS = 24;
 const BAR_COLOR_R = 255;
 const BAR_COLOR_G = 60;
 const BAR_COLOR_B = 0;

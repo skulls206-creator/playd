@@ -164,6 +164,7 @@ export function AudioEngine() {
       if (secs <= 0) return;
 
       const remaining = myDeck.audio.duration - myDeck.audio.currentTime;
+      // Non-finite duration (live streams, some formats): skip crossfade silently
       if (!isFinite(remaining) || remaining > secs || remaining <= 0) return;
 
       // Peek at the next track without advancing the queue
