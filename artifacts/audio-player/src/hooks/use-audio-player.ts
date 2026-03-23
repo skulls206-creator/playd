@@ -3,6 +3,18 @@ import { get } from 'idb-keyval';
 import type { Track, QueueItem, EqPreset } from '@workspace/api-client-react';
 import type { LyricLine } from '@/lib/lrc-parser';
 
+/** Sync localStorage read — used by store actions that change currentTrack. */
+function loadLyricsFromStorage(trackId: number): { lyrics: LyricLine[] | null; lyricsTrackId: number | null } {
+  try {
+    const stored = localStorage.getItem(`playd_lyrics_${trackId}`);
+    if (stored) {
+      const parsed: LyricLine[] = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) return { lyrics: parsed, lyricsTrackId: trackId };
+    }
+  } catch {}
+  return { lyrics: null, lyricsTrackId: null };
+}
+
 const ART_STORE_KEY = 'track-art';
 
 async function resolveArtUrl(track: Track): Promise<string | null> {
@@ -205,11 +217,13 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       });
     }
 
+    const lyricsState = nextTrack ? loadLyricsFromStorage(nextTrack.id) : { lyrics: null, lyricsTrackId: null };
     return { 
       currentTrack: nextTrack, 
       queue: nextQueue, 
       queueIndex: nextIndex,
-      isPlaying: !!nextTrack 
+      isPlaying: !!nextTrack,
+      ...lyricsState,
     };
   }),
 
@@ -235,11 +249,13 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       nextIndex = Math.floor(Math.random() * state.queue.length);
     }
     
+    const nextTrackN = state.queue[nextIndex].track;
     return {
       queueIndex: nextIndex,
-      currentTrack: state.queue[nextIndex].track,
+      currentTrack: nextTrackN,
       isPlaying: true,
-      progress: 0
+      progress: 0,
+      ...loadLyricsFromStorage(nextTrackN.id),
     };
   }),
 
@@ -257,11 +273,13 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       else prevIndex = 0;
     }
     
+    const prevTrack = state.queue[prevIndex].track;
     return {
       queueIndex: prevIndex,
-      currentTrack: state.queue[prevIndex].track,
+      currentTrack: prevTrack,
       isPlaying: true,
-      progress: 0
+      progress: 0,
+      ...loadLyricsFromStorage(prevTrack.id),
     };
   }),
 
@@ -336,11 +354,13 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   },
   _advanceToIndex: (idx) => set((state) => {
     if (idx < 0 || idx >= state.queue.length) return { isPlaying: false, progress: 0 };
+    const advTrack = state.queue[idx].track;
     return {
       queueIndex: idx,
-      currentTrack: state.queue[idx].track,
+      currentTrack: advTrack,
       isPlaying: true,
       progress: 0,
+      ...loadLyricsFromStorage(advTrack.id),
     };
   }),
 }));

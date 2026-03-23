@@ -4,22 +4,29 @@ export interface LyricLine {
 }
 
 const TS_RE = /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
-const METADATA_RE = /^\[(?:ar|al|ti|by|offset|re|ve):.+\]$/i;
+const METADATA_RE = /^\[(?:ar|al|ti|by|offset|re|ve|length):.+\]$/i;
 
 /**
- * Parse an LRC string into an array of timed lyric lines.
+ * Parse an LRC string into an array of timed lyric lines, sorted by timeSec.
  *
  * Handles:
- *   - Standard [mm:ss.xx] timestamps (one or many per source line)
- *   - LRC metadata tags (skipped)
- *   - Plain / unsynced text fallback: returns lines with timeSec = 0, isSynced = false
+ *   - Standard [mm:ss.xx] / [mm:ss:xx] timestamps
+ *   - Multiple timestamps on one source line → multiple output entries with the same text
+ *   - Continuation lines (no timestamp, not metadata) → appended to the previous entry's text
+ *   - LRC metadata tags (ar/al/ti/by/offset/re/ve/length) — skipped
+ *   - Plain / unsynced text fallback → all lines returned with timeSec = 0
  */
-export function parseLrc(raw: string): { lines: LyricLine[]; isSynced: boolean } {
+export function parseLrc(raw: string): LyricLine[] {
   const rawLines = raw.replace(/\r\n?/g, '\n').split('\n');
   const synced: LyricLine[] = [];
   let hasTimes = false;
 
   for (const rawLine of rawLines) {
+    const trimmed = rawLine.trim();
+
+    // Skip blank lines and metadata-only lines
+    if (!trimmed || METADATA_RE.test(trimmed)) continue;
+
     const timestamps: number[] = [];
     let m: RegExpExecArray | null;
 
@@ -27,7 +34,7 @@ export function parseLrc(raw: string): { lines: LyricLine[]; isSynced: boolean }
     while ((m = TS_RE.exec(rawLine)) !== null) {
       const mins = parseInt(m[1], 10);
       const secs = parseInt(m[2], 10);
-      // centiseconds or hundredths – normalise to two digits then divide
+      // Normalise fractional part: could be centiseconds (.xx) or hundredths
       const frac = m[3] ? parseInt(m[3].padEnd(2, '0').slice(0, 2), 10) / 100 : 0;
       timestamps.push(mins * 60 + secs + frac);
       hasTimes = true;
@@ -35,26 +42,36 @@ export function parseLrc(raw: string): { lines: LyricLine[]; isSynced: boolean }
 
     const text = rawLine.replace(TS_RE, '').trim();
 
-    // Skip blank lines and metadata-only lines
-    if (timestamps.length === 0) continue;
-
-    for (const t of timestamps) {
-      synced.push({ timeSec: t, text });
+    if (timestamps.length > 0) {
+      // One entry per timestamp (common LRC pattern: [t1][t2]text)
+      for (const t of timestamps) {
+        synced.push({ timeSec: t, text });
+      }
+    } else if (hasTimes && synced.length > 0) {
+      // Continuation line in a synced file — append to the previous entry
+      const prev = synced[synced.length - 1];
+      if (prev.text) {
+        prev.text += '\n' + text;
+      } else {
+        prev.text = text;
+      }
     }
+    // Lines before any timestamp in a synced file are silently dropped
   }
-
-  // Sort by timestamp
-  synced.sort((a, b) => a.timeSec - b.timeSec);
 
   if (hasTimes) {
-    return { lines: synced, isSynced: true };
+    // Sort by timestamp (multiple timestamps per source line may be out of order)
+    return synced.sort((a, b) => a.timeSec - b.timeSec);
   }
 
-  // Fallback: plain unsynced text
-  const plain = rawLines
+  // Fallback: plain unsynced text — return all non-empty lines with timeSec = 0
+  return rawLines
     .map(l => l.trim())
     .filter(l => l.length > 0 && !METADATA_RE.test(l))
     .map(text => ({ timeSec: 0, text }));
+}
 
-  return { lines: plain, isSynced: false };
+/** Helper: true when the array contains at least one line with a meaningful timestamp. */
+export function isLrcSynced(lines: LyricLine[]): boolean {
+  return lines.some(l => l.timeSec > 0);
 }

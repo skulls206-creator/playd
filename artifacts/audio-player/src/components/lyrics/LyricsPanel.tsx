@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
-import { parseLrc } from '@/lib/lrc-parser';
+import { parseLrc, isLrcSynced } from '@/lib/lrc-parser';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { X, FileText, ClipboardPaste, Trash2 } from 'lucide-react';
@@ -27,7 +27,6 @@ function EmptyState({
           <ClipboardPaste className="w-3.5 h-3.5" />
           Paste LRC
         </Button>
-        {/* File picker: hidden on mobile */}
         <Button
           variant="ghost"
           size="sm"
@@ -79,13 +78,14 @@ function PasteView({
 }
 
 export function LyricsPanel() {
-  const { currentTrack, progress, lyrics, setLyrics, clearLyrics, toggleLyrics } = useAudioPlayer();
+  const { currentTrack, progress, lyrics, lyricsTrackId, setLyrics, clearLyrics, toggleLyrics } = useAudioPlayer();
   const [showPaste, setShowPaste] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeRef = useRef<HTMLDivElement>(null);
 
-  // Determine active line index (last line with timeSec <= progress)
-  const isSynced = lyrics !== null && lyrics.some(l => l.timeSec > 0);
+  const isSynced = lyrics !== null && isLrcSynced(lyrics);
+
+  // Active line: last entry whose timeSec <= current playback position
   const activeIdx = (() => {
     if (!lyrics || !isSynced) return -1;
     let idx = -1;
@@ -103,9 +103,11 @@ export function LyricsPanel() {
     }
   }, [activeIdx]);
 
-  // Hydrate lyrics when track changes
+  // Mount-time guard: if the store hasn't hydrated this track's lyrics yet (e.g. app
+  // was restored without going through play()), load them now from localStorage.
   useEffect(() => {
     if (!currentTrack) return;
+    if (lyricsTrackId === currentTrack.id) return; // Store already has them
     const stored = localStorage.getItem(`playd_lyrics_${currentTrack.id}`);
     if (stored) {
       try {
@@ -116,14 +118,12 @@ export function LyricsPanel() {
         }
       } catch {}
     }
-    // No stored lyrics for this track — reset state
     setLyrics(currentTrack.id, []);
   }, [currentTrack?.id]);
 
   const handleConfirmPaste = useCallback((text: string) => {
     if (!currentTrack) return;
-    const { lines } = parseLrc(text);
-    setLyrics(currentTrack.id, lines);
+    setLyrics(currentTrack.id, parseLrc(text));
     setShowPaste(false);
   }, [currentTrack, setLyrics]);
 
@@ -138,8 +138,7 @@ export function LyricsPanel() {
     reader.onload = ev => {
       const text = ev.target?.result as string;
       if (!text) return;
-      const { lines } = parseLrc(text);
-      setLyrics(currentTrack.id, lines);
+      setLyrics(currentTrack.id, parseLrc(text));
     };
     reader.readAsText(file, 'utf-8');
     e.target.value = '';
@@ -153,7 +152,6 @@ export function LyricsPanel() {
 
   return (
     <div className="w-72 flex-shrink-0 flex flex-col bg-card border-l border-border overflow-hidden">
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -211,7 +209,7 @@ export function LyricsPanel() {
                 Plain text — no timestamps
               </p>
             )}
-            {lyrics!.map((line, i) => {
+            {lyrics.map((line, i) => {
               const isActive = i === activeIdx;
               const isPast = isSynced && i < activeIdx;
               return (
@@ -219,7 +217,7 @@ export function LyricsPanel() {
                   key={i}
                   ref={isActive ? activeRef : null}
                   className={clsx(
-                    'py-1 px-2 rounded text-sm leading-relaxed transition-all duration-300 text-center',
+                    'py-1 px-2 rounded text-sm leading-relaxed transition-all duration-300 text-center whitespace-pre-line',
                     isActive
                       ? 'text-primary font-semibold scale-[1.03]'
                       : isPast
