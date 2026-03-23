@@ -7,6 +7,7 @@ import MainPlayer from "@/pages/MainPlayer";
 import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/not-found";
 import { InstallPrompt } from "@/components/layout/InstallPrompt";
+import { KhurkOsBanner } from "@/components/layout/KhurkOsBanner";
 import { useAuth } from "@/hooks/use-auth";
 import { requestNotificationPermission, setNotificationsEnabled } from "@/hooks/use-now-playing-notification";
 
@@ -83,6 +84,7 @@ function App() {
             <Router />
           </WouterRouter>
           <InstallPrompt />
+          <KhurkOsBanner />
         </AuthGate>
         <Toaster />
       </TooltipProvider>
