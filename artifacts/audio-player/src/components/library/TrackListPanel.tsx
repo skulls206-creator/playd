@@ -147,7 +147,7 @@ interface TrackListPanelProps {
 
 export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
-  const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
+  const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter, searchQuery, setSearchQuery } = useAudioPlayer();
   const { isScanning, scanProgress, scanStatus, scanFileList, importDroppedItems } = useFileSystem();
   const folderInputRef = useRef<HTMLInputElement>(null);
   const mobileFilesInputRef = useRef<HTMLInputElement>(null);
@@ -225,12 +225,23 @@ export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPane
     else { setSortCol(col); setSortDir('asc'); }
   };
 
+  const isSearching = searchQuery.trim().length > 0;
+
   const filtered = useMemo(() => {
+    if (isSearching) {
+      const q = searchQuery.trim().toLowerCase();
+      return allTracks.filter(t =>
+        (t.title ?? '').toLowerCase().includes(q) ||
+        (t.artist ?? '').toLowerCase().includes(q) ||
+        (t.album ?? '').toLowerCase().includes(q) ||
+        (t.fileName ?? '').toLowerCase().includes(q)
+      );
+    }
     if (libraryFilter.type === 'all') return allTracks;
     if (libraryFilter.type === 'artist') return allTracks.filter(t => t.artist === libraryFilter.value);
     if (libraryFilter.type === 'album') return allTracks.filter(t => t.album === libraryFilter.value);
     return allTracks;
-  }, [allTracks, libraryFilter]);
+  }, [allTracks, libraryFilter, searchQuery, isSearching]);
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -403,7 +414,20 @@ export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPane
 
         {/* Active filter label + scan status (always visible side-by-side) */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          {libraryFilter.type !== 'all' ? (
+          {isSearching ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[10px] text-primary/80 truncate max-w-[140px]">
+                "{searchQuery}" — {sorted.length} result{sorted.length !== 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Clear search"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : libraryFilter.type !== 'all' ? (
             <div className="flex items-center gap-1 shrink-0">
               <span className="text-[10px] text-primary/80">{libraryFilter.label}</span>
               <button
@@ -502,8 +526,17 @@ export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPane
           {sorted.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center text-muted-foreground gap-3 py-24 px-6">
               <Music className="w-10 h-10 opacity-20" />
-              <p className="text-sm font-medium">No tracks yet</p>
-              <p className="text-xs opacity-60 leading-relaxed max-w-[220px]">Add a folder in Preferences to get started</p>
+              {isSearching ? (
+                <>
+                  <p className="text-sm font-medium">No results for "{searchQuery}"</p>
+                  <p className="text-xs opacity-60">Try a different word or check your spelling</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium">No tracks yet</p>
+                  <p className="text-xs opacity-60 leading-relaxed max-w-[220px]">Add a folder in Preferences to get started</p>
+                </>
+              )}
             </div>
           ) : (
             <div>

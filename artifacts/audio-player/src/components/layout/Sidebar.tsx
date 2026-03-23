@@ -23,11 +23,10 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   const { data: tracks = [] } = useListTracks();
   const { data: playlists = [] } = useListPlaylists();
   const { isScanning } = useFileSystem();
-  const { libraryFilter, setLibraryFilter, togglePrefs, isLyricsOpen, toggleLyrics } = useAudioPlayer();
+  const { libraryFilter, setLibraryFilter, togglePrefs, isLyricsOpen, toggleLyrics, searchQuery, setSearchQuery } = useAudioPlayer();
   const { user, logout } = useAuth();
   const { canInstall, install } = usePwaInstall();
 
-  const [search, setSearch] = useState('');
   const [openSections, setOpenSections] = useState<Record<NavSection, boolean>>({
     artists: true, albums: false, playlists: true,
   });
@@ -47,7 +46,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   }, [tracks]);
 
   const matchSearch = (s: string) =>
-    !search || s.toLowerCase().includes(search.toLowerCase());
+    !searchQuery || s.toLowerCase().includes(searchQuery.toLowerCase());
 
   const filteredArtists = artists.filter(matchSearch);
   const filteredAlbums  = albums.filter(matchSearch);
@@ -108,11 +107,20 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Filter…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search songs, artists, albums…"
             className="pl-8 h-7 bg-black/20 border-border/50 text-xs rounded-sm"
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              title="Clear search"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
 

@@ -69,6 +69,10 @@ interface PlayerState {
   setSleepTimerEndOfTrack: () => void;
   clearSleepTimer: () => void;
 
+  // Global search
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+
   // Lyrics
   isLyricsOpen: boolean;
   lyrics: LyricLine[] | null;       // lines for the currently loaded track
@@ -315,6 +319,9 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   toggleQueue: () => set((state) => ({ isQueueOpen: !state.isQueueOpen })),
   togglePrefs: () => set((state) => ({ isPrefsOpen: !state.isPrefsOpen })),
   toggleLyrics: () => set((state) => ({ isLyricsOpen: !state.isLyricsOpen })),
+
+  searchQuery: '',
+  setSearchQuery: (q) => set({ searchQuery: q }),
   
   setRepeatMode: (mode) => { savePref('playd_repeat', mode); set({ repeatMode: mode }); },
   toggleShuffle: () => set((state) => {
