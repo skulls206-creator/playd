@@ -20,6 +20,7 @@ import {
   Copy,
   FolderOpen,
   ListMusic,
+  Scissors,
 } from 'lucide-react';
 
 interface TrackContextMenuProps {
@@ -30,6 +31,7 @@ interface TrackContextMenuProps {
   onPlayNow: () => void;
   onPlaySelected?: () => void;
   onQueueSelected?: () => void;
+  onEditInClipStudio?: (track: Track) => void;
 }
 
 export function TrackContextMenu({
@@ -40,6 +42,7 @@ export function TrackContextMenu({
   onPlayNow,
   onPlaySelected,
   onQueueSelected,
+  onEditInClipStudio,
 }: TrackContextMenuProps) {
   const {
     addToQueueNext,
@@ -197,6 +200,20 @@ export function TrackContextMenu({
                 Go to Album
                 <span className="ml-auto text-[10px] text-zinc-500 truncate max-w-[80px]">{track.album}</span>
               </ContextMenuItem>
+            )}
+
+            {/* Edit in Clip Studio — local tracks only */}
+            {track.source === 'local' && onEditInClipStudio && (
+              <>
+                <ContextMenuSeparator className="bg-zinc-700/50" />
+                <ContextMenuItem
+                  onClick={() => onEditInClipStudio(track)}
+                  className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
+                >
+                  <Scissors className="w-3.5 h-3.5 text-zinc-400" />
+                  Edit in Clip Studio
+                </ContextMenuItem>
+              </>
             )}
 
             <ContextMenuSeparator className="bg-zinc-700/50" />

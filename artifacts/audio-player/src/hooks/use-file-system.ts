@@ -1126,6 +1126,30 @@ export function useFileSystem() {
     }
   };
 
+  // Returns the FileSystemFileHandle (not just the File), enabling createWritable() for save-back.
+  const getFileHandleFromPath = async (
+    fileName: string,
+    folderPath: string,
+  ): Promise<FileSystemFileHandle | null> => {
+    try {
+      const handles = await getStoredHandles();
+      const rootFolderName = folderPath.split('/')[0];
+      const rootHandle = handles.find(h => h.name === rootFolderName);
+      if (!rootHandle) return null;
+      if (!(await verifyPermission(rootHandle))) return null;
+
+      const pathParts = folderPath.split('/').slice(1);
+      let currentHandle: FileSystemDirectoryHandle = rootHandle;
+      for (const part of pathParts) {
+        currentHandle = await currentHandle.getDirectoryHandle(part);
+      }
+      return await currentHandle.getFileHandle(fileName);
+    } catch (e) {
+      console.error('Failed to get file handle from path', e);
+      return null;
+    }
+  };
+
   const rescanAll = async (): Promise<void> => {
     const handles = await getStoredHandles();
     if (handles.length === 0) {
@@ -1220,6 +1244,7 @@ export function useFileSystem() {
     getStoredHandles,
     verifyPermission,
     getFileFromPath,
+    getFileHandleFromPath,
     getArtForTrack,
   };
 }

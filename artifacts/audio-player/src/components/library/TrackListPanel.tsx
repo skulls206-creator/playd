@@ -142,9 +142,10 @@ function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
 // ─── Component ───────────────────────────────────────────────────────────────
 interface TrackListPanelProps {
   onMenuOpen?: () => void;
+  onEditInClipStudio?: (track: Track) => void;
 }
 
-export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
+export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter } = useAudioPlayer();
   const { isScanning, scanProgress, scanStatus, scanFileList, importDroppedItems } = useFileSystem();
@@ -535,6 +536,7 @@ export function TrackListPanel({ onMenuOpen }: TrackListPanelProps = {}) {
                     onQueueSelected={() => {
                       ctxTracks.forEach(t => addToQueueEnd(t));
                     }}
+                    onEditInClipStudio={onEditInClipStudio}
                   >
                     <div
                       onDoubleClick={() => {

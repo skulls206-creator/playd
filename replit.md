@@ -107,6 +107,14 @@ foobar2000-style audio player PWA. Served at `/`.
 - 10-band EQ with 8 built-in presets seeded in DB (per user)
 - Smart playlists with query language (evaluated server-side)
 - Duplicate detection, tag editing, multi-column sort, keyboard shortcuts
+- **Clip Studio**: full-screen offline audio editor (right-click any local track → "Edit in Clip Studio")
+  - Decodes audio via `AudioContext.decodeAudioData` — no server round-trips
+  - Interactive canvas waveform with draggable trim handles (orange)
+  - Operations: Trim, Fade In, Fade Out (cosine ramps), Peak Normalize
+  - Preview playback with animated playhead (`AudioBufferSourceNode`)
+  - Save-back via File System Access API `createWritable()`, or fallback to `showSaveFilePicker()`, or download
+  - Revert to original at any time; warns on close with unsaved changes
+  - Key files: `src/lib/wav-encoder.ts`, `src/lib/audio-editor.ts`, `src/components/editor/WaveformCanvas.tsx`, `src/components/editor/ClipStudioModal.tsx`
 - State managed by Zustand; data fetched via React Query hooks from `@workspace/api-client-react`
 - Key packages: zustand, framer-motion, idb-keyval, date-fns, bcryptjs, jsonwebtoken
 

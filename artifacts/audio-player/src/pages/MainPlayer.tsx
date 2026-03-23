@@ -5,19 +5,31 @@ import { TransportBar } from '@/components/layout/TransportBar';
 import { AudioEngine } from '@/components/player/AudioEngine';
 import { EqPanel } from '@/components/player/EqPanel';
 import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
-import { useEffect, useState } from 'react';
+import { ClipStudioModal } from '@/components/editor/ClipStudioModal';
+import { useEffect, useState, useCallback } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import type { Track } from '@workspace/api-client-react';
 
 export default function MainPlayer() {
   const { getStoredHandles } = useFileSystem();
-  const { isQueueOpen } = useAudioPlayer();
+  const { isQueueOpen, pause } = useAudioPlayer();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [clipStudioTrack, setClipStudioTrack] = useState<Track | null>(null);
   useKeyboardShortcuts();
 
   useEffect(() => {
     getStoredHandles().then(() => {});
+  }, []);
+
+  const handleOpenClipStudio = useCallback((track: Track) => {
+    pause();
+    setClipStudioTrack(track);
+  }, [pause]);
+
+  const handleCloseClipStudio = useCallback(() => {
+    setClipStudioTrack(null);
   }, []);
 
   return (
@@ -44,7 +56,10 @@ export default function MainPlayer() {
           <Sidebar />
         </div>
 
-        <TrackListPanel onMenuOpen={() => setMobileSidebarOpen(true)} />
+        <TrackListPanel
+          onMenuOpen={() => setMobileSidebarOpen(true)}
+          onEditInClipStudio={handleOpenClipStudio}
+        />
         {isQueueOpen && <QueuePanel />}
 
         {/* Floating Overlays */}
@@ -55,6 +70,14 @@ export default function MainPlayer() {
 
       {/* Footer Transport */}
       <TransportBar />
+
+      {/* Clip Studio — full-screen overlay */}
+      {clipStudioTrack && (
+        <ClipStudioModal
+          track={clipStudioTrack}
+          onClose={handleCloseClipStudio}
+        />
+      )}
     </div>
   );
 }
