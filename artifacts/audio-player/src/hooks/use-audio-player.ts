@@ -69,6 +69,10 @@ interface PlayerState {
   setSleepTimerEndOfTrack: () => void;
   clearSleepTimer: () => void;
 
+  // ReplayGain
+  replaygainEnabled: boolean;
+  setReplaygainEnabled: (enabled: boolean) => void;
+
   // Global search
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -147,6 +151,9 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   setCrossfadeSec: (sec) => { savePref('playd_crossfade', sec); set({ crossfadeSec: sec }); },
   showSpectrum: loadPref('playd_spectrum', true),
   setShowSpectrum: (show) => { savePref('playd_spectrum', show); set({ showSpectrum: show }); },
+
+  replaygainEnabled: loadPref('playd_replaygain', false),
+  setReplaygainEnabled: (enabled) => { savePref('playd_replaygain', enabled); set({ replaygainEnabled: enabled }); },
 
   // Sleep Timer — restore from localStorage, discarding expired timestamps
   sleepTimerExpiry: (() => {

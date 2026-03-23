@@ -3,12 +3,14 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import {
   useListEqPresets,
+  useListTracks,
   useCreateEqPreset,
   useDeleteEqPreset,
   getListEqPresetsQueryKey,
   getListTracksQueryKey,
   customFetch,
 } from '@workspace/api-client-react';
+import { scanReplaygain } from '@/lib/replaygain-scanner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -21,7 +23,7 @@ import {
   FolderOpen, RefreshCw, Trash2, Plus, CheckCircle2,
   XCircle, Loader2, Info, HardDrive,
   Database, Monitor, Save, FileMusic, Bell, BellOff, Smartphone,
-  Activity, Blend,
+  Activity, Blend, Volume2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { get, del, set } from 'idb-keyval';
@@ -35,8 +37,9 @@ export function PreferencesPanel() {
   const {
     isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset,
     crossfadeSec, setCrossfadeSec, showSpectrum, setShowSpectrum,
+    replaygainEnabled, setReplaygainEnabled,
   } = useAudioPlayer();
-  const { loadSampleTrack, scanFileList, isScanning, scanStatus } = useFileSystem();
+  const { loadSampleTrack, scanFileList, isScanning, scanStatus, getFileFromPath } = useFileSystem();
 
   const folderInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef  = useRef<HTMLInputElement>(null);
@@ -44,6 +47,52 @@ export function PreferencesPanel() {
 
   // EQ Presets
   const { data: presets = [] } = useListEqPresets();
+
+  // ReplayGain scan
+  const { data: allTracks = [] } = useListTracks();
+  const [rgScanning, setRgScanning] = useState(false);
+  const [rgProgress, setRgProgress] = useState<{ done: number; total: number } | null>(null);
+  const [rgStatus, setRgStatus] = useState<string | null>(null);
+
+  const handleScanReplaygain = useCallback(async () => {
+    const localTracks = allTracks.filter(t => t.source === 'local');
+    if (localTracks.length === 0) {
+      setRgStatus('No local tracks found. Import some files first.');
+      return;
+    }
+    setRgScanning(true);
+    setRgProgress({ done: 0, total: localTracks.length });
+    setRgStatus(null);
+    let scanned = 0;
+    let failed = 0;
+
+    for (const track of localTracks) {
+      try {
+        const file = await getFileFromPath(track.fileName, track.folderPath);
+        if (!file) { failed++; } else {
+          const gain = await scanReplaygain(file);
+          await customFetch(`/api/tracks/${track.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ replaygainGain: gain }),
+          });
+          scanned++;
+        }
+      } catch {
+        failed++;
+      }
+      setRgProgress({ done: scanned + failed, total: localTracks.length });
+    }
+
+    await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    setRgScanning(false);
+    const msg = failed > 0
+      ? `✓ Scanned ${scanned} track${scanned !== 1 ? 's' : ''} — ${failed} skipped (file not accessible)`
+      : `✓ Scanned ${scanned} track${scanned !== 1 ? 's' : ''} successfully`;
+    setRgStatus(msg);
+    setRgProgress(null);
+  }, [allTracks, getFileFromPath, queryClient]);
+
   const createPreset = useCreateEqPreset();
   const deletePreset = useDeleteEqPreset();
 
@@ -349,6 +398,83 @@ export function PreferencesPanel() {
                   />
                 </button>
               </div>
+            </section>
+
+            <Separator className="border-border/20" />
+
+            {/* ReplayGain */}
+            <section>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Volume2 className="w-3.5 h-3.5 text-primary" />
+                  ReplayGain Normalization
+                </h3>
+                <button
+                  onClick={() => setReplaygainEnabled(!replaygainEnabled)}
+                  className={clsx(
+                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
+                    'transition-colors duration-200 focus:outline-none',
+                    replaygainEnabled ? 'bg-primary' : 'bg-border',
+                  )}
+                  role="switch"
+                  aria-checked={replaygainEnabled}
+                >
+                  <span
+                    className={clsx(
+                      'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg',
+                      'transform transition duration-200',
+                      replaygainEnabled ? 'translate-x-4' : 'translate-x-0',
+                    )}
+                  />
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                Automatically adjust playback volume so all tracks play at the same perceived loudness.
+                Scan your library to measure each track, then enable to apply.
+              </p>
+
+              <div className="flex items-center gap-2 mb-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs gap-1.5 border-border/50"
+                  onClick={handleScanReplaygain}
+                  disabled={rgScanning}
+                >
+                  {rgScanning
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <RefreshCw className="w-3 h-3" />
+                  }
+                  {rgScanning ? 'Scanning…' : 'Scan Library'}
+                </Button>
+                {allTracks.filter(t => t.source === 'local' && t.replaygainGain != null).length > 0 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {allTracks.filter(t => t.source === 'local' && t.replaygainGain != null).length} of {allTracks.filter(t => t.source === 'local').length} local tracks scanned
+                  </span>
+                )}
+              </div>
+
+              {rgProgress && (
+                <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-md bg-primary/10 text-primary animate-pulse mb-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  Scanning {rgProgress.done} / {rgProgress.total}…
+                </div>
+              )}
+
+              {rgStatus && (
+                <div className={clsx(
+                  'flex items-center gap-2 text-xs px-3 py-2 rounded-md mb-2',
+                  rgStatus.startsWith('✓')
+                    ? 'text-green-400 bg-green-400/10'
+                    : 'text-muted-foreground bg-black/20',
+                )}>
+                  {rgStatus.startsWith('✓')
+                    ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    : <Info className="w-3.5 h-3.5 shrink-0" />
+                  }
+                  {rgStatus}
+                </div>
+              )}
             </section>
 
             <Separator className="border-border/20" />

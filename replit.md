@@ -100,13 +100,14 @@ foobar2000-style audio player PWA. Served at `/`.
 - **Per-user isolation**: every DB table (tracks, playlists, eq_presets, subsonic_servers, queued_tracks) has a nullable `user_id` FK. All API queries filter by `req.userId` (set by `requireAuth` middleware). Users never see each other's data.
 - **Local mode**: File System Access API (`window.showDirectoryPicker()`), folder handles persisted in IndexedDB via `idb-keyval`, tags parsed by native TS parsers (ID3v2, FLAC, Vorbis, WAV)
 - **Subsonic mode**: ALL Subsonic API calls (test, sync, stream) are client-side — the browser fetches directly from the Subsonic server. The API has a JWT-protected `/api/subsonic-servers/:id/config` endpoint that returns credentials; the browser uses them to build stream URLs and sync the library. This bypasses server-side NAT/port restrictions that blocked home servers on non-standard ports.
-- Playback via HTML5 `<audio>` → Web Audio API pipeline (GainNode → 10× BiquadFilterNode for EQ)
+- Playback via HTML5 `<audio>` → Web Audio API pipeline: crossGain → 10× BiquadFilterNode (EQ) → ReplayGain GainNode → AnalyserNode → masterGain
 - Media Session API for OS media keys, lock screen controls, system transport widget
 - Web Notifications API for persistent now-playing notification
 - Custom right-click context menu (browser default suppressed app-wide)
 - 10-band EQ with 8 built-in presets seeded in DB (per user)
 - Smart playlists with query language (evaluated server-side)
 - Duplicate detection, tag editing, multi-column sort, keyboard shortcuts
+- **ReplayGain normalization**: `src/lib/replaygain-scanner.ts` uses `OfflineAudioContext` to measure RMS dBFS for each local file; gain stored in `tracks.replaygain_gain` (real, nullable); Preferences → Playback → "ReplayGain Normalization" section with scan-library button + per-track progress; `rgGainRef` GainNode in AudioEngine applies `10^(gain/20)` when enabled; `replaygainEnabled` persisted in `localStorage`
 - **Clip Studio**: full-screen offline audio editor (right-click any local track → "Edit in Clip Studio")
   - Decodes audio via `AudioContext.decodeAudioData` — no server round-trips
   - Interactive canvas waveform with draggable trim handles (orange)

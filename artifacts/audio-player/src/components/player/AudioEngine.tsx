@@ -24,10 +24,12 @@ export function AudioEngine() {
   const xfadeNextIdx = useRef<number | null>(null); // index pinned when crossfade starts
   const ctxRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
+  const rgGainRef = useRef<GainNode | null>(null);
   const filtersRef = useRef<BiquadFilterNode[]>([]);
 
   const {
     currentTrack, isPlaying, volume, isMuted, progress, eqBands, crossfadeSec,
+    replaygainEnabled,
     _setProgress, _setDuration, _trackEnded, play, pause, next, prev,
   } = useAudioPlayer();
 
@@ -101,7 +103,13 @@ export function AudioEngine() {
     sharedAnalyserRef.current = analyser;
     analyser.connect(master);
 
-    // 10-band EQ chain → analyser
+    // ReplayGain gain node (between EQ chain and analyser)
+    const rgGain = ctx.createGain();
+    rgGain.gain.value = 1.0;
+    rgGainRef.current = rgGain;
+    rgGain.connect(analyser);
+
+    // 10-band EQ chain → rgGain
     const filters = EQ_FREQS.map((freq, i) => {
       const f = ctx.createBiquadFilter();
       f.type = i === 0 ? 'lowshelf' : i === EQ_FREQS.length - 1 ? 'highshelf' : 'peaking';
@@ -110,7 +118,7 @@ export function AudioEngine() {
     });
     filtersRef.current = filters;
     for (let i = 0; i < filters.length - 1; i++) filters[i].connect(filters[i + 1]);
-    filters[filters.length - 1].connect(analyser);
+    filters[filters.length - 1].connect(rgGain);
 
     // Create one deck with a given initial crossfade gain value
     const makeDeck = (initGain: number): Deck => {
@@ -301,6 +309,18 @@ export function AudioEngine() {
   useEffect(() => {
     filtersRef.current.forEach((f, i) => { f.gain.value = eqBands[i] || 0; });
   }, [eqBands]);
+
+  // ReplayGain gain adjustment
+  useEffect(() => {
+    const rg = rgGainRef.current;
+    if (!rg) return;
+    if (replaygainEnabled && currentTrack?.replaygainGain != null) {
+      // Convert dB gain to linear multiplier: 10^(dB/20)
+      rg.gain.value = Math.pow(10, currentTrack.replaygainGain / 20);
+    } else {
+      rg.gain.value = 1.0;
+    }
+  }, [replaygainEnabled, currentTrack]);
 
   // Track change
   useEffect(() => {

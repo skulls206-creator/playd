@@ -28,6 +28,8 @@ export interface Track {
   subsonicId?: string | null;
   /** @nullable */
   subsonicServerId?: number | null;
+  /** @nullable */
+  replaygainGain?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

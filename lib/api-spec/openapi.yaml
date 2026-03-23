@@ -649,6 +649,8 @@ components:
           type: ["string", "null"]
         subsonicServerId:
           type: ["integer", "null"]
+        replaygainGain:
+          type: ["number", "null"]
         createdAt:
           type: string
           format: date-time
@@ -722,6 +724,8 @@ components:
           type: integer
         albumArtDataUrl:
           type: ["string", "null"]
+        replaygainGain:
+          type: ["number", "null"]
 
     BulkUpsertTracksBody:
       type: object

@@ -19,6 +19,7 @@ export const tracksTable = pgTable("tracks", {
   source: text("source").notNull().default("local"),
   subsonicId: text("subsonic_id"),
   subsonicServerId: integer("subsonic_server_id"),
+  replaygainGain: real("replaygain_gain"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

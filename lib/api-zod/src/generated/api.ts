@@ -42,6 +42,7 @@ export const ListTracksResponseItem = zod.object({
   source: zod.string(),
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
+  replaygainGain: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -110,6 +111,7 @@ export const BulkUpsertTracksResponse = zod.object({
       source: zod.string(),
       subsonicId: zod.string().nullish(),
       subsonicServerId: zod.number().nullish(),
+      replaygainGain: zod.number().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     }),
@@ -139,6 +141,7 @@ export const GetTrackResponse = zod.object({
   source: zod.string(),
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
+  replaygainGain: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -159,6 +162,7 @@ export const UpdateTrackBody = zod.object({
   trackNumber: zod.number().nullish(),
   rating: zod.number().optional(),
   albumArtDataUrl: zod.string().nullish(),
+  replaygainGain: zod.number().nullish(),
 });
 
 export const UpdateTrackResponse = zod.object({
@@ -177,6 +181,7 @@ export const UpdateTrackResponse = zod.object({
   source: zod.string(),
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
+  replaygainGain: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -273,6 +278,7 @@ export const GetPlaylistTracksResponseItem = zod.object({
   source: zod.string(),
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
+  replaygainGain: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -323,6 +329,7 @@ export const GetQueueResponseItem = zod.object({
     source: zod.string(),
     subsonicId: zod.string().nullish(),
     subsonicServerId: zod.number().nullish(),
+    replaygainGain: zod.number().nullish(),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),
@@ -356,6 +363,7 @@ export const ReplaceQueueResponseItem = zod.object({
     source: zod.string(),
     subsonicId: zod.string().nullish(),
     subsonicServerId: zod.number().nullish(),
+    replaygainGain: zod.number().nullish(),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),
@@ -389,6 +397,7 @@ export const AddToQueueResponseItem = zod.object({
     source: zod.string(),
     subsonicId: zod.string().nullish(),
     subsonicServerId: zod.number().nullish(),
+    replaygainGain: zod.number().nullish(),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),

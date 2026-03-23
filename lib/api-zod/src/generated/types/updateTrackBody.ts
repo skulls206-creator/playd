@@ -19,4 +19,6 @@ export interface UpdateTrackBody {
   rating?: number;
   /** @nullable */
   albumArtDataUrl?: string | null;
+  /** @nullable */
+  replaygainGain?: number | null;
 }
