@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useNowPlayingNotification } from '@/hooks/use-now-playing-notification';
+import type { Track } from '@workspace/api-client-react';
 
 const EQ_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
@@ -11,7 +12,7 @@ export const sharedAnalyserRef: { current: AnalyserNode | null } = { current: nu
 interface Deck {
   audio: HTMLAudioElement;
   crossGain: GainNode;
-  loadedTrackId: string | null;
+  loadedTrackId: number | null;
   objectUrl: string | null;
 }
 
@@ -45,19 +46,36 @@ export function AudioEngine() {
   const getIdle   = () => (active.current === 'A' ? deckB : deckA).current!;
   const swap      = () => { active.current = active.current === 'A' ? 'B' : 'A'; };
 
-  // Load a track's audio file onto a deck
-  const loadDeckFile = useRef(async (deck: Deck, track: any): Promise<boolean> => {
+  // Resolve a playable URL for any track source
+  const resolveTrackSrc = useRef(async (track: Track): Promise<string | null> => {
+    if (track.source === 'local') {
+      const file = await getFileFromPathRef.current(track.fileName, track.folderPath);
+      if (!file) { console.error('Cannot access local file'); return null; }
+      return URL.createObjectURL(file);
+    }
+
+    if (track.source === 'subsonic' && track.subsonicServerId && track.subsonicId) {
+      // Audio elements cannot set custom headers, so we embed the JWT token as a
+      // query param. The API's requireAuth middleware accepts ?token= on GET requests.
+      const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
+      const qs = jwt ? `?token=${encodeURIComponent(jwt)}` : '';
+      return `/api/subsonic-servers/${track.subsonicServerId}/stream/${encodeURIComponent(track.subsonicId)}${qs}`;
+    }
+
+    console.warn('AudioEngine: unsupported track source', track.source);
+    return null;
+  });
+
+  // Load a track onto a deck and return success
+  const loadDeckFile = useRef(async (deck: Deck, track: Track): Promise<boolean> => {
     if (deck.objectUrl) { URL.revokeObjectURL(deck.objectUrl); deck.objectUrl = null; }
     deck.loadedTrackId = null;
 
-    let src = '';
-    if (track.source === 'local') {
-      const file = await getFileFromPathRef.current(track.fileName, track.folderPath);
-      if (!file) { console.error('Cannot access local file'); return false; }
-      src = URL.createObjectURL(file);
-      deck.objectUrl = src;
-    }
+    const src = await resolveTrackSrc.current(track);
     if (!src) return false;
+
+    // Only keep a reference to object URLs (not remote stream URLs) for revocation
+    if (src.startsWith('blob:')) deck.objectUrl = src;
 
     deck.audio.src = src;
     deck.audio.load();
@@ -160,21 +178,25 @@ export function AudioEngine() {
 
       xfading.current = true;
       const ctx = ctxRef.current!;
-      const fadeDur = remaining;
+      // Use the full configured crossfade duration for the ramp.
+      // If timeupdate fired a little late (remaining < crossfadeSec), the ramp still
+      // plays for the full duration — the old track ends naturally, handleEnded cancels
+      // its gain and pauses it, while the new track continues fading in to 1.
+      const fadeDur = crossfadeSecRef.current;
 
       // Fire-and-forget async preload + ramp
       (async () => {
         const ok = await loadDeckFile.current(otherDeck, nextTrack);
         if (!ok || !xfading.current) { xfading.current = false; return; }
 
-        // Start idle deck at gain 0, ramp to 1
+        // Start idle deck at gain 0, ramp to 1 over the full crossfade duration
         otherDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
         otherDeck.crossGain.gain.setValueAtTime(0, ctx.currentTime);
         otherDeck.crossGain.gain.linearRampToValueAtTime(1, ctx.currentTime + fadeDur);
         ctx.resume();
         otherDeck.audio.play().catch(() => {});
 
-        // Ramp active deck from current to 0
+        // Ramp active deck from its current value down to 0
         myDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
         myDeck.crossGain.gain.setValueAtTime(myDeck.crossGain.gain.value, ctx.currentTime);
         myDeck.crossGain.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeDur);

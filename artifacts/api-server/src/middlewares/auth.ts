@@ -27,12 +27,21 @@ export function verifyToken(token: string): AuthPayload {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  // Accept Bearer token from Authorization header OR ?token= query param (for media streaming).
+  let token: string | null = null;
+
   const auth = req.headers.authorization;
-  if (!auth?.startsWith("Bearer ")) {
+  if (auth?.startsWith("Bearer ")) {
+    token = auth.slice(7);
+  } else if (req.method === "GET" && typeof req.query.token === "string") {
+    token = req.query.token;
+  }
+
+  if (!token) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  const token = auth.slice(7);
+
   try {
     const payload = verifyToken(token);
     req.userId = payload.userId;
