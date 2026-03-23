@@ -6,3 +6,21 @@ id = "6F5uQRSVXY5oRLU4zZoD-"
 uri = "file://artifacts/audio-player/public/test-tone.wav"
 type = "audio"
 title = "Test Tone (440Hz WAV — 2 seconds)"
+
+[[outputs]]
+id = "-_Gzux3J8V_tBdNuFt8T3"
+uri = "file://artifacts/audio-player/public/icons/icon-512.png"
+type = "image"
+title = "playd.music logo — 512×512 (best quality)"
+
+[[outputs]]
+id = "-gFh-hQ5TST77J-PUzmRt"
+uri = "file://artifacts/audio-player/public/icons/icon-192.png"
+type = "image"
+title = "playd.music logo — 192×192"
+
+[[outputs]]
+id = "VaSG1JFMUAT9F0a18C07n"
+uri = "file://artifacts/audio-player/public/favicon.svg"
+type = "image"
+title = "playd.music favicon — SVG (scalable, any size)"
