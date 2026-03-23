@@ -92,21 +92,39 @@ export function normalizePeak(buffer: AudioBuffer, targetPeak = 0.891): number {
 }
 
 /**
- * Computes downsampled min/max peaks for waveform rendering.
+ * Computes downsampled min/max peaks for the FULL buffer for waveform rendering.
  * Returns a Float32Array of length `steps * 2`: [min0, max0, min1, max1, ...].
  * Uses the average of both channels if stereo.
  */
 export function computeWaveformPeaks(buffer: AudioBuffer, steps: number): Float32Array {
-  const numCh = buffer.numberOfChannels;
-  const size  = Math.ceil(buffer.length / steps);
-  const out   = new Float32Array(steps * 2);
+  return computeWaveformPeaksInRange(buffer, 0, buffer.duration, steps);
+}
+
+/**
+ * Computes downsampled min/max peaks for a specific time range within the buffer.
+ * Use this for zoomed waveform display.
+ * Returns a Float32Array of length `steps * 2`: [min0, max0, min1, max1, ...].
+ */
+export function computeWaveformPeaksInRange(
+  buffer: AudioBuffer,
+  startSec: number,
+  endSec: number,
+  steps: number,
+): Float32Array {
+  const sr       = buffer.sampleRate;
+  const numCh    = buffer.numberOfChannels;
+  const startIdx = Math.max(0, Math.floor(startSec * sr));
+  const endIdx   = Math.min(buffer.length, Math.ceil(endSec * sr));
+  const rangeLen = Math.max(1, endIdx - startIdx);
+  const chunkSz  = Math.ceil(rangeLen / steps);
+  const out      = new Float32Array(steps * 2);
 
   for (let i = 0; i < steps; i++) {
-    const start = i * size;
-    const end   = Math.min(start + size, buffer.length);
+    const s = startIdx + i * chunkSz;
+    const e = Math.min(s + chunkSz, endIdx);
     let mn = 0, mx = 0;
 
-    for (let j = start; j < end; j++) {
+    for (let j = s; j < e; j++) {
       let sample = 0;
       for (let ch = 0; ch < numCh; ch++) {
         sample += buffer.getChannelData(ch)[j];
@@ -119,5 +137,49 @@ export function computeWaveformPeaks(buffer: AudioBuffer, steps: number): Float3
     out[i * 2]     = mn;
     out[i * 2 + 1] = mx;
   }
+
   return out;
+}
+
+/**
+ * Detects silence at the start and end of a buffer.
+ * Returns the time range (in seconds) of the audible content.
+ * If completely silent, returns the full buffer range.
+ *
+ * @param thresholdDb  Amplitude threshold in dBFS (default −60 dB)
+ */
+export function detectSilence(
+  buffer: AudioBuffer,
+  thresholdDb = -60,
+): { startSec: number; endSec: number } {
+  const thresh = Math.pow(10, thresholdDb / 20); // linear threshold
+  const numCh  = buffer.numberOfChannels;
+  const len    = buffer.length;
+  const sr     = buffer.sampleRate;
+
+  const isAudible = (i: number): boolean => {
+    for (let ch = 0; ch < numCh; ch++) {
+      if (Math.abs(buffer.getChannelData(ch)[i]) > thresh) return true;
+    }
+    return false;
+  };
+
+  // Scan forward from start
+  let startIdx = 0;
+  for (let i = 0; i < len; i++) {
+    if (isAudible(i)) { startIdx = i; break; }
+  }
+
+  // Scan backward from end
+  let endIdx = len - 1;
+  for (let i = len - 1; i >= 0; i--) {
+    if (isAudible(i)) { endIdx = i; break; }
+  }
+
+  // Add a tiny pad around detected edges (5ms) to avoid hard cuts
+  const padSamples = Math.round(0.005 * sr);
+  return {
+    startSec: Math.max(0, (startIdx - padSamples) / sr),
+    endSec:   Math.min(buffer.duration, (endIdx + 1 + padSamples) / sr),
+  };
 }
