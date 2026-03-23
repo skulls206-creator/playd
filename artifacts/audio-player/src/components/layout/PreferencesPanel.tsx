@@ -54,34 +54,43 @@ export function PreferencesPanel() {
   const [rgProgress, setRgProgress] = useState<{ done: number; total: number } | null>(null);
   const [rgStatus, setRgStatus] = useState<string | null>(null);
 
-  const handleScanReplaygain = useCallback(async () => {
+  const handleScanReplaygain = useCallback(async (rescanAll = false) => {
     const localTracks = allTracks.filter(t => t.source === 'local');
     if (localTracks.length === 0) {
       setRgStatus('No local tracks found. Import some files first.');
       return;
     }
+    const toScan = rescanAll
+      ? localTracks
+      : localTracks.filter(t => t.replaygainGain == null);
+
+    if (toScan.length === 0) {
+      setRgStatus('All local tracks are already scanned. Use Re-scan All to update.');
+      return;
+    }
+
     setRgScanning(true);
-    setRgProgress({ done: 0, total: localTracks.length });
+    setRgProgress({ done: 0, total: toScan.length });
     setRgStatus(null);
     let scanned = 0;
     let failed = 0;
 
-    for (const track of localTracks) {
+    for (const track of toScan) {
       try {
         const file = await getFileFromPath(track.fileName, track.folderPath);
         if (!file) { failed++; } else {
           const gain = await scanReplaygain(file);
-          await customFetch(`/api/tracks/${track.id}`, {
+          await customFetch(`/api/tracks/${track.id}/replaygain`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ replaygainGain: gain }),
+            body: JSON.stringify({ gain }),
           });
           scanned++;
         }
       } catch {
         failed++;
       }
-      setRgProgress({ done: scanned + failed, total: localTracks.length });
+      setRgProgress({ done: scanned + failed, total: toScan.length });
     }
 
     await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
@@ -433,26 +442,49 @@ export function PreferencesPanel() {
                 Scan your library to measure each track, then enable to apply.
               </p>
 
-              <div className="flex items-center gap-2 mb-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs gap-1.5 border-border/50"
-                  onClick={handleScanReplaygain}
-                  disabled={rgScanning}
-                >
-                  {rgScanning
-                    ? <Loader2 className="w-3 h-3 animate-spin" />
-                    : <RefreshCw className="w-3 h-3" />
-                  }
-                  {rgScanning ? 'Scanning…' : 'Scan Library'}
-                </Button>
-                {allTracks.filter(t => t.source === 'local' && t.replaygainGain != null).length > 0 && (
-                  <span className="text-[11px] text-muted-foreground">
-                    {allTracks.filter(t => t.source === 'local' && t.replaygainGain != null).length} of {allTracks.filter(t => t.source === 'local').length} local tracks scanned
-                  </span>
-                )}
-              </div>
+              {(() => {
+                const localCount = allTracks.filter(t => t.source === 'local').length;
+                const scannedCount = allTracks.filter(t => t.source === 'local' && t.replaygainGain != null).length;
+                const unscannedCount = localCount - scannedCount;
+                return (
+                  <div className="flex flex-col gap-2 mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs gap-1.5 border-border/50"
+                        onClick={() => handleScanReplaygain(false)}
+                        disabled={rgScanning}
+                        title={unscannedCount === 0 ? 'All tracks already scanned' : `Scan ${unscannedCount} unscanned track${unscannedCount !== 1 ? 's' : ''}`}
+                      >
+                        {rgScanning
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <RefreshCw className="w-3 h-3" />
+                        }
+                        {rgScanning ? 'Scanning…' : 'Scan Library'}
+                      </Button>
+                      {scannedCount > 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleScanReplaygain(true)}
+                          disabled={rgScanning}
+                          title="Re-scan all tracks, overwriting existing gain values"
+                        >
+                          Re-scan All
+                        </Button>
+                      )}
+                    </div>
+                    {localCount > 0 && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {scannedCount} of {localCount} local track{localCount !== 1 ? 's' : ''} scanned
+                        {unscannedCount > 0 && ` · ${unscannedCount} pending`}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
 
               {rgProgress && (
                 <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-md bg-primary/10 text-primary animate-pulse mb-2">

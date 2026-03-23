@@ -35,6 +35,8 @@ export interface Track {
   subsonicId?: string | null;
   /** @nullable */
   subsonicServerId?: number | null;
+  /** @nullable */
+  replaygainGain?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +77,12 @@ export interface UpdateTrackBody {
   rating?: number;
   /** @nullable */
   albumArtDataUrl?: string | null;
+  /** @nullable */
+  replaygainGain?: number | null;
+}
+
+export interface SetTrackReplaygainBody {
+  gain: number;
 }
 
 export interface BulkUpsertTracksBody {
@@ -201,3 +209,7 @@ export type ListTracksParams = {
   sortBy?: string;
   sortDir?: string;
 };
+
+export interface SetTrackReplaygainBody {
+  gain: number;
+}

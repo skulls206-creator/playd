@@ -637,18 +637,28 @@ export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPane
                         )}
                       </div>
 
-                      {/* Right: Duration — outside clip section, always pinned at right edge */}
-                      <div className="w-14 shrink-0 text-right pl-1">
-                        {(track.duration ?? 0) > 0 ? (
-                          <span className={clsx(
-                            'text-[11px] font-mono',
-                            isCurrent ? 'text-primary/80' : 'text-foreground/50',
-                          )}>
-                            {formatDuration(track.duration!)}
+                      {/* Right: RG badge + Duration — pinned at right edge */}
+                      <div className="shrink-0 flex items-center gap-1.5 pl-1">
+                        {track.replaygainGain != null && (
+                          <span
+                            className="hidden group-hover:inline-flex items-center text-[9px] font-mono font-bold px-1 py-0.5 rounded bg-primary/15 text-primary/70 leading-none select-none"
+                            title={`ReplayGain: ${track.replaygainGain > 0 ? '+' : ''}${track.replaygainGain.toFixed(1)} dB`}
+                          >
+                            RG
                           </span>
-                        ) : (
-                          <span className="text-[11px] font-mono text-muted-foreground/30">—</span>
                         )}
+                        <div className="w-14 text-right">
+                          {(track.duration ?? 0) > 0 ? (
+                            <span className={clsx(
+                              'text-[11px] font-mono',
+                              isCurrent ? 'text-primary/80' : 'text-foreground/50',
+                            )}>
+                              {formatDuration(track.duration!)}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-mono text-muted-foreground/30">—</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </TrackContextMenu>

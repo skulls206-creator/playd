@@ -145,6 +145,29 @@ router.post("/tracks/bulk", requireAuth, async (req, res): Promise<void> => {
   res.json(BulkUpsertTracksResponse.parse({ upserted: results.length, tracks: results }));
 });
 
+router.patch("/tracks/:id/replaygain", requireAuth, async (req, res): Promise<void> => {
+  const params = UpdateTrackParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const { gain } = req.body as { gain?: unknown };
+  if (typeof gain !== 'number') {
+    res.status(400).json({ error: "gain must be a number" });
+    return;
+  }
+  const [track] = await db
+    .update(tracksTable)
+    .set({ replaygainGain: gain, updatedAt: new Date() })
+    .where(and(eq(tracksTable.id, params.data.id), eq(tracksTable.userId, req.userId!)))
+    .returning();
+  if (!track) {
+    res.status(404).json({ error: "Track not found" });
+    return;
+  }
+  res.json(UpdateTrackResponse.parse(track));
+});
+
 router.delete("/tracks/local", requireAuth, async (req, res): Promise<void> => {
   await db.delete(tracksTable).where(and(eq(tracksTable.userId, req.userId!), eq(tracksTable.source, "local")));
   res.sendStatus(204);
