@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useTrackArt } from '@/hooks/use-track-art';
 import {
   Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Volume2, VolumeX,
-  SlidersHorizontal, ListMusic, Settings, ChevronDown,
+  SlidersHorizontal, ListMusic, Settings, ChevronDown, Moon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -15,6 +16,132 @@ function formatTime(seconds: number) {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function SleepTimerButton() {
+  const { sleepTimerExpiry, sleepTimerMode, setSleepTimer, setSleepTimerEndOfTrack, clearSleepTimer } = useAudioPlayer();
+  const [open, setOpen] = useState(false);
+  const [customMins, setCustomMins] = useState('');
+  const [badge, setBadge] = useState<string | null>(null);
+
+  // Update the countdown badge every 30 s
+  useEffect(() => {
+    const update = () => {
+      if (sleepTimerMode === 'track') { setBadge('EOT'); return; }
+      if (!sleepTimerExpiry) { setBadge(null); return; }
+      const remaining = sleepTimerExpiry - Date.now();
+      if (remaining <= 0) { setBadge(null); return; }
+      const m = Math.ceil(remaining / 60_000);
+      setBadge(`${m}m`);
+    };
+    update();
+    const id = setInterval(update, 30_000);
+    return () => clearInterval(id);
+  }, [sleepTimerExpiry, sleepTimerMode]);
+
+  const isActive = sleepTimerMode !== null;
+
+  const handlePreset = (mins: number) => {
+    setSleepTimer(mins * 60_000);
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+    setOpen(false);
+  };
+
+  const handleEndOfTrack = () => {
+    setSleepTimerEndOfTrack();
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+    setOpen(false);
+  };
+
+  const handleCustom = () => {
+    const m = parseInt(customMins, 10);
+    if (!m || m < 1) return;
+    handlePreset(m);
+    setCustomMins('');
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={clsx(
+            'relative h-8 w-8 inline-flex items-center justify-center rounded-md transition-colors',
+            isActive
+              ? 'text-primary hover:text-primary/80'
+              : 'text-foreground/70 hover:text-foreground hover:bg-white/5',
+          )}
+          title="Sleep Timer"
+        >
+          <Moon className="w-4 h-4" />
+          {badge && (
+            <span className="absolute -top-1 -right-1 text-[9px] font-bold leading-none bg-primary text-primary-foreground rounded-full px-1 py-0.5 tabular-nums">
+              {badge}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-56 p-3 space-y-3">
+        <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Sleep Timer</p>
+
+        {/* Preset buttons */}
+        <div className="grid grid-cols-2 gap-1.5">
+          {[15, 30, 45, 60].map(m => (
+            <Button
+              key={m}
+              variant={sleepTimerMode === 'time' && sleepTimerExpiry && Math.round((sleepTimerExpiry - Date.now()) / 60_000) === m ? 'default' : 'outline'}
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => handlePreset(m)}
+            >
+              {m} min
+            </Button>
+          ))}
+        </div>
+
+        {/* End of track */}
+        <Button
+          variant={sleepTimerMode === 'track' ? 'default' : 'outline'}
+          size="sm"
+          className="w-full text-xs h-7"
+          onClick={handleEndOfTrack}
+        >
+          End of track
+        </Button>
+
+        {/* Custom minutes */}
+        <div className="flex gap-1.5">
+          <input
+            type="number"
+            min={1}
+            max={999}
+            value={customMins}
+            onChange={e => setCustomMins(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleCustom()}
+            placeholder="Custom mins"
+            className="flex-1 h-7 rounded border border-border bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <Button size="sm" className="h-7 px-2 text-xs" onClick={handleCustom}>Set</Button>
+        </div>
+
+        {/* Cancel */}
+        {isActive && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs h-7 text-destructive hover:text-destructive"
+            onClick={() => { clearSleepTimer(); setOpen(false); }}
+          >
+            Cancel timer
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function TransportBar() {
@@ -231,6 +358,7 @@ export function TransportBar() {
               </button>
             </div>
 
+            <SleepTimerButton />
             <Button
               variant="ghost" size="icon"
               className={clsx('h-8 w-8', isPrefsOpen && 'text-primary')}
@@ -319,6 +447,7 @@ export function TransportBar() {
 
         {/* Extras (Right) */}
         <div className="flex items-center justify-end gap-2 w-1/4 min-w-[160px]">
+          <SleepTimerButton />
           <Button
             variant="ghost" size="icon"
             className={clsx('h-8 w-8', isQueueOpen && 'bg-primary/20 text-primary')}

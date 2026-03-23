@@ -48,6 +48,13 @@ interface PlayerState {
   setCrossfadeSec: (sec: number) => void;
   showSpectrum: boolean;
   setShowSpectrum: (show: boolean) => void;
+
+  // Sleep Timer
+  sleepTimerExpiry: number | null;   // Unix ms — null when inactive
+  sleepTimerMode: 'time' | 'track' | null;
+  setSleepTimer: (ms: number) => void;
+  setSleepTimerEndOfTrack: () => void;
+  clearSleepTimer: () => void;
   
   // Actions
   play: (track?: Track, queue?: QueueItem[], startIndex?: number) => void;
@@ -115,6 +122,35 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   setCrossfadeSec: (sec) => { savePref('playd_crossfade', sec); set({ crossfadeSec: sec }); },
   showSpectrum: loadPref('playd_spectrum', true),
   setShowSpectrum: (show) => { savePref('playd_spectrum', show); set({ showSpectrum: show }); },
+
+  // Sleep Timer — restore from localStorage, discarding expired timestamps
+  sleepTimerExpiry: (() => {
+    const stored = loadPref<number | null>('playd_sleep_timer_expiry', null);
+    return stored && stored > Date.now() ? stored : null;
+  })(),
+  sleepTimerMode: (() => {
+    const stored = loadPref<'time' | 'track' | null>('playd_sleep_timer_mode', null);
+    const expiry = loadPref<number | null>('playd_sleep_timer_expiry', null);
+    // Discard 'time' mode if expiry has already passed
+    if (stored === 'time' && (!expiry || expiry <= Date.now())) return null;
+    return stored;
+  })(),
+  setSleepTimer: (ms) => {
+    const expiry = Date.now() + ms;
+    savePref('playd_sleep_timer_expiry', expiry);
+    savePref('playd_sleep_timer_mode', 'time');
+    set({ sleepTimerExpiry: expiry, sleepTimerMode: 'time' });
+  },
+  setSleepTimerEndOfTrack: () => {
+    savePref('playd_sleep_timer_expiry', null);
+    savePref('playd_sleep_timer_mode', 'track');
+    set({ sleepTimerExpiry: null, sleepTimerMode: 'track' });
+  },
+  clearSleepTimer: () => {
+    savePref('playd_sleep_timer_expiry', null);
+    savePref('playd_sleep_timer_mode', null);
+    set({ sleepTimerExpiry: null, sleepTimerMode: null });
+  },
 
   play: (track, newQueue, startIndex) => set((state) => {
     const nextQueue = newQueue || state.queue;
@@ -254,6 +290,15 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   _setDuration: (time) => set({ duration: time }),
   _trackEnded: () => {
     const state = get();
+    // End-of-track sleep timer: pause and clear before advancing
+    if (state.sleepTimerMode === 'track') {
+      state.pause();
+      state.clearSleepTimer();
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('playd.music', { body: 'Sleep timer ended — playback stopped.' });
+      }
+      return;
+    }
     if (state.repeatMode === 'one') {
       state.seek(0);
       state.play();

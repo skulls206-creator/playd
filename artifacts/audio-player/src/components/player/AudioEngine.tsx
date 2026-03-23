@@ -277,6 +277,23 @@ export function AudioEngine() {
 
   // ── React to store changes ───────────────────────────────────────────────────
 
+  // ── Sleep timer expiry check (every 10 s) ────────────────────────────────
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { sleepTimerExpiry, sleepTimerMode, pause: doPause, clearSleepTimer } = useAudioPlayer.getState();
+      if (sleepTimerMode !== 'time' || sleepTimerExpiry === null) return;
+      if (Date.now() < sleepTimerExpiry) return;
+
+      doPause();
+      clearSleepTimer();
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('playd.music', { body: 'Sleep timer ended — playback stopped.' });
+      }
+    }, 10_000);
+    return () => clearInterval(id);
+  }, []);
+
   // EQ band values
   useEffect(() => {
     filtersRef.current.forEach((f, i) => { f.gain.value = eqBands[i] || 0; });
