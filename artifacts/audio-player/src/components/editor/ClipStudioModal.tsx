@@ -318,8 +318,9 @@ export function ClipStudioModal({ track, onClose }: ClipStudioModalProps) {
 
     const tick = () => {
       if (!audioCtxRef.current) return;
-      const elapsed = (audioCtxRef.current.currentTime - playStartRef.current)
-        * previewRateRef.current;
+      // Effective playback speed = playbackRate × 2^(detune/1200)
+      const effectiveRate = previewRateRef.current * Math.pow(2, previewDetuneRef.current / 1200);
+      const elapsed = (audioCtxRef.current.currentTime - playStartRef.current) * effectiveRate;
       const pos = playOffsetRef.current + elapsed;
       setPlayhead(Math.min(pos, wb.duration));
       if (pos < wb.duration) {
