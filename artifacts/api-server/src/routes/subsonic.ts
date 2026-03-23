@@ -13,7 +13,7 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { z } from "zod/v4";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireStreamAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -266,7 +266,7 @@ router.post("/subsonic-servers/:id/sync", requireAuth, async (req, res): Promise
 
 // ── STREAM PROXY ──────────────────────────────────────────────────────────────
 
-router.get("/subsonic-servers/:id/stream/:subsonicTrackId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/subsonic-servers/:id/stream/:subsonicTrackId", requireStreamAuth, async (req: Request, res: Response): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const subsonicTrackId = req.params.subsonicTrackId;
   if (isNaN(id)) { res.status(400).end(); return; }

@@ -21,6 +21,7 @@ export function AudioEngine() {
   const deckB = useRef<Deck | null>(null);
   const active = useRef<'A' | 'B'>('A');
   const xfading = useRef(false);
+  const xfadeNextIdx = useRef<number | null>(null); // index pinned when crossfade starts
   const ctxRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
   const filtersRef = useRef<BiquadFilterNode[]>([]);
@@ -167,6 +168,10 @@ export function AudioEngine() {
 
       // Peek at the next track without advancing the queue
       const state = useAudioPlayer.getState();
+
+      // Crossfade doesn't make sense in repeat-one mode (next track = same track)
+      if (state.repeatMode === 'one') return;
+
       let nextIdx = state.queueIndex + 1;
       if (state.isShuffle) nextIdx = Math.floor(Math.random() * state.queue.length);
       if (nextIdx >= state.queue.length) {
@@ -176,6 +181,8 @@ export function AudioEngine() {
       const nextTrack = state.queue[nextIdx]?.track;
       if (!nextTrack) return;
 
+      // Pin the chosen index so handleEnded uses the exact same track
+      xfadeNextIdx.current = nextIdx;
       xfading.current = true;
       const ctx = ctxRef.current!;
       // Use the full configured crossfade duration for the ramp.
@@ -215,6 +222,16 @@ export function AudioEngine() {
         oldActive.crossGain.gain.value = 0;
         oldActive.audio.pause();
         xfading.current = false;
+
+        // Use the exact same index that was peeked at crossfade start —
+        // prevents re-randomisation in shuffle mode.
+        const pinnedIdx = xfadeNextIdx.current;
+        xfadeNextIdx.current = null;
+        if (pinnedIdx !== null) {
+          const { _advanceToIndex } = useAudioPlayer.getState();
+          _advanceToIndex(pinnedIdx);
+          return;
+        }
       }
 
       const { _trackEnded } = useAudioPlayer.getState();

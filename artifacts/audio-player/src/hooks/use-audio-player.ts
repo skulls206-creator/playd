@@ -75,6 +75,8 @@ interface PlayerState {
   _setProgress: (time: number) => void;
   _setDuration: (time: number) => void;
   _trackEnded: () => void;
+  /** Advance the queue to a specific index — used by crossfade to pin the chosen track. */
+  _advanceToIndex: (idx: number) => void;
 }
 
 const DEFAULT_EQ = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -258,5 +260,14 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     } else {
       state.next();
     }
-  }
+  },
+  _advanceToIndex: (idx) => set((state) => {
+    if (idx < 0 || idx >= state.queue.length) return { isPlaying: false, progress: 0 };
+    return {
+      queueIndex: idx,
+      currentTrack: state.queue[idx].track,
+      isPlaying: true,
+      progress: 0,
+    };
+  }),
 }));

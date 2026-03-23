@@ -27,7 +27,29 @@ export function verifyToken(token: string): AuthPayload {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  // Accept Bearer token from Authorization header OR ?token= query param (for media streaming).
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const token = auth.slice(7);
+  try {
+    const payload = verifyToken(token);
+    req.userId = payload.userId;
+    req.userEmail = payload.email;
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+/**
+ * Auth middleware for audio streaming routes.
+ * Accepts the JWT from either the Authorization header or a `?token=` query param,
+ * because HTMLAudioElement cannot set custom request headers.
+ * Scoped to GET-only stream endpoints to minimise JWT-in-URL exposure.
+ */
+export function requireStreamAuth(req: Request, res: Response, next: NextFunction): void {
   let token: string | null = null;
 
   const auth = req.headers.authorization;
