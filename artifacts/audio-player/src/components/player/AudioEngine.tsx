@@ -173,6 +173,9 @@ export function AudioEngine() {
       // Crossfade doesn't make sense in repeat-one mode (next track = same track)
       if (state.repeatMode === 'one') return;
 
+      // End-of-track sleep timer: let the track finish naturally so _trackEnded fires
+      if (state.sleepTimerMode === 'track') return;
+
       let nextIdx = state.queueIndex + 1;
       if (state.isShuffle) nextIdx = Math.floor(Math.random() * state.queue.length);
       if (nextIdx >= state.queue.length) {
