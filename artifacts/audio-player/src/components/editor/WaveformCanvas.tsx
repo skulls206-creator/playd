@@ -276,11 +276,77 @@ export function WaveformCanvas({
 
   const onScrollbarPointerUp = useCallback(() => { scrollDrag.current = null; }, []);
 
+  // ── Pinch-to-zoom ─────────────────────────────────────────────────────────
+  const pinchRef = useRef<{ dist: number; centerClientX: number } | null>(null);
+
+  const touchDist = (e: React.TouchEvent): number => {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const touchCenterX = (e: React.TouchEvent): number =>
+    (e.touches[0].clientX + e.touches[1].clientX) / 2;
+
+  const applyPinchZoom = useCallback((
+    prevDist: number,
+    newDist: number,
+    centerClientX: number,
+  ) => {
+    if (newDist < 1) return;
+    const canvas = canvasRef.current!;
+    const { duration: dur, viewStart: vs, viewEnd: ve } = live.current;
+    if (dur <= 0) return;
+
+    const cx        = getCanvasX(centerClientX);
+    const centerT   = canvasXToTime(cx, canvas.width);
+    const viewRange = ve - vs;
+    const MIN_RANGE = Math.max(0.5, dur * 0.02);
+    // spreading fingers (newDist > prevDist) = zoom in → scaleFactor < 1
+    const scaleFactor = prevDist / newDist;
+    const newRange    = Math.min(dur, Math.max(MIN_RANGE, viewRange * scaleFactor));
+    const ratio       = (centerT - vs) / viewRange;
+    let   newStart    = centerT - ratio * newRange;
+    let   newEnd      = newStart + newRange;
+
+    if (newStart < 0) { newStart = 0; newEnd = Math.min(dur, newRange); }
+    if (newEnd > dur) { newEnd = dur; newStart = Math.max(0, dur - newRange); }
+
+    onViewChange(newStart, newEnd);
+  }, [getCanvasX, onViewChange]);
+
   // Mouse/touch event wiring
-  const onMouseDown  = (e: React.MouseEvent<HTMLCanvasElement>)  => { e.preventDefault(); pointerDown(e.clientX); };
-  const onMouseMove  = (e: React.MouseEvent<HTMLCanvasElement>)  => pointerMove(e.clientX);
-  const onTouchStart = (e: React.TouchEvent<HTMLCanvasElement>)  => { e.preventDefault(); if (e.touches[0]) pointerDown(e.touches[0].clientX); };
-  const onTouchMove  = (e: React.TouchEvent<HTMLCanvasElement>)  => { e.preventDefault(); if (e.touches[0]) pointerMove(e.touches[0].clientX); };
+  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => { e.preventDefault(); pointerDown(e.clientX); };
+  const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => pointerMove(e.clientX);
+
+  const onTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+      // Begin pinch — cancel any active trim drag
+      trimDrag.current = null;
+      pinchRef.current = { dist: touchDist(e), centerClientX: touchCenterX(e) };
+    } else if (e.touches.length === 1) {
+      pinchRef.current = null;
+      pointerDown(e.touches[0].clientX);
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (e.touches.length === 2 && pinchRef.current) {
+      const newDist    = touchDist(e);
+      const centerX    = touchCenterX(e);
+      applyPinchZoom(pinchRef.current.dist, newDist, centerX);
+      pinchRef.current = { dist: newDist, centerClientX: centerX };
+    } else if (e.touches.length === 1 && !pinchRef.current) {
+      pointerMove(e.touches[0].clientX);
+    }
+  };
+
+  const onTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length < 2) pinchRef.current = null;
+    if (e.touches.length === 0) pointerUp();
+  };
 
   // Scrollbar thumb geometry
   const thumbLeft  = duration > 0 ? (viewStart / duration) * 100 : 0;
@@ -300,7 +366,7 @@ export function WaveformCanvas({
         onMouseLeave={pointerUp}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
-        onTouchEnd={pointerUp}
+        onTouchEnd={onTouchEnd}
         onWheel={onWheel}
       />
 

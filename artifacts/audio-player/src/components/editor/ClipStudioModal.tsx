@@ -433,15 +433,18 @@ export function ClipStudioModal({ track, onClose }: ClipStudioModalProps) {
     setIsBaking(true);
 
     try {
-      const rate       = previewRateRef.current;
-      const detune     = previewDetuneRef.current;
-      const outLength  = Math.ceil(wb.length / rate);
-      const offCtx     = new OfflineAudioContext(wb.numberOfChannels, outLength, wb.sampleRate);
+      const rate    = previewRateRef.current;
+      const detune  = previewDetuneRef.current;
+      // Effective rate accounts for both playbackRate AND detune (cents shift)
+      // detune is in cents: 1200 cents = 1 octave = 2× speed
+      const effectiveRate = rate * Math.pow(2, detune / 1200);
+      const outLength = Math.max(1, Math.ceil(wb.length / effectiveRate));
+      const offCtx    = new OfflineAudioContext(wb.numberOfChannels, outLength, wb.sampleRate);
 
-      const src           = offCtx.createBufferSource();
-      src.buffer          = wb;
+      const src              = offCtx.createBufferSource();
+      src.buffer             = wb;
       src.playbackRate.value = rate;
-      src.detune.value    = detune;
+      src.detune.value       = detune;
       src.connect(offCtx.destination);
       src.start(0);
 
@@ -453,15 +456,17 @@ export function ClipStudioModal({ track, onClose }: ClipStudioModalProps) {
       setPreviewDetune(0);
 
       const dur = rendered.duration;
-      setTrimStart(ts => Math.min(ts / rate, dur));
-      setTrimEnd(te => Math.min(te / rate, dur));
+      // Remap trim/view positions using the effective rate so handles stay accurate
+      setTrimStart(ts => Math.min(ts / effectiveRate, dur));
+      setTrimEnd(te => Math.min(te / effectiveRate, dur));
 
-      const vs = Math.min(viewStartRef.current / rate, dur);
-      const ve = Math.min(viewEndRef.current / rate, dur);
+      const vs = Math.min(viewStartRef.current / effectiveRate, dur);
+      const ve = Math.min(viewEndRef.current   / effectiveRate, dur);
       setViewRange(vs, Math.max(ve, vs + 0.001));
       refreshPeaks(rendered, vs, ve);
       setHasChanges(true);
-      showStatus(`Baked: ${rate.toFixed(2)}× speed, ${detune >= 0 ? '+' : ''}${detune} cents`);
+      showStatus(`Baked: ${rate.toFixed(2)}× speed, ${detune >= 0 ? '+' : ''}${detune} ¢` +
+        (effectiveRate !== rate ? ` (effective ${effectiveRate.toFixed(2)}×)` : ''));
     } catch (e: any) {
       showStatus(e?.message ?? 'Bake failed', false);
     } finally {
