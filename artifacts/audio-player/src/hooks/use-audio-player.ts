@@ -231,7 +231,8 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   
   togglePlay: () => set((state) => {
     if (!state.currentTrack && state.queue.length > 0) {
-      return { currentTrack: state.queue[0].track, queueIndex: 0, isPlaying: true };
+      const firstTrack = state.queue[0].track;
+      return { currentTrack: firstTrack, queueIndex: 0, isPlaying: true, ...loadLyricsFromStorage(firstTrack.id) };
     }
     return { isPlaying: !state.isPlaying };
   }),
