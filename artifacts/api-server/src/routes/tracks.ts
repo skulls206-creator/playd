@@ -152,8 +152,8 @@ router.patch("/tracks/:id/replaygain", requireAuth, async (req, res): Promise<vo
     return;
   }
   const { gain } = req.body as { gain?: unknown };
-  if (typeof gain !== 'number') {
-    res.status(400).json({ error: "gain must be a number" });
+  if (typeof gain !== 'number' || !isFinite(gain)) {
+    res.status(400).json({ error: "gain must be a finite number" });
     return;
   }
   const [track] = await db

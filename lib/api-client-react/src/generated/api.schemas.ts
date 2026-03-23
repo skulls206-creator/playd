@@ -209,7 +209,3 @@ export type ListTracksParams = {
   sortBy?: string;
   sortDir?: string;
 };
-
-export interface SetTrackReplaygainBody {
-  gain: number;
-}
