@@ -185,7 +185,15 @@ export function AudioEngine() {
       if (state.sleepTimerMode === 'track') return;
 
       let nextIdx = state.queueIndex + 1;
-      if (state.isShuffle) nextIdx = Math.floor(Math.random() * state.queue.length);
+      if (state.isShuffle) {
+        // Avoid re-picking the track currently playing
+        const cur = state.queueIndex;
+        if (state.queue.length > 1) {
+          do { nextIdx = Math.floor(Math.random() * state.queue.length); } while (nextIdx === cur);
+        } else {
+          nextIdx = 0;
+        }
+      }
       if (nextIdx >= state.queue.length) {
         if (state.repeatMode !== 'all') return;
         nextIdx = 0;

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, or, ilike, gte, lte, gt, lt } from "drizzle-orm";
+import { eq, ne, and, or, ilike, gte, lte, gt, lt } from "drizzle-orm";
 import { db, playlistsTable, playlistTracksTable, tracksTable } from "@workspace/db";
 import {
   CreatePlaylistBody,
@@ -53,7 +53,7 @@ function parseSmartQuery(query: string, table: typeof tracksTable, userId: numbe
       if (col) conditions.push(eq(col, eqMatch[2] as never));
     } else if (neqMatch) {
       const col = fieldMap[neqMatch[1].toLowerCase()];
-      if (col) conditions.push(eq(col, neqMatch[2] as never));
+      if (col) conditions.push(ne(col, neqMatch[2] as never));
     } else if (gteMatch) {
       const col = fieldMap[gteMatch[1].toLowerCase()];
       if (col) conditions.push(gte(col as typeof table.year, Number(gteMatch[2]) as never));
@@ -193,6 +193,16 @@ router.post("/playlists/:id/tracks", requireAuth, async (req, res): Promise<void
     .select()
     .from(playlistTracksTable)
     .where(eq(playlistTracksTable.playlistId, params.data.id));
+
+  // Verify the track belongs to the authenticated user
+  const [track] = await db
+    .select({ id: tracksTable.id })
+    .from(tracksTable)
+    .where(and(eq(tracksTable.id, parsed.data.trackId), eq(tracksTable.userId, req.userId!)));
+  if (!track) {
+    res.status(404).json({ error: "Track not found" });
+    return;
+  }
 
   const position = parsed.data.position ?? existingRows.length;
   const [row] = await db

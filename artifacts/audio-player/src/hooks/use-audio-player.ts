@@ -258,7 +258,12 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     }
     
     if (state.isShuffle) {
-      nextIndex = Math.floor(Math.random() * state.queue.length);
+      const cur = state.queueIndex;
+      if (state.queue.length > 1) {
+        do { nextIndex = Math.floor(Math.random() * state.queue.length); } while (nextIndex === cur);
+      } else {
+        nextIndex = 0;
+      }
     }
     
     const nextTrackN = state.queue[nextIndex].track;

@@ -17,7 +17,7 @@ async function getFullQueue(userId: number) {
   const rows = await db
     .select({ queued: queuedTracksTable, track: tracksTable })
     .from(queuedTracksTable)
-    .innerJoin(tracksTable, eq(tracksTable.id, queuedTracksTable.trackId))
+    .innerJoin(tracksTable, and(eq(tracksTable.id, queuedTracksTable.trackId), eq(tracksTable.userId, userId)))
     .where(eq(queuedTracksTable.userId, userId))
     .orderBy(asc(queuedTracksTable.position));
 
