@@ -35,7 +35,7 @@ function SleepTimerButton() {
       setBadge(`${m}m`);
     };
     update();
-    const id = setInterval(update, 30_000);
+    const id = setInterval(update, 60_000);
     return () => clearInterval(id);
   }, [sleepTimerExpiry, sleepTimerMode]);
 
@@ -77,12 +77,9 @@ function SleepTimerButton() {
           )}
           title="Sleep Timer"
         >
-          <Moon className="w-4 h-4" />
-          {badge && (
-            <span className="absolute -top-1 -right-1 text-[9px] font-bold leading-none bg-primary text-primary-foreground rounded-full px-1 py-0.5 tabular-nums">
-              {badge}
-            </span>
-          )}
+          {badge
+            ? <span className="text-[10px] font-bold tabular-nums text-primary leading-none">{badge}</span>
+            : <Moon className="w-4 h-4" />}
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="end" className="w-56 p-3 space-y-3">
