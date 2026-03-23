@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useNowPlayingNotification } from '@/hooks/use-now-playing-notification';
+import { useToast } from '@/hooks/use-toast';
 import type { Track } from '@workspace/api-client-react';
 
 const EQ_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
@@ -34,6 +35,7 @@ export function AudioEngine() {
   } = useAudioPlayer();
 
   const { getFileFromPath } = useFileSystem();
+  const { toast } = useToast();
   useNowPlayingNotification(currentTrack ?? null);
 
   // Stable refs for values used inside event-listener closures
@@ -403,6 +405,36 @@ export function AudioEngine() {
       act.audio.currentTime = progress;
     }
   }, [progress]);
+
+  // ── Stalled-playback detection ────────────────────────────────────────────
+  // If a local track is "playing" but progress is still at 0 after 3 seconds,
+  // the file handle is likely gone (user needs to re-add the folder).
+  const lastWarnedTrackRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isPlaying || !currentTrack || currentTrack.source !== 'local') return;
+    // Only warn once per track per session
+    if (lastWarnedTrackRef.current === currentTrack.id) return;
+
+    const timerId = setTimeout(() => {
+      const state = useAudioPlayer.getState();
+      if (
+        state.isPlaying &&
+        state.progress < 0.5 &&
+        state.currentTrack?.id === currentTrack.id
+      ) {
+        lastWarnedTrackRef.current = currentTrack.id;
+        toast({
+          title: 'Track not playing?',
+          description:
+            'The audio file may not be accessible. Open Settings → Library and re-add your music folder to restore playback.',
+          duration: 9000,
+        });
+      }
+    }, 3000);
+
+    return () => clearTimeout(timerId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, currentTrack?.id]);
 
   return null;
 }
