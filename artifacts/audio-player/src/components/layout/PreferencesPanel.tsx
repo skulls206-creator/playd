@@ -16,10 +16,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Slider } from '@/components/ui/slider';
 import {
   FolderOpen, RefreshCw, Trash2, Plus, CheckCircle2,
   XCircle, Loader2, Info, HardDrive,
   Database, Monitor, Save, FileMusic, Bell, BellOff, Smartphone,
+  Activity, Blend,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { get, del, set } from 'idb-keyval';
@@ -30,7 +32,10 @@ import {
 } from '@/hooks/use-now-playing-notification';
 
 export function PreferencesPanel() {
-  const { isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset } = useAudioPlayer();
+  const {
+    isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset,
+    crossfadeSec, setCrossfadeSec, showSpectrum, setShowSpectrum,
+  } = useAudioPlayer();
   const { loadSampleTrack, scanFileList, isScanning, scanStatus } = useFileSystem();
 
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -287,6 +292,67 @@ export function PreferencesPanel() {
 
           {/* ── PLAYBACK TAB ── */}
           <TabsContent value="playback" className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 mt-4">
+
+            {/* Crossfade */}
+            <section>
+              <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                <Blend className="w-3.5 h-3.5 text-primary" />
+                Crossfade
+              </h3>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                Blend the end of one track into the beginning of the next.
+                Set to 0 to disable.
+              </p>
+              <div className="flex items-center gap-4">
+                <Slider
+                  min={0}
+                  max={12}
+                  step={1}
+                  value={[crossfadeSec]}
+                  onValueChange={([v]) => setCrossfadeSec(v)}
+                  className="flex-1"
+                />
+                <span className="text-xs text-muted-foreground w-12 text-right shrink-0">
+                  {crossfadeSec === 0 ? 'Off' : `${crossfadeSec}s`}
+                </span>
+              </div>
+            </section>
+
+            {/* Spectrum Visualizer */}
+            <section>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Activity className="w-3.5 h-3.5 text-primary" />
+                    Spectrum Visualizer
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Show a real-time frequency bar graph above the transport.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowSpectrum(!showSpectrum)}
+                  className={clsx(
+                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
+                    'transition-colors duration-200 focus:outline-none',
+                    showSpectrum ? 'bg-primary' : 'bg-border',
+                  )}
+                  role="switch"
+                  aria-checked={showSpectrum}
+                >
+                  <span
+                    className={clsx(
+                      'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg',
+                      'transform transition duration-200',
+                      showSpectrum ? 'translate-x-4' : 'translate-x-0',
+                    )}
+                  />
+                </button>
+              </div>
+            </section>
+
+            <Separator className="border-border/20" />
+
             <section>
               <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
                 EQ Presets

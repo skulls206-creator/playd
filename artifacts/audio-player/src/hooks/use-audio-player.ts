@@ -42,6 +42,12 @@ interface PlayerState {
   isShuffle: boolean;
   activeEqPreset: EqPreset | null;
   eqBands: number[]; // Array of 10 values -12 to +12
+
+  // Crossfade & Visualizer
+  crossfadeSec: number;       // 0 = disabled, 1–12 seconds
+  setCrossfadeSec: (sec: number) => void;
+  showSpectrum: boolean;
+  setShowSpectrum: (show: boolean) => void;
   
   // Actions
   play: (track?: Track, queue?: QueueItem[], startIndex?: number) => void;
@@ -102,6 +108,11 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   isShuffle: loadPref('playd_shuffle', false),
   activeEqPreset: null,
   eqBands: DEFAULT_EQ,
+
+  crossfadeSec: loadPref('playd_crossfade', 0),
+  setCrossfadeSec: (sec) => { savePref('playd_crossfade', sec); set({ crossfadeSec: sec }); },
+  showSpectrum: loadPref('playd_spectrum', true),
+  setShowSpectrum: (show) => { savePref('playd_spectrum', show); set({ showSpectrum: show }); },
 
   play: (track, newQueue, startIndex) => set((state) => {
     const nextQueue = newQueue || state.queue;

@@ -4,6 +4,7 @@ import { QueuePanel } from '@/components/queue/QueuePanel';
 import { TransportBar } from '@/components/layout/TransportBar';
 import { AudioEngine } from '@/components/player/AudioEngine';
 import { EqPanel } from '@/components/player/EqPanel';
+import { SpectrumBar } from '@/components/player/SpectrumBar';
 import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
 import { ClipStudioModal } from '@/components/editor/ClipStudioModal';
 import { useEffect, useState, useCallback } from 'react';
@@ -67,6 +68,9 @@ export default function MainPlayer() {
       </div>
 
       <PreferencesPanel />
+
+      {/* Spectrum visualizer — sits just above the transport bar */}
+      <SpectrumBar />
 
       {/* Footer Transport */}
       <TransportBar />
