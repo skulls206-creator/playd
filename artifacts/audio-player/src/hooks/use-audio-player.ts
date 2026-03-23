@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { get } from 'idb-keyval';
 import type { Track, QueueItem, EqPreset } from '@workspace/api-client-react';
+import type { LyricLine } from '@/lib/lrc-parser';
 
 const ART_STORE_KEY = 'track-art';
 
@@ -55,6 +56,14 @@ interface PlayerState {
   setSleepTimer: (ms: number) => void;
   setSleepTimerEndOfTrack: () => void;
   clearSleepTimer: () => void;
+
+  // Lyrics
+  isLyricsOpen: boolean;
+  lyrics: LyricLine[] | null;       // lines for the currently loaded track
+  lyricsTrackId: number | null;     // Track.id of the loaded lyrics
+  toggleLyrics: () => void;
+  setLyrics: (trackId: number, lines: LyricLine[]) => void;
+  clearLyrics: (trackId: number) => void;
   
   // Actions
   play: (track?: Track, queue?: QueueItem[], startIndex?: number) => void;
@@ -150,6 +159,24 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     savePref('playd_sleep_timer_expiry', null);
     savePref('playd_sleep_timer_mode', null);
     set({ sleepTimerExpiry: null, sleepTimerMode: null });
+  },
+
+  // Lyrics — initial state; hydrated per-track by LyricsPanel
+  isLyricsOpen: false,
+  lyrics: null,
+  lyricsTrackId: null,
+  setLyrics: (trackId, lines) => {
+    if (lines.length > 0) {
+      try { localStorage.setItem(`playd_lyrics_${trackId}`, JSON.stringify(lines)); } catch {}
+      set({ lyrics: lines, lyricsTrackId: trackId });
+    } else {
+      try { localStorage.removeItem(`playd_lyrics_${trackId}`); } catch {}
+      set({ lyrics: null, lyricsTrackId: null });
+    }
+  },
+  clearLyrics: (trackId) => {
+    try { localStorage.removeItem(`playd_lyrics_${trackId}`); } catch {}
+    set((state) => state.lyricsTrackId === trackId ? { lyrics: null, lyricsTrackId: null } : {});
   },
 
   play: (track, newQueue, startIndex) => set((state) => {
@@ -268,6 +295,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   toggleEq: () => set((state) => ({ isEqOpen: !state.isEqOpen })),
   toggleQueue: () => set((state) => ({ isQueueOpen: !state.isQueueOpen })),
   togglePrefs: () => set((state) => ({ isPrefsOpen: !state.isPrefsOpen })),
+  toggleLyrics: () => set((state) => ({ isLyricsOpen: !state.isLyricsOpen })),
   
   setRepeatMode: (mode) => { savePref('playd_repeat', mode); set({ repeatMode: mode }); },
   toggleShuffle: () => set((state) => {

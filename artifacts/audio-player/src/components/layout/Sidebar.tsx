@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
   Music2, ListMusic, Settings, Search,
-  Library, Disc3, User, ChevronDown, ChevronRight, X, LogOut, Download
+  Library, Disc3, User, ChevronDown, ChevronRight, X, LogOut, Download, FileText,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -23,7 +23,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   const { data: tracks = [] } = useListTracks();
   const { data: playlists = [] } = useListPlaylists();
   const { isScanning } = useFileSystem();
-  const { libraryFilter, setLibraryFilter, togglePrefs } = useAudioPlayer();
+  const { libraryFilter, setLibraryFilter, togglePrefs, isLyricsOpen, toggleLyrics } = useAudioPlayer();
   const { user, logout } = useAuth();
   const { canInstall, install } = usePwaInstall();
 
@@ -133,6 +133,22 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
               <Library className="w-3.5 h-3.5" />
               All Songs
               <span className="ml-auto text-[10px] opacity-50">{tracks.length}</span>
+            </button>
+          </div>
+
+          {/* Lyrics */}
+          <div className="px-2 mb-1">
+            <button
+              onClick={() => { toggleLyrics(); onClose?.(); }}
+              className={clsx(
+                'w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-xs font-medium transition-colors',
+                isLyricsOpen
+                  ? 'bg-primary/20 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+              )}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Lyrics
             </button>
           </div>
 

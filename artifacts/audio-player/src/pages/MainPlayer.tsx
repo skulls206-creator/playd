@@ -1,6 +1,7 @@
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TrackListPanel } from '@/components/library/TrackListPanel';
 import { QueuePanel } from '@/components/queue/QueuePanel';
+import { LyricsPanel } from '@/components/lyrics/LyricsPanel';
 import { TransportBar } from '@/components/layout/TransportBar';
 import { AudioEngine } from '@/components/player/AudioEngine';
 import { EqPanel } from '@/components/player/EqPanel';
@@ -15,7 +16,7 @@ import type { Track } from '@workspace/api-client-react';
 
 export default function MainPlayer() {
   const { getStoredHandles } = useFileSystem();
-  const { isQueueOpen, pause } = useAudioPlayer();
+  const { isQueueOpen, isLyricsOpen, pause } = useAudioPlayer();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [clipStudioTrack, setClipStudioTrack] = useState<Track | null>(null);
   useKeyboardShortcuts();
@@ -62,6 +63,7 @@ export default function MainPlayer() {
           onEditInClipStudio={handleOpenClipStudio}
         />
         {isQueueOpen && <QueuePanel />}
+        {isLyricsOpen && <LyricsPanel />}
 
         {/* Floating Overlays */}
         <EqPanel />
