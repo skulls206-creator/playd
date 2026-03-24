@@ -12,6 +12,23 @@
 import { useState, useEffect } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 
+// ─── Document Picture-in-Picture type augmentation ────────────────────────────
+// The spec is not yet in lib.dom.d.ts, so we declare the minimal shape here.
+interface DocumentPictureInPictureOptions {
+  width?: number;
+  height?: number;
+  disallowReturnToOpener?: boolean;
+}
+interface DocumentPictureInPicture {
+  requestWindow(options?: DocumentPictureInPictureOptions): Promise<Window>;
+  readonly window: Window | null;
+}
+declare global {
+  interface Window {
+    documentPictureInPicture?: DocumentPictureInPicture;
+  }
+}
+
 // ─── Module-level singleton ───────────────────────────────────────────────────
 
 let _pipWindow: Window | null = null;
@@ -86,7 +103,7 @@ export async function openMiniPlayer(): Promise<void> {
   // Already have a PiP window open — nothing more to do
   if (_pipWindow) return;
 
-  const dpp = (window as any).documentPictureInPicture;
+  const dpp = window.documentPictureInPicture;
   if (!dpp) return; // overlay mode — store toggle above is enough
 
   const compact = store.isCompactMiniPlayer;
