@@ -8,6 +8,7 @@ import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/not-found";
 import { InstallPrompt } from "@/components/layout/InstallPrompt";
 import { KhurkOsBanner } from "@/components/layout/KhurkOsBanner";
+import { DiscordBanner } from "@/components/layout/DiscordBanner";
 import { useAuth } from "@/hooks/use-auth";
 import { requestNotificationPermission, setNotificationsEnabled } from "@/hooks/use-now-playing-notification";
 
@@ -85,6 +86,7 @@ function App() {
           </WouterRouter>
           <InstallPrompt />
           <KhurkOsBanner />
+          <DiscordBanner />
         </AuthGate>
         <Toaster />
       </TooltipProvider>

@@ -23,8 +23,10 @@ import {
   FolderOpen, RefreshCw, Trash2, Plus, CheckCircle2,
   XCircle, Loader2, Info, HardDrive,
   Database, Monitor, Save, FileMusic, Bell, BellOff, Smartphone,
-  Activity, Blend, Volume2,
+  Activity, Blend, Volume2, Palette, Check,
 } from 'lucide-react';
+import { THEMES, THEME_KEYS } from '@/lib/themes';
+import { useTheme } from '@/hooks/use-theme';
 import { clsx } from 'clsx';
 import { get, del, set } from 'idb-keyval';
 import {
@@ -50,6 +52,8 @@ export function PreferencesPanel() {
 
   // ReplayGain scan
   const { data: allTracks = [] } = useListTracks();
+  const { theme: activeTheme, setTheme } = useTheme();
+
   const [rgScanning, setRgScanning] = useState(false);
   const [rgProgress, setRgProgress] = useState<{ done: number; total: number } | null>(null);
   const [rgStatus, setRgStatus] = useState<string | null>(null);
@@ -229,9 +233,10 @@ export function PreferencesPanel() {
 
         <Tabs defaultValue="sources" className="flex flex-col flex-1 overflow-hidden">
           <TabsList className="shrink-0 mx-6 mt-4 bg-black/30 border border-border/30">
-            <TabsTrigger value="sources" className="flex-1 text-xs">Music Sources</TabsTrigger>
-            <TabsTrigger value="playback" className="flex-1 text-xs">Playback</TabsTrigger>
-            <TabsTrigger value="about" className="flex-1 text-xs">About</TabsTrigger>
+            <TabsTrigger value="sources"    className="flex-1 text-xs">Sources</TabsTrigger>
+            <TabsTrigger value="playback"   className="flex-1 text-xs">Playback</TabsTrigger>
+            <TabsTrigger value="appearance" className="flex-1 text-xs">Appearance</TabsTrigger>
+            <TabsTrigger value="about"      className="flex-1 text-xs">About</TabsTrigger>
           </TabsList>
 
           {/* ── MUSIC SOURCES TAB ── */}
@@ -641,6 +646,63 @@ export function PreferencesPanel() {
                   </div>
                 </div>
               )}
+            </section>
+          </TabsContent>
+
+          {/* ── APPEARANCE TAB ── */}
+          <TabsContent value="appearance" className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 mt-4">
+            <section>
+              <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                <Palette className="w-3.5 h-3.5 text-primary" />
+                Theme
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                Choose a colour scheme. Your selection is saved and applied immediately.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {THEME_KEYS.map((key) => {
+                  const t = THEMES[key];
+                  const isActive = activeTheme === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setTheme(key)}
+                      className={clsx(
+                        'relative rounded-lg overflow-hidden border-2 transition-all text-left group',
+                        isActive
+                          ? 'border-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.4)]'
+                          : 'border-border/40 hover:border-border',
+                      )}
+                    >
+                      {/* Colour preview block */}
+                      <div
+                        className="h-14 w-full flex items-end p-2"
+                        style={{ background: t.preview.bg }}
+                      >
+                        {/* Accent dot */}
+                        <span
+                          className="w-4 h-4 rounded-full border-2 border-black/20 ml-auto"
+                          style={{ background: t.preview.accent }}
+                        />
+                      </div>
+
+                      {/* Label row */}
+                      <div
+                        className="flex items-center justify-between px-2.5 py-1.5"
+                        style={{ background: t.preview.bg, borderTop: `1px solid rgba(255,255,255,0.06)` }}
+                      >
+                        <span className="text-[11px] font-medium" style={{ color: '#ccc' }}>
+                          {t.label}
+                        </span>
+                        {isActive && (
+                          <Check className="w-3 h-3 text-primary shrink-0" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </section>
           </TabsContent>
 
