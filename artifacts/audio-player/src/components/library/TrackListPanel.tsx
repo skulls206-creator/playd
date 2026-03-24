@@ -4,9 +4,10 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput } from 'lucide-react';
+import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput, RefreshCw } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
+import { useLibraryAutoRestore } from '@/hooks/use-library-auto-restore';
 import type { Track } from '@workspace/api-client-react';
 
 type SortCol = 'trackNumber' | 'title' | 'artist' | 'album' | 'duration' | 'year';
@@ -148,7 +149,8 @@ interface TrackListPanelProps {
 export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter, searchQuery, setSearchQuery } = useAudioPlayer();
-  const { isScanning, scanProgress, scanStatus, scanFileList, importDroppedItems } = useFileSystem();
+  const { isScanning, scanProgress, scanStatus, scanFileList, importDroppedItems, rescanAll } = useFileSystem();
+  const { needsRestore, restore, dismiss } = useLibraryAutoRestore(rescanAll);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const mobileFilesInputRef = useRef<HTMLInputElement>(null);
 
@@ -396,7 +398,7 @@ export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPane
           </button>
         )}
 
-        {/* Refresh Folders */}
+        {/* Add Folder */}
         <button
           onClick={handleRescan}
           disabled={isScanning}
@@ -410,6 +412,25 @@ export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPane
         >
           <FolderOpen className="w-3 h-3" />
           <span>{isScanning ? 'Importing…' : 'Add Folder'}</span>
+        </button>
+
+        {/* Soft Refresh — re-scans saved folders without a page reload */}
+        <button
+          onClick={async () => {
+            queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+            await rescanAll();
+          }}
+          disabled={isScanning}
+          title="Refresh library — re-scan saved folders without reloading the page"
+          className={clsx(
+            'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
+            isScanning
+              ? 'text-primary/50 cursor-not-allowed'
+              : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+          )}
+        >
+          <RefreshCw className={clsx('w-3 h-3', isScanning && 'animate-spin')} />
+          <span className="hidden sm:inline">Refresh</span>
         </button>
 
         {/* Active filter label + scan status (always visible side-by-side) */}
@@ -472,6 +493,29 @@ export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPane
           <span className={clearConfirm ? 'inline' : 'hidden sm:inline'}>{clearConfirm ? 'Confirm?' : 'Clear'}</span>
         </button>
       </div>
+
+      {/* ── Restore-access banner ──────────────────────────────────────────── */}
+      {needsRestore && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950/60 border-b border-amber-700/50 shrink-0">
+          <RefreshCw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="text-[11px] text-amber-300 flex-1 leading-tight">
+            Your music library needs access to play — click to restore.
+          </span>
+          <button
+            onClick={restore}
+            className="px-2 py-0.5 rounded text-[10px] bg-amber-700/60 hover:bg-amber-600/70 text-amber-100 transition-colors shrink-0"
+          >
+            Restore Access
+          </button>
+          <button
+            onClick={dismiss}
+            title="Dismiss"
+            className="text-amber-600 hover:text-amber-400 transition-colors shrink-0"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* Column headers + track rows */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
