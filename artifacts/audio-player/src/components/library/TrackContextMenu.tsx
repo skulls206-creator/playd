@@ -1,7 +1,10 @@
 import { type ReactNode } from 'react';
 import type { Track } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
+import { useFileSystem } from '@/hooks/use-file-system';
 import { openMiniPlayer } from '@/hooks/use-mini-player';
+import { useQueryClient } from '@tanstack/react-query';
+import { getListTracksQueryKey } from '@workspace/api-client-react';
 import { clsx } from 'clsx';
 import {
   ContextMenu,
@@ -24,6 +27,7 @@ import {
   ListMusic,
   Scissors,
   PictureInPicture2,
+  RefreshCw,
 } from 'lucide-react';
 
 interface TrackContextMenuProps {
@@ -56,6 +60,13 @@ export function TrackContextMenu({
     toggleQueue,
     isMiniPlayer,
   } = useAudioPlayer();
+  const { rescanAll, isScanning } = useFileSystem();
+  const queryClient = useQueryClient();
+
+  const handleRefreshLibrary = async () => {
+    queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    await rescanAll();
+  };
 
   const isMulti = selectedTracks.length > 1;
   const count = selectedTracks.length;
@@ -274,6 +285,17 @@ export function TrackContextMenu({
             </ContextMenuSub>
           </>
         )}
+
+        {/* Refresh Library — always visible at the bottom */}
+        <ContextMenuSeparator className="bg-zinc-700/50" />
+        <ContextMenuItem
+          onClick={handleRefreshLibrary}
+          disabled={isScanning}
+          className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100 text-zinc-400"
+        >
+          <RefreshCw className={clsx('w-3.5 h-3.5 text-zinc-500', isScanning && 'animate-spin')} />
+          {isScanning ? 'Refreshing…' : 'Refresh Library'}
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
