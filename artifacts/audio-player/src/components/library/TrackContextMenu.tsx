@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import type { Track } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
+import { openMiniPlayer } from '@/hooks/use-mini-player';
 import { clsx } from 'clsx';
 import {
   ContextMenu,
@@ -54,7 +55,6 @@ export function TrackContextMenu({
     isQueueOpen,
     toggleQueue,
     isMiniPlayer,
-    toggleMiniPlayer,
   } = useAudioPlayer();
 
   const isMulti = selectedTracks.length > 1;
@@ -83,7 +83,9 @@ export function TrackContextMenu({
 
   const handlePopOutPlayer = () => {
     onPlayNow();
-    if (!isMiniPlayer) toggleMiniPlayer();
+    // openMiniPlayer() is called directly here so the user-gesture activation
+    // propagates into documentPictureInPicture.requestWindow() without breaking.
+    openMiniPlayer();
   };
 
   const handleCopyTitle = () => {

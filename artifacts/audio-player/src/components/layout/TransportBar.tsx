@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useTrackArt } from '@/hooks/use-track-art';
+import { openMiniPlayer, closeMiniPlayer } from '@/hooks/use-mini-player';
 import {
   Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Volume2, VolumeX,
@@ -147,7 +148,7 @@ export function TransportBar() {
     currentTrack, isPlaying, progress, duration, volume, isMuted,
     repeatMode, isShuffle, isEqOpen, isQueueOpen, isPrefsOpen, isMiniPlayer,
     togglePlay, next, prev, seek, setVolume, toggleMute,
-    setRepeatMode, toggleShuffle, toggleEq, toggleQueue, togglePrefs, toggleMiniPlayer,
+    setRepeatMode, toggleShuffle, toggleEq, toggleQueue, togglePrefs,
   } = useAudioPlayer();
 
   const artUrl = useTrackArt(currentTrack ?? null);
@@ -360,7 +361,7 @@ export function TransportBar() {
             <Button
               variant="ghost" size="icon"
               className={clsx('h-8 w-8', isMiniPlayer && 'text-primary bg-primary/10')}
-              onClick={toggleMiniPlayer}
+              onClick={() => isMiniPlayer ? closeMiniPlayer() : openMiniPlayer()}
               title="Mini Player"
             >
               <PictureInPicture2 className="w-4 h-4" />
@@ -457,7 +458,7 @@ export function TransportBar() {
           <Button
             variant="ghost" size="icon"
             className={clsx('h-8 w-8', isMiniPlayer && 'bg-primary/20 text-primary')}
-            onClick={toggleMiniPlayer}
+            onClick={() => isMiniPlayer ? closeMiniPlayer() : openMiniPlayer()}
             title="Mini Player"
           >
             <PictureInPicture2 className="w-4 h-4" />
