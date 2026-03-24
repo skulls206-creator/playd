@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import type { Track } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
+import { clsx } from 'clsx';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,6 +22,7 @@ import {
   FolderOpen,
   ListMusic,
   Scissors,
+  PictureInPicture2,
 } from 'lucide-react';
 
 interface TrackContextMenuProps {
@@ -51,6 +53,8 @@ export function TrackContextMenu({
     queue,
     isQueueOpen,
     toggleQueue,
+    isMiniPlayer,
+    toggleMiniPlayer,
   } = useAudioPlayer();
 
   const isMulti = selectedTracks.length > 1;
@@ -75,6 +79,11 @@ export function TrackContextMenu({
   const handleGoToAlbum = () => {
     if (!track.album) return;
     setLibraryFilter({ type: 'album', value: track.album, label: track.album });
+  };
+
+  const handlePopOutPlayer = () => {
+    onPlayNow();
+    if (!isMiniPlayer) toggleMiniPlayer();
   };
 
   const handleCopyTitle = () => {
@@ -159,6 +168,16 @@ export function TrackContextMenu({
             >
               <Play className="w-3.5 h-3.5 text-[#FF3C00]" />
               Play Now
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={handlePopOutPlayer}
+              className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
+            >
+              <PictureInPicture2 className={clsx(
+                'w-3.5 h-3.5',
+                isMiniPlayer ? 'text-primary' : 'text-zinc-400',
+              )} />
+              {isMiniPlayer ? 'Mini Player Open' : 'Pop Out Player'}
             </ContextMenuItem>
 
             <ContextMenuSeparator className="bg-zinc-700/50" />

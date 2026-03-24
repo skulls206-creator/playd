@@ -8,6 +8,7 @@ import {
   Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Volume2, VolumeX,
   SlidersHorizontal, ListMusic, Settings, ChevronDown, Moon,
+  PictureInPicture2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -144,9 +145,9 @@ function SleepTimerButton() {
 export function TransportBar() {
   const {
     currentTrack, isPlaying, progress, duration, volume, isMuted,
-    repeatMode, isShuffle, isEqOpen, isQueueOpen, isPrefsOpen,
+    repeatMode, isShuffle, isEqOpen, isQueueOpen, isPrefsOpen, isMiniPlayer,
     togglePlay, next, prev, seek, setVolume, toggleMute,
-    setRepeatMode, toggleShuffle, toggleEq, toggleQueue, togglePrefs
+    setRepeatMode, toggleShuffle, toggleEq, toggleQueue, togglePrefs, toggleMiniPlayer,
   } = useAudioPlayer();
 
   const artUrl = useTrackArt(currentTrack ?? null);
@@ -358,6 +359,14 @@ export function TransportBar() {
             <SleepTimerButton />
             <Button
               variant="ghost" size="icon"
+              className={clsx('h-8 w-8', isMiniPlayer && 'text-primary bg-primary/10')}
+              onClick={toggleMiniPlayer}
+              title="Mini Player"
+            >
+              <PictureInPicture2 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost" size="icon"
               className={clsx('h-8 w-8', isPrefsOpen && 'text-primary')}
               onClick={togglePrefs}
             >
@@ -445,6 +454,14 @@ export function TransportBar() {
         {/* Extras (Right) */}
         <div className="flex items-center justify-end gap-2 w-1/4 min-w-[160px]">
           <SleepTimerButton />
+          <Button
+            variant="ghost" size="icon"
+            className={clsx('h-8 w-8', isMiniPlayer && 'bg-primary/20 text-primary')}
+            onClick={toggleMiniPlayer}
+            title="Mini Player"
+          >
+            <PictureInPicture2 className="w-4 h-4" />
+          </Button>
           <Button
             variant="ghost" size="icon"
             className={clsx('h-8 w-8', isQueueOpen && 'bg-primary/20 text-primary')}

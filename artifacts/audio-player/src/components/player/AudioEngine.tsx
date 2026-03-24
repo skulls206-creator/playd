@@ -46,6 +46,48 @@ export function AudioEngine() {
   crossfadeSecRef.current = crossfadeSec;
   getFileFromPathRef.current = getFileFromPath;
 
+  // ── Screen Wake Lock ─────────────────────────────────────────────────────────
+  // Keeps the screen awake while music is playing so the OS doesn't kill audio.
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  useEffect(() => {
+    if (!('wakeLock' in navigator)) return;
+
+    const acquire = async () => {
+      if (wakeLockRef.current) return;
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        wakeLockRef.current.addEventListener('release', () => {
+          wakeLockRef.current = null;
+        });
+      } catch { /* permission denied or page not visible */ }
+    };
+
+    const release = () => {
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+
+    if (isPlaying) acquire(); else release();
+  }, [isPlaying]);
+
+  // Re-acquire wake lock when the page becomes visible again
+  useEffect(() => {
+    if (!('wakeLock' in navigator)) return;
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && isPlayingRef.current && !wakeLockRef.current) {
+        navigator.wakeLock.request('screen')
+          .then(lock => {
+            wakeLockRef.current = lock;
+            lock.addEventListener('release', () => { wakeLockRef.current = null; });
+          })
+          .catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
   // Deck helpers (always read the latest active ref)
   const getActive = () => (active.current === 'A' ? deckA : deckB).current!;
   const getIdle   = () => (active.current === 'A' ? deckB : deckA).current!;

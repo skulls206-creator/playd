@@ -49,6 +49,7 @@ interface PlayerState {
   
   // Modes & Settings
   isMiniPlayer: boolean;
+  isCompactMiniPlayer: boolean;
   isEqOpen: boolean;
   isQueueOpen: boolean;
   repeatMode: 'off' | 'all' | 'one';
@@ -98,6 +99,7 @@ interface PlayerState {
   addToQueueNext: (track: Track) => void;
   addToQueueEnd: (track: Track) => void;
   toggleMiniPlayer: () => void;
+  toggleCompactMiniPlayer: () => void;
   toggleEq: () => void;
   toggleQueue: () => void;
   togglePrefs: () => void;
@@ -139,6 +141,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   queueIndex: -1,
   
   isMiniPlayer: false,
+  isCompactMiniPlayer: false,
   isEqOpen: false,
   isPrefsOpen: false,
   isQueueOpen: false,
@@ -327,6 +330,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   }),
   
   toggleMiniPlayer: () => set((state) => ({ isMiniPlayer: !state.isMiniPlayer })),
+  toggleCompactMiniPlayer: () => set((state) => ({ isCompactMiniPlayer: !state.isCompactMiniPlayer })),
   toggleEq: () => set((state) => ({ isEqOpen: !state.isEqOpen })),
   toggleQueue: () => set((state) => ({ isQueueOpen: !state.isQueueOpen })),
   togglePrefs: () => set((state) => ({ isPrefsOpen: !state.isPrefsOpen })),

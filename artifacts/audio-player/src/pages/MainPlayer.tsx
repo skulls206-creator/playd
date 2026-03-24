@@ -4,6 +4,7 @@ import { QueuePanel } from '@/components/queue/QueuePanel';
 import { LyricsPanel } from '@/components/lyrics/LyricsPanel';
 import { TransportBar } from '@/components/layout/TransportBar';
 import { AudioEngine } from '@/components/player/AudioEngine';
+import { MiniPlayerRoot } from '@/components/player/MiniPlayerRoot';
 import { EqPanel } from '@/components/player/EqPanel';
 import { SpectrumBar } from '@/components/player/SpectrumBar';
 import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
@@ -76,6 +77,9 @@ export default function MainPlayer() {
 
       {/* Footer Transport */}
       <TransportBar />
+
+      {/* Mini Player — PiP or draggable overlay */}
+      <MiniPlayerRoot />
 
       {/* Clip Studio — full-screen overlay */}
       {clipStudioTrack && (
