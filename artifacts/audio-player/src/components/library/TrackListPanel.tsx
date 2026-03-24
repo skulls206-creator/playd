@@ -7,7 +7,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput, RefreshCw } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
-import { useLibraryAutoRestore } from '@/hooks/use-library-auto-restore';
 import type { Track } from '@workspace/api-client-react';
 
 type SortCol = 'trackNumber' | 'title' | 'artist' | 'album' | 'duration' | 'year';
@@ -144,13 +143,21 @@ function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
 interface TrackListPanelProps {
   onMenuOpen?: () => void;
   onEditInClipStudio?: (track: Track) => void;
+  needsRestore?: boolean;
+  onRestore?: () => void;
+  onDismissRestore?: () => void;
 }
 
-export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPanelProps = {}) {
+export function TrackListPanel({
+  onMenuOpen,
+  onEditInClipStudio,
+  needsRestore = false,
+  onRestore,
+  onDismissRestore,
+}: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter, searchQuery, setSearchQuery } = useAudioPlayer();
   const { isScanning, scanProgress, scanStatus, scanFileList, importDroppedItems, rescanAll } = useFileSystem();
-  const { needsRestore, restore, dismiss } = useLibraryAutoRestore(rescanAll);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const mobileFilesInputRef = useRef<HTMLInputElement>(null);
 
@@ -502,13 +509,13 @@ export function TrackListPanel({ onMenuOpen, onEditInClipStudio }: TrackListPane
             Your music library needs access to play — click to restore.
           </span>
           <button
-            onClick={restore}
+            onClick={onRestore}
             className="px-2 py-0.5 rounded text-[10px] bg-amber-700/60 hover:bg-amber-600/70 text-amber-100 transition-colors shrink-0"
           >
             Restore Access
           </button>
           <button
-            onClick={dismiss}
+            onClick={onDismissRestore}
             title="Dismiss"
             className="text-amber-600 hover:text-amber-400 transition-colors shrink-0"
           >

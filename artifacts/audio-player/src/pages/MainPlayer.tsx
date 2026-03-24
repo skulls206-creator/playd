@@ -13,18 +13,17 @@ import { useEffect, useState, useCallback } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { useLibraryAutoRestore } from '@/hooks/use-library-auto-restore';
 import type { Track } from '@workspace/api-client-react';
 
 export default function MainPlayer() {
-  const { getStoredHandles } = useFileSystem();
+  const { rescanAll } = useFileSystem();
   const { isQueueOpen, isLyricsOpen, pause } = useAudioPlayer();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [clipStudioTrack, setClipStudioTrack] = useState<Track | null>(null);
   useKeyboardShortcuts();
 
-  useEffect(() => {
-    getStoredHandles().then(() => {});
-  }, []);
+  const { needsRestore, restore, dismiss } = useLibraryAutoRestore(rescanAll);
 
   const handleOpenClipStudio = useCallback((track: Track) => {
     pause();
@@ -62,6 +61,9 @@ export default function MainPlayer() {
         <TrackListPanel
           onMenuOpen={() => setMobileSidebarOpen(true)}
           onEditInClipStudio={handleOpenClipStudio}
+          needsRestore={needsRestore}
+          onRestore={restore}
+          onDismissRestore={dismiss}
         />
         {isQueueOpen && <QueuePanel />}
         {isLyricsOpen && <LyricsPanel />}

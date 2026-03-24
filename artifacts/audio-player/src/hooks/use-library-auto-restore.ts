@@ -58,10 +58,14 @@ export function useLibraryAutoRestore(rescanAll: () => Promise<void>) {
           else if (perm === 'prompt') anyPrompt = true;
         }
 
-        if (anyGranted) {
-          await rescanAll();
-        } else if (anyPrompt) {
+        if (anyPrompt) {
+          // One or more handles need a user gesture — show the banner.
+          // Do NOT call rescanAll() here because it internally calls
+          // requestPermission(), which fails without a user gesture.
           setNeedsRestore(true);
+        } else if (anyGranted) {
+          // All handles are already granted — safe to rescan silently.
+          await rescanAll();
         }
       } catch {
         // File System Access API not available or handles corrupted — ignore
