@@ -96,7 +96,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
         <div className="flex items-center justify-between">
           <h1 className="text-base font-bold tracking-tight text-primary flex items-center gap-2">
             <Music2 className="w-5 h-5" />
-            playd.music
+            playd
           </h1>
           {onClose && (
             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={onClose}>

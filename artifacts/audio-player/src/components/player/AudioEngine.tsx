@@ -351,7 +351,7 @@ export function AudioEngine() {
       clearSleepTimer();
 
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('playd.music', { body: 'Sleep timer ended — playback stopped.' });
+        new Notification('playd', { body: 'Sleep timer ended — playback stopped.' });
       }
     }, 10_000);
     return () => clearInterval(id);

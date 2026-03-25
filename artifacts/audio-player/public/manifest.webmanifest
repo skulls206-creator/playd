@@ -1,5 +1,5 @@
 {
-  "name": "playd.music",
+  "name": "playd",
   "short_name": "playd",
   "description": "A foobar2000-style audio player with local files and streaming",
   "start_url": ".",
