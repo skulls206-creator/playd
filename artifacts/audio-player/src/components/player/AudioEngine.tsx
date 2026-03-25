@@ -27,6 +27,7 @@ export function AudioEngine() {
   const masterGainRef = useRef<GainNode | null>(null);
   const rgGainRef = useRef<GainNode | null>(null);
   const filtersRef = useRef<BiquadFilterNode[]>([]);
+  const lockControllerRef = useRef<AbortController | null>(null);
 
   const {
     currentTrack, isPlaying, volume, isMuted, progress, eqBands, crossfadeSec,
@@ -87,6 +88,36 @@ export function AudioEngine() {
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
+
+  // ── Web Locks keep-alive ──────────────────────────────────────────────────
+  // Holding a shared Web Lock signals to the browser that this tab has active
+  // work in progress, preventing it from throttling JS timers in the background.
+  // The lock is acquired when playback starts and released when it stops.
+  useEffect(() => {
+    if (!('locks' in navigator)) return;
+
+    if (isPlaying) {
+      lockControllerRef.current?.abort();
+      const controller = new AbortController();
+      lockControllerRef.current = controller;
+
+      navigator.locks.request(
+        'playd-keep-alive',
+        { mode: 'shared', signal: controller.signal },
+        () => new Promise<void>(resolve => {
+          controller.signal.addEventListener('abort', () => resolve());
+        }),
+      ).catch(() => {});
+    } else {
+      lockControllerRef.current?.abort();
+      lockControllerRef.current = null;
+    }
+
+    return () => {
+      lockControllerRef.current?.abort();
+      lockControllerRef.current = null;
+    };
+  }, [isPlaying]);
 
   // Deck helpers (always read the latest active ref)
   const getActive = () => (active.current === 'A' ? deckA : deckB).current!;
@@ -164,10 +195,15 @@ export function AudioEngine() {
     for (let i = 0; i < filters.length - 1; i++) filters[i].connect(filters[i + 1]);
     filters[filters.length - 1].connect(rgGain);
 
-    // Create one deck with a given initial crossfade gain value
+    // Create one deck with a given initial crossfade gain value.
+    // The <audio> element is appended to the DOM (hidden) so the browser
+    // marks the tab as "media playing" and reduces background timer throttling.
     const makeDeck = (initGain: number): Deck => {
       const audio = new Audio();
       audio.preload = 'auto';
+      audio.style.cssText = 'position:absolute;width:0;height:0;left:-9999px;top:-9999px;pointer-events:none';
+      audio.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(audio);
       const source = ctx.createMediaElementSource(audio);
       const crossGain = ctx.createGain();
       crossGain.gain.value = initGain;
@@ -178,6 +214,13 @@ export function AudioEngine() {
 
     deckA.current = makeDeck(1.0); // active
     deckB.current = makeDeck(0.0); // idle
+
+    // Auto-resume the AudioContext if the browser suspends it in the background.
+    ctx.addEventListener('statechange', () => {
+      if (ctx.state === 'suspended' && isPlayingRef.current) {
+        ctx.resume().catch(() => {});
+      }
+    });
 
     // OS Media Session
     if ('mediaSession' in navigator) {
@@ -197,6 +240,8 @@ export function AudioEngine() {
       deckB.current?.audio.pause();
       if (deckA.current?.objectUrl) URL.revokeObjectURL(deckA.current.objectUrl);
       if (deckB.current?.objectUrl) URL.revokeObjectURL(deckB.current.objectUrl);
+      deckA.current?.audio.parentNode?.removeChild(deckA.current.audio);
+      deckB.current?.audio.parentNode?.removeChild(deckB.current.audio);
       sharedAnalyserRef.current = null;
       ctx.close();
     };
