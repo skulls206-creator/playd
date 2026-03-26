@@ -157,16 +157,27 @@ export function TrackListPanel({
 }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter, searchQuery, setSearchQuery } = useAudioPlayer();
-  const { isScanning, scanProgress, scanStatus, scanFileList, importDroppedItems, rescanAll } = useFileSystem();
-  const folderInputRef = useRef<HTMLInputElement>(null);
-  const mobileFilesInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) await scanFileList(files);
-    e.target.value = '';
-  };
+  const { isScanning, scanProgress, scanStatus, addFolder, importDroppedItems, rescanAll, getStoredHandles } = useFileSystem();
   const queryClient = useQueryClient();
+
+  // Track whether we already have at least one saved folder handle.
+  // When true the toolbar button becomes "Sync Now" instead of "Add Folder".
+  const [hasFolders, setHasFolders] = useState(false);
+
+  const refreshHasFolders = useCallback(async () => {
+    const handles = await getStoredHandles();
+    setHasFolders(handles.length > 0);
+  }, [getStoredHandles]);
+
+  // Check on mount
+  useEffect(() => { refreshHasFolders(); }, [refreshHasFolders]);
+
+  // Re-check every time a scan finishes so the button flips immediately after first import
+  const prevScanning = useRef(false);
+  useEffect(() => {
+    if (prevScanning.current && !isScanning) refreshHasFolders();
+    prevScanning.current = isScanning;
+  }, [isScanning, refreshHasFolders]);
 
   const [clearConfirm, setClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -178,18 +189,6 @@ export function TrackListPanel({
   // ── Drag-drop ────────────────────────────────────────────────────────────
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
-
-  const handleRescan = () => {
-    // Feature-detect webkitdirectory support — works on desktop AND Android Chrome.
-    // Only falls back to plain file picker on browsers that truly don't support it (e.g. iOS Safari).
-    const probe = document.createElement('input');
-    probe.type = 'file';
-    if ('webkitdirectory' in probe) {
-      folderInputRef.current?.click();
-    } else {
-      mobileFilesInputRef.current?.click();
-    }
-  };
 
   const handleClearLibrary = async () => {
     if (!clearConfirm) { setClearConfirm(true); setTimeout(() => setClearConfirm(false), 3000); return; }
@@ -366,23 +365,6 @@ export function TrackListPanel({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      {/* Desktop: folder picker (webkitdirectory, unsupported on mobile) */}
-      <input
-        ref={folderInputRef}
-        type="file"
-        style={{ display: 'none' }}
-        {...{ webkitdirectory: '', multiple: true } as any}
-        onChange={handleFolderInputChange}
-      />
-      {/* Mobile: plain audio file picker — webkitdirectory doesn't work on mobile browsers */}
-      <input
-        ref={mobileFilesInputRef}
-        type="file"
-        style={{ display: 'none' }}
-        accept="audio/*,.mp3,.flac,.ogg,.opus,.m4a,.wav,.aiff,.aac,.wma"
-        multiple
-        onChange={handleFolderInputChange}
-      />
 
       {/* ── Drag-over overlay ──────────────────────────────────────────────── */}
       {isDragOver && (
@@ -405,40 +387,47 @@ export function TrackListPanel({
           </button>
         )}
 
-        {/* Add Folder */}
-        <button
-          onClick={handleRescan}
-          disabled={isScanning}
-          title="Add folder to import music"
-          className={clsx(
-            'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
-            isScanning
-              ? 'text-primary/50 cursor-not-allowed'
-              : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
-          )}
-        >
-          <FolderOpen className="w-3 h-3" />
-          <span>{isScanning ? 'Importing…' : 'Add Folder'}</span>
-        </button>
-
-        {/* Soft Refresh — re-scans saved folders without a page reload */}
-        <button
-          onClick={async () => {
-            queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-            await rescanAll();
-          }}
-          disabled={isScanning}
-          title="Refresh library — re-scan saved folders without reloading the page"
-          className={clsx(
-            'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
-            isScanning
-              ? 'text-primary/50 cursor-not-allowed'
-              : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
-          )}
-        >
-          <RefreshCw className={clsx('w-3 h-3', isScanning && 'animate-spin')} />
-          <span className="hidden sm:inline">Refresh</span>
-        </button>
+        {/* Add Folder / Sync Now — mode switches once a folder is known */}
+        {hasFolders ? (
+          <button
+            onClick={async () => {
+              queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+              await rescanAll();
+            }}
+            disabled={isScanning}
+            title="Re-scan your saved music folders"
+            className={clsx(
+              'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
+              isScanning
+                ? 'text-primary/50 cursor-not-allowed'
+                : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+            )}
+          >
+            <RefreshCw className={clsx('w-3 h-3', isScanning && 'animate-spin')} />
+            <span>{isScanning ? 'Syncing…' : 'Sync Now'}</span>
+          </button>
+        ) : (
+          <button
+            onClick={async () => {
+              const added = await addFolder();
+              if (added) {
+                queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+                await refreshHasFolders();
+              }
+            }}
+            disabled={isScanning}
+            title="Add a music folder to your library"
+            className={clsx(
+              'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
+              isScanning
+                ? 'text-primary/50 cursor-not-allowed'
+                : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+            )}
+          >
+            <FolderOpen className="w-3 h-3" />
+            <span>{isScanning ? 'Importing…' : 'Add Folder'}</span>
+          </button>
+        )}
 
         {/* Active filter label + scan status (always visible side-by-side) */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
