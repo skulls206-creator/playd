@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import {
@@ -118,9 +118,14 @@ export function PreferencesPanel() {
   // Vault
   const { isUnlocking } = useVaultUnlock();
   const [vaultKeyLoaded, setVaultKeyLoaded] = useState(false);
+  const [removingVault, setRemovingVault] = useState(false);
+  const [vaultRemoveConfirm, setVaultRemoveConfirm] = useState(false);
+
   useEffect(() => {
     getVaultKey().then(k => setVaultKeyLoaded(!!k));
   }, [isUnlocking]);
+
+  const vaultTracks = useMemo(() => allTracks.filter(t => t.source === 'vault'), [allTracks]);
 
   const handleLockVault = () => {
     clearVaultKey();
@@ -129,6 +134,20 @@ export function PreferencesPanel() {
 
   const handleUnlockVault = () => {
     requestVaultKey().then(() => setVaultKeyLoaded(true)).catch(() => {});
+  };
+
+  const handleRemoveAllVault = async () => {
+    if (!vaultRemoveConfirm) { setVaultRemoveConfirm(true); setTimeout(() => setVaultRemoveConfirm(false), 4000); return; }
+    setRemovingVault(true);
+    setVaultRemoveConfirm(false);
+    try {
+      await Promise.allSettled(
+        vaultTracks.map(t => customFetch(`/api/vault/${t.id}`, { method: 'DELETE' })),
+      );
+      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    } finally {
+      setRemovingVault(false);
+    }
   };
 
   // EQ save form
@@ -381,6 +400,19 @@ export function PreferencesPanel() {
                 </p>
               </div>
 
+              {/* Metrics row */}
+              <div className="flex items-center gap-4 px-3 py-2 rounded-md bg-black/20 border border-border/30 mb-2 text-[11px] text-muted-foreground">
+                <span>
+                  <span className="text-foreground font-medium">{vaultTracks.length}</span>{' '}
+                  {vaultTracks.length === 1 ? 'track' : 'tracks'} in vault
+                </span>
+                <span className="h-3 w-px bg-border/40" />
+                <span className={clsx('font-medium', vaultKeyLoaded ? 'text-emerald-400' : 'text-zinc-500')}>
+                  {vaultKeyLoaded ? 'Session key loaded' : 'Key not loaded'}
+                </span>
+              </div>
+
+              {/* Lock / Unlock row */}
               <div className="flex items-center justify-between p-3 rounded-md bg-black/20 border border-border/30">
                 <div className="flex items-center gap-2">
                   {vaultKeyLoaded
@@ -394,7 +426,7 @@ export function PreferencesPanel() {
                     <p className="text-[10px] text-muted-foreground">
                       {vaultKeyLoaded
                         ? 'Key is in session — vault tracks can be played and uploaded.'
-                        : 'Enter password to access vault tracks in this session.'}
+                        : 'Enter your account password to decrypt vault tracks.'}
                     </p>
                   </div>
                 </div>
@@ -421,9 +453,40 @@ export function PreferencesPanel() {
                 )}
               </div>
 
+              {/* Remove all vault tracks */}
+              {vaultTracks.length > 0 && (
+                <div className="flex items-center justify-between mt-2 px-3 py-2 rounded-md bg-red-950/20 border border-red-900/30">
+                  <div>
+                    <p className="text-xs font-medium text-red-300">Remove all vault tracks</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Permanently deletes all {vaultTracks.length} encrypted{' '}
+                      {vaultTracks.length === 1 ? 'track' : 'tracks'} from the cloud. This cannot be undone.
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveAllVault}
+                    disabled={removingVault}
+                    className={clsx(
+                      'text-xs shrink-0',
+                      vaultRemoveConfirm
+                        ? 'text-red-400 bg-red-950/40 hover:bg-red-950/60'
+                        : 'text-zinc-500 hover:text-red-400',
+                    )}
+                  >
+                    {removingVault
+                      ? <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
+                      : <Trash2 className="w-3 h-3 mr-1.5" />
+                    }
+                    {removingVault ? 'Removing…' : vaultRemoveConfirm ? 'Confirm?' : 'Remove All'}
+                  </Button>
+                </div>
+              )}
+
               <p className="text-[10px] text-muted-foreground/60 mt-2">
                 To back up a local track, right-click it in the library and choose "Upload to Vault".
-                Vault tracks are shown with a lock icon and survive "Clear Library".
+                Vault tracks show a lock icon and survive "Clear Library".
               </p>
             </section>
           </TabsContent>

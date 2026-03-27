@@ -75,6 +75,14 @@ export function clearVaultKeyFromSession(): void {
 /** Alias: clear vault key from session and Zustand state. */
 export const clearVaultKey = clearVaultKeyFromSession;
 
+/**
+ * React hook to access the current vault unlock state (isUnlocking + vaultKey).
+ * Thin alias over `useVaultUnlock` for ergonomic hook naming.
+ */
+export function useVaultKey() {
+  return useVaultUnlock(state => ({ key: state.vaultKey, isUnlocking: state.isUnlocking }));
+}
+
 // ── Key derivation ────────────────────────────────────────────────────────────
 
 /**
@@ -258,3 +266,9 @@ export function cancelVaultUnlock(reason = 'User cancelled vault unlock'): void 
   _close();
   _reject?.(new Error(reason));
 }
+
+/**
+ * Alias for `decryptVaultBlob` matching the originally-requested surface.
+ * Must be declared after decryptVaultBlob is defined.
+ */
+export const decryptFile = decryptVaultBlob;

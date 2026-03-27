@@ -4,7 +4,7 @@ import { useFileSystem } from '@/hooks/use-file-system';
 import { useNowPlayingNotification } from '@/hooks/use-now-playing-notification';
 import { useToast } from '@/hooks/use-toast';
 import type { Track } from '@workspace/api-client-react';
-import { getVaultKey, decryptVaultBlob } from '@/hooks/use-vault-crypto';
+import { requestVaultKey, decryptVaultBlob } from '@/hooks/use-vault-crypto';
 
 const EQ_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
@@ -193,14 +193,16 @@ export function AudioEngine() {
 
     if (track.source === 'vault') {
       // Vault track: fetch encrypted blob from the API, decrypt in-browser, return blob URL.
-      // The vault key must already be in session (loaded via VaultUnlockModal before this plays).
-      const masterKey = await getVaultKey();
-      if (!masterKey) {
-        console.warn('AudioEngine: vault key not in session — cannot play vault track');
+      // If the vault key is not in session, requestVaultKey() opens the unlock modal and waits.
+      let masterKey: CryptoKey;
+      try {
+        masterKey = await requestVaultKey();
+      } catch {
+        // User cancelled the unlock modal
         toast({
           title: 'Vault locked',
-          description: 'Right-click the track and play it again after entering your vault password.',
-          duration: 7000,
+          description: 'Enter your vault password to play encrypted tracks.',
+          duration: 5000,
         });
         return null;
       }
