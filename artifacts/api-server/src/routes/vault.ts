@@ -62,43 +62,47 @@ router.post("/vault/upload-url", requireAuth, async (req, res): Promise<void> =>
     return;
   }
 
-  // Reserve a temporary track row so we have an ID for the R2 key.
-  // We use a placeholder fileName/folderPath because vault tracks don't live on disk.
-  const [track] = await db
-    .insert(tracksTable)
-    .values({
-      userId,
-      title:    String(title),
-      artist:   artist   ? String(artist)   : "Unknown Artist",
-      album:    album    ? String(album)    : "Unknown Album",
-      year:     typeof year === "number"    ? year        : null,
-      genre:    genre    ? String(genre)    : null,
-      duration: typeof duration === "number" ? duration   : 0,
-      trackNumber: typeof trackNumber === "number" ? trackNumber : null,
-      fileName: String(fileName),
-      folderPath: "",
-      source:   "vault",
-      vaultEncryptedKey: String(vaultEncryptedKey),
-      vaultKeyIv:        String(vaultKeyIv),
-      vaultDataIv:       String(vaultDataIv),
-      vaultStatus: "uploading",
-    })
-    .returning({ id: tracksTable.id });
+  // Use a transaction so the track row is never left without a vaultObjectPath.
+  // If the update fails the insert is rolled back — no orphan rows.
+  const { trackId, objectKey, uploadUrl } = await db.transaction(async (tx) => {
+    const [track] = await tx
+      .insert(tracksTable)
+      .values({
+        userId,
+        title:    String(title),
+        artist:   artist   ? String(artist)   : "Unknown Artist",
+        album:    album    ? String(album)    : "Unknown Album",
+        year:     typeof year === "number"    ? year        : null,
+        genre:    genre    ? String(genre)    : null,
+        duration: typeof duration === "number" ? duration   : 0,
+        trackNumber: typeof trackNumber === "number" ? trackNumber : null,
+        fileName: String(fileName),
+        folderPath: "",
+        source:   "vault",
+        vaultEncryptedKey: String(vaultEncryptedKey),
+        vaultKeyIv:        String(vaultKeyIv),
+        vaultDataIv:       String(vaultDataIv),
+        vaultStatus: "uploading",
+      })
+      .returning({ id: tracksTable.id });
 
-  const trackId   = track.id;
-  const objectKey = `vault/${userId}/${trackId}/${randomUUID()}`;
+    const key = `vault/${userId}/${track.id}/${randomUUID()}`;
 
-  // Store the object key so we can fetch/delete it later.
-  await db
-    .update(tracksTable)
-    .set({ vaultObjectPath: objectKey })
-    .where(and(eq(tracksTable.id, trackId), eq(tracksTable.userId, userId)));
+    await tx
+      .update(tracksTable)
+      .set({ vaultObjectPath: key })
+      .where(and(eq(tracksTable.id, track.id), eq(tracksTable.userId, userId)));
 
-  const uploadUrl = await getPresignedPutUrl(
-    objectKey,
-    contentType ? String(contentType) : "application/octet-stream",
-    3600
-  );
+    // Generate the presigned URL inside the transaction boundary so a signing
+    // failure also rolls back the DB rows.
+    const url = await getPresignedPutUrl(
+      key,
+      contentType ? String(contentType) : "application/octet-stream",
+      3600
+    );
+
+    return { trackId: track.id, objectKey: key, uploadUrl: url };
+  });
 
   res.status(201).json({ trackId, objectKey, uploadUrl });
 });
