@@ -76,8 +76,12 @@ export function clearVaultKeyFromSession(): void {
 export const clearVaultKey = clearVaultKeyFromSession;
 
 /**
- * React hook to access the current vault unlock state (isUnlocking + vaultKey).
- * Thin alias over `useVaultUnlock` for ergonomic hook naming.
+ * React hook to subscribe to vault unlock state (current in-memory key + isUnlocking).
+ *
+ * Note: this hook provides reactive access to the Zustand state only — it does NOT
+ * perform session restore or trigger the unlock modal. For imperative unlock use
+ * `requestVaultKey()`. For checking the key synchronously / restoring from session,
+ * use `getVaultKey()` (returns a Promise).
  */
 export function useVaultKey() {
   return useVaultUnlock(state => ({ key: state.vaultKey, isUnlocking: state.isUnlocking }));
@@ -233,16 +237,46 @@ export async function getVaultKey(): Promise<CryptoKey | null> {
   return null;
 }
 
+// Pending waiters for requestVaultKey — allows multiple concurrent callers to
+// share a single unlock dialog instead of overwriting the resolver each time.
+const pendingVaultRequests: Array<{
+  resolve: (key: CryptoKey) => void;
+  reject:  (err: Error)    => void;
+}> = [];
+
+function flushVaultWaiters(key: CryptoKey) {
+  const waiting = pendingVaultRequests.splice(0);
+  waiting.forEach(w => w.resolve(key));
+}
+
+function rejectVaultWaiters(err: Error) {
+  const waiting = pendingVaultRequests.splice(0);
+  waiting.forEach(w => w.reject(err));
+}
+
 /**
  * Request the vault master key. If it is not in session, opens the unlock modal
  * and returns a Promise that resolves when the user successfully enters their
  * password. Rejects if the user cancels.
+ *
+ * Concurrency-safe: multiple simultaneous callers share the same pending unlock
+ * dialog and all receive the key once it resolves.
  */
 export function requestVaultKey(): Promise<CryptoKey> {
   return new Promise((resolve, reject) => {
     getVaultKey().then(key => {
       if (key) { resolve(key); return; }
-      useVaultUnlock.getState()._open(resolve, reject);
+
+      // Queue this caller alongside any already-waiting callers
+      pendingVaultRequests.push({ resolve, reject });
+
+      // Only open the modal if we are the first waiter (modal not already open)
+      if (!useVaultUnlock.getState().isUnlocking) {
+        useVaultUnlock.getState()._open(
+          (resolvedKey) => flushVaultWaiters(resolvedKey),
+          (err)        => rejectVaultWaiters(err),
+        );
+      }
     }).catch(reject);
   });
 }
