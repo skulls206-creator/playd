@@ -47,6 +47,7 @@ export const ListTracksResponseItem = zod.object({
   vaultKeyIv: zod.string().nullish(),
   vaultDataIv: zod.string().nullish(),
   vaultStatus: zod.string().nullish(),
+  vaultBlobSize: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -150,6 +151,7 @@ export const GetTrackResponse = zod.object({
   vaultKeyIv: zod.string().nullish(),
   vaultDataIv: zod.string().nullish(),
   vaultStatus: zod.string().nullish(),
+  vaultBlobSize: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -194,6 +196,7 @@ export const UpdateTrackResponse = zod.object({
   vaultKeyIv: zod.string().nullish(),
   vaultDataIv: zod.string().nullish(),
   vaultStatus: zod.string().nullish(),
+  vaultBlobSize: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });

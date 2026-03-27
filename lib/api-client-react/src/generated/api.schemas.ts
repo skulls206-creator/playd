@@ -48,6 +48,8 @@ export interface Track {
   vaultDataIv?: string | null;
   /** @nullable */
   vaultStatus?: string | null;
+  /** @nullable */
+  vaultBlobSize?: number | null;
 }
 
 export interface CreateTrackBody {

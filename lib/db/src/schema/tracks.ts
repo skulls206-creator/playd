@@ -28,6 +28,7 @@ export const tracksTable = pgTable("tracks", {
   vaultKeyIv:        text("vault_key_iv"),        // base64(IV used to wrap the file key)
   vaultDataIv:       text("vault_data_iv"),       // base64(IV used for AES-GCM file encryption)
   vaultStatus:       text("vault_status"),        // 'uploading' | 'ready' | null
+  vaultBlobSize:     integer("vault_blob_size"),  // encrypted ciphertext byte size (for storage display)
   // ────────────────────────────────────────────────────────────────────────────
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

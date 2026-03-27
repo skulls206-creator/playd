@@ -82,7 +82,8 @@ router.post("/vault/upload-url", requireAuth, async (req, res): Promise<void> =>
         vaultEncryptedKey: String(vaultEncryptedKey),
         vaultKeyIv:        String(vaultKeyIv),
         vaultDataIv:       String(vaultDataIv),
-        vaultStatus: "uploading",
+        vaultStatus:       "uploading",
+        vaultBlobSize:     blobSize,
       })
       .returning({ id: tracksTable.id });
 

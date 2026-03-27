@@ -127,6 +127,19 @@ export function PreferencesPanel() {
 
   const vaultTracks = useMemo(() => allTracks.filter(t => t.source === 'vault'), [allTracks]);
 
+  const vaultStorageBytes = useMemo(
+    () => vaultTracks.reduce((sum, t) => sum + (t.vaultBlobSize ?? 0), 0),
+    [vaultTracks],
+  );
+
+  function formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+  }
+
   const handleLockVault = () => {
     clearVaultKey();
     setVaultKeyLoaded(false);
@@ -406,9 +419,18 @@ export function PreferencesPanel() {
                   <span className="text-foreground font-medium">{vaultTracks.length}</span>{' '}
                   {vaultTracks.length === 1 ? 'track' : 'tracks'} in vault
                 </span>
+                {vaultStorageBytes > 0 && (
+                  <>
+                    <span className="h-3 w-px bg-border/40" />
+                    <span>
+                      <span className="text-foreground font-medium">{formatBytes(vaultStorageBytes)}</span>{' '}
+                      encrypted
+                    </span>
+                  </>
+                )}
                 <span className="h-3 w-px bg-border/40" />
                 <span className={clsx('font-medium', vaultKeyLoaded ? 'text-emerald-400' : 'text-zinc-500')}>
-                  {vaultKeyLoaded ? 'Session key loaded' : 'Key not loaded'}
+                  {vaultKeyLoaded ? 'Key loaded' : 'Key not loaded'}
                 </span>
               </div>
 
