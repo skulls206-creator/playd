@@ -389,9 +389,9 @@ export function TrackListPanel({
       <input
         ref={iosFileInputRef}
         type="file"
-        style={{ display: 'none' }}
-        accept="audio/*,.mp3,.flac,.ogg,.opus,.m4a,.wav,.aiff,.aac,.wma"
+        {...{ webkitdirectory: '' } as any}
         multiple
+        style={{ display: 'none' }}
         onChange={handleIosFiles}
       />
 
