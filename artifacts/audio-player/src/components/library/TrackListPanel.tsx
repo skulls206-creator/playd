@@ -421,13 +421,13 @@ export function TrackListPanel({
             context alive. Desktop/Android: use the async addFolder() which saves handles. */}
         {hasFolders ? (
           <button
-            onClick={async () => {
+            onClick={() => {
               if (hasDirectoryPicker) {
-                // Desktop/Android: rescan saved handles
+                // Desktop/Android: fire-and-forget rescan (async work via .then)
                 queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-                await rescanAll();
+                rescanAll();
               } else {
-                // iOS: re-open file picker synchronously so user can add more files
+                // iOS: plain synchronous .click() — no async keyword anywhere above
                 iosFileInputRef.current?.click();
               }
             }}
@@ -445,17 +445,17 @@ export function TrackListPanel({
           </button>
         ) : (
           <button
-            onClick={async () => {
+            onClick={() => {
               if (hasDirectoryPicker) {
-                // Desktop/Android: async directory picker saves handle to IndexedDB
-                const added = await addFolder();
-                if (added) {
-                  queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-                  await refreshHasFolders();
-                }
+                // Desktop/Android: async picker via .then — no await in onClick itself
+                addFolder().then(added => {
+                  if (added) {
+                    queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+                    refreshHasFolders();
+                  }
+                });
               } else {
-                // iOS Safari: trigger the pre-rendered input synchronously.
-                // Must NOT await anything before this — iOS kills the gesture context.
+                // iOS: plain synchronous .click() — no async keyword anywhere above
                 iosFileInputRef.current?.click();
               }
             }}
