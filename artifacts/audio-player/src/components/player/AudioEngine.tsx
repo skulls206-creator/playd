@@ -4,6 +4,7 @@ import { useFileSystem } from '@/hooks/use-file-system';
 import { useNowPlayingNotification } from '@/hooks/use-now-playing-notification';
 import { useToast } from '@/hooks/use-toast';
 import type { Track } from '@workspace/api-client-react';
+import { getVaultKey, decryptVaultBlob } from '@/hooks/use-vault-crypto';
 
 const EQ_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
@@ -188,6 +189,42 @@ export function AudioEngine() {
       const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
       const qs = jwt ? `?token=${encodeURIComponent(jwt)}` : '';
       return `/api/subsonic-servers/${track.subsonicServerId}/stream/${encodeURIComponent(track.subsonicId)}${qs}`;
+    }
+
+    if (track.source === 'vault') {
+      // Vault track: fetch encrypted blob from the API, decrypt in-browser, return blob URL.
+      // The vault key must already be in session (loaded via VaultUnlockModal before this plays).
+      const masterKey = await getVaultKey();
+      if (!masterKey) {
+        console.warn('AudioEngine: vault key not in session — cannot play vault track');
+        toast({
+          title: 'Vault locked',
+          description: 'Right-click the track and play it again after entering your vault password.',
+          duration: 7000,
+        });
+        return null;
+      }
+      if (!track.vaultEncryptedKey || !track.vaultKeyIv || !track.vaultDataIv) {
+        console.error('AudioEngine: vault track missing crypto metadata', track.id);
+        return null;
+      }
+      const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
+      const resp = await fetch(`/api/vault/download/${track.id}`, {
+        headers: jwt ? { 'Authorization': `Bearer ${jwt}` } : {},
+      });
+      if (!resp.ok) {
+        console.error('AudioEngine: vault download failed', resp.status);
+        return null;
+      }
+      const ciphertext = await resp.arrayBuffer();
+      const plaintext  = await decryptVaultBlob(
+        ciphertext,
+        track.vaultEncryptedKey,
+        track.vaultKeyIv,
+        track.vaultDataIv,
+        masterKey,
+      );
+      return URL.createObjectURL(new Blob([plaintext]));
     }
 
     console.warn('AudioEngine: unsupported track source', track.source);

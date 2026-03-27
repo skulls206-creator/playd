@@ -39,6 +39,15 @@ export interface Track {
   replaygainGain?: number | null;
   createdAt: string;
   updatedAt: string;
+  // Zero-knowledge vault fields (populated only when source = 'vault')
+  /** @nullable */
+  vaultEncryptedKey?: string | null;
+  /** @nullable */
+  vaultKeyIv?: string | null;
+  /** @nullable */
+  vaultDataIv?: string | null;
+  /** @nullable */
+  vaultStatus?: string | null;
 }
 
 export interface CreateTrackBody {

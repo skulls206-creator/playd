@@ -9,6 +9,7 @@ import NotFound from "@/pages/not-found";
 import { InstallPrompt } from "@/components/layout/InstallPrompt";
 import { KhurkOsBanner } from "@/components/layout/KhurkOsBanner";
 import { DiscordBanner } from "@/components/layout/DiscordBanner";
+import { VaultUnlockModal } from "@/components/vault/VaultUnlockModal";
 import { useAuth } from "@/hooks/use-auth";
 import { requestNotificationPermission, setNotificationsEnabled } from "@/hooks/use-now-playing-notification";
 
@@ -84,6 +85,7 @@ function App() {
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />
           </WouterRouter>
+          <VaultUnlockModal />
           <InstallPrompt />
           <KhurkOsBanner />
           <DiscordBanner />

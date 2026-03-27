@@ -1,10 +1,10 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import type { Track } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { openMiniPlayer } from '@/hooks/use-mini-player';
 import { useQueryClient } from '@tanstack/react-query';
-import { getListTracksQueryKey } from '@workspace/api-client-react';
+import { getListTracksQueryKey, customFetch } from '@workspace/api-client-react';
 import { clsx } from 'clsx';
 import {
   ContextMenu,
@@ -28,7 +28,13 @@ import {
   Scissors,
   PictureInPicture2,
   RefreshCw,
+  Lock,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react';
+import { requestVaultKey, encryptFile } from '@/hooks/use-vault-crypto';
+
+type VaultUploadState = 'idle' | 'encrypting' | 'uploading' | 'done' | 'error';
 
 interface TrackContextMenuProps {
   track: Track;
@@ -60,8 +66,77 @@ export function TrackContextMenu({
     toggleQueue,
     isMiniPlayer,
   } = useAudioPlayer();
-  const { rescanAll, isScanning } = useFileSystem();
+  const { rescanAll, isScanning, getFileFromPath } = useFileSystem();
   const queryClient = useQueryClient();
+
+  // ── Vault upload state ───────────────────────────────────────────────────
+  const [vaultState, setVaultState] = useState<VaultUploadState>('idle');
+  const [vaultError, setVaultError] = useState<string | null>(null);
+
+  const handleUploadToVault = async () => {
+    if (track.source === 'vault') return; // already in vault
+    setVaultState('encrypting');
+    setVaultError(null);
+    try {
+      // Ensure vault key is available — shows unlock modal if not in session.
+      const masterKey = await requestVaultKey();
+
+      const file = await getFileFromPath(track.fileName, track.folderPath);
+      if (!file) throw new Error('Could not access local audio file.');
+
+      const { ciphertext, encryptedKey, keyIv, dataIv } = await encryptFile(file, masterKey);
+
+      setVaultState('uploading');
+
+      // Reserve track + get presigned upload URL
+      const { trackId, uploadUrl } = await customFetch<{ trackId: number; objectKey: string; uploadUrl: string }>(
+        '/api/vault/upload-url',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title:             track.title,
+            artist:            track.artist,
+            album:             track.album,
+            year:              track.year,
+            genre:             track.genre,
+            duration:          track.duration,
+            trackNumber:       track.trackNumber,
+            fileName:          track.fileName,
+            vaultEncryptedKey: encryptedKey,
+            vaultKeyIv:        keyIv,
+            vaultDataIv:       dataIv,
+            blobSize:          ciphertext.byteLength,
+            contentType:       'application/octet-stream',
+          }),
+        },
+      );
+
+      // Upload ciphertext directly to R2 via presigned URL (no Auth header — URL is self-authenticating)
+      const putResp = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: ciphertext,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      });
+      if (!putResp.ok) throw new Error(`R2 upload failed: ${putResp.status}`);
+
+      // Confirm upload to flip vaultStatus → 'ready'
+      await customFetch(`/api/vault/confirm/${trackId}`, { method: 'POST' });
+
+      setVaultState('done');
+      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+
+      // Reset to idle after 2 seconds so the menu item looks normal again
+      setTimeout(() => setVaultState('idle'), 2000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      // If user cancelled vault unlock, just reset silently
+      if (msg.includes('cancelled')) { setVaultState('idle'); return; }
+      setVaultError(msg);
+      setVaultState('error');
+      setTimeout(() => { setVaultState('idle'); setVaultError(null); }, 4000);
+    }
+  };
 
   const handleRefreshLibrary = async () => {
     queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
@@ -232,6 +307,33 @@ export function TrackContextMenu({
                 Go to Album
                 <span className="ml-auto text-[10px] text-zinc-500 truncate max-w-[80px]">{track.album}</span>
               </ContextMenuItem>
+            )}
+
+            {/* Upload to Vault — local tracks only, not already in vault */}
+            {track.source === 'local' && (
+              <>
+                <ContextMenuSeparator className="bg-zinc-700/50" />
+                <ContextMenuItem
+                  onClick={handleUploadToVault}
+                  disabled={vaultState === 'encrypting' || vaultState === 'uploading'}
+                  className={clsx(
+                    'gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100',
+                    vaultState === 'done' && 'text-emerald-400',
+                    vaultState === 'error' && 'text-red-400',
+                  )}
+                >
+                  {vaultState === 'encrypting' && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
+                  {vaultState === 'uploading'  && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
+                  {vaultState === 'done'       && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                  {vaultState === 'error'      && <Lock className="w-3.5 h-3.5 text-red-400" />}
+                  {vaultState === 'idle'       && <Lock className="w-3.5 h-3.5 text-zinc-400" />}
+                  {vaultState === 'encrypting' && 'Encrypting…'}
+                  {vaultState === 'uploading'  && 'Uploading to vault…'}
+                  {vaultState === 'done'       && 'Uploaded to vault!'}
+                  {vaultState === 'error'      && (vaultError ? `Error: ${vaultError.slice(0, 30)}` : 'Upload failed')}
+                  {vaultState === 'idle'       && 'Upload to Vault'}
+                </ContextMenuItem>
+              </>
             )}
 
             {/* Edit in Clip Studio — local tracks only */}

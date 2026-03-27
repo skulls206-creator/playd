@@ -43,6 +43,10 @@ export const ListTracksResponseItem = zod.object({
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
   replaygainGain: zod.number().nullish(),
+  vaultEncryptedKey: zod.string().nullish(),
+  vaultKeyIv: zod.string().nullish(),
+  vaultDataIv: zod.string().nullish(),
+  vaultStatus: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -142,6 +146,10 @@ export const GetTrackResponse = zod.object({
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
   replaygainGain: zod.number().nullish(),
+  vaultEncryptedKey: zod.string().nullish(),
+  vaultKeyIv: zod.string().nullish(),
+  vaultDataIv: zod.string().nullish(),
+  vaultStatus: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -182,6 +190,10 @@ export const UpdateTrackResponse = zod.object({
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
   replaygainGain: zod.number().nullish(),
+  vaultEncryptedKey: zod.string().nullish(),
+  vaultKeyIv: zod.string().nullish(),
+  vaultDataIv: zod.string().nullish(),
+  vaultStatus: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });

@@ -23,8 +23,9 @@ import {
   FolderOpen, RefreshCw, Trash2, Plus, CheckCircle2,
   XCircle, Loader2, Info, HardDrive,
   Database, Monitor, Save, FileMusic, Bell, BellOff, Smartphone,
-  Activity, Blend, Volume2, Palette, Check,
+  Activity, Blend, Volume2, Palette, Check, Lock, LockOpen,
 } from 'lucide-react';
+import { getVaultKey, clearVaultKey, useVaultUnlock, requestVaultKey } from '@/hooks/use-vault-crypto';
 import { THEMES, THEME_KEYS } from '@/lib/themes';
 import { useTheme } from '@/hooks/use-theme';
 import { clsx } from 'clsx';
@@ -113,6 +114,22 @@ export function PreferencesPanel() {
   const [localFolders, setLocalFolders] = useState<string[]>([]);
   const [scanningFolderName, setScanningFolderName] = useState<string | null>(null);
   const [clearingLibrary, setClearingLibrary] = useState(false);
+
+  // Vault
+  const { isUnlocking } = useVaultUnlock();
+  const [vaultKeyLoaded, setVaultKeyLoaded] = useState(false);
+  useEffect(() => {
+    getVaultKey().then(k => setVaultKeyLoaded(!!k));
+  }, [isUnlocking]);
+
+  const handleLockVault = () => {
+    clearVaultKey();
+    setVaultKeyLoaded(false);
+  };
+
+  const handleUnlockVault = () => {
+    requestVaultKey().then(() => setVaultKeyLoaded(true)).catch(() => {});
+  };
 
   // EQ save form
   const [newPresetName, setNewPresetName] = useState('');
@@ -350,6 +367,64 @@ export function PreferencesPanel() {
                   ))}
                 </div>
               )}
+            </section>
+
+            {/* ── Encrypted Vault ── */}
+            <section>
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Lock className="w-3.5 h-3.5 text-primary" />
+                  Encrypted Cloud Vault
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Tracks encrypted on-device with AES-GCM before upload. The server never sees your audio.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-md bg-black/20 border border-border/30">
+                <div className="flex items-center gap-2">
+                  {vaultKeyLoaded
+                    ? <LockOpen className="w-4 h-4 text-emerald-400" />
+                    : <Lock    className="w-4 h-4 text-zinc-500" />
+                  }
+                  <div>
+                    <p className="text-xs font-medium">
+                      {vaultKeyLoaded ? 'Vault unlocked' : 'Vault locked'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {vaultKeyLoaded
+                        ? 'Key is in session — vault tracks can be played and uploaded.'
+                        : 'Enter password to access vault tracks in this session.'}
+                    </p>
+                  </div>
+                </div>
+                {vaultKeyLoaded ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLockVault}
+                    className="text-xs text-zinc-400 hover:text-red-400 shrink-0"
+                  >
+                    <Lock className="w-3 h-3 mr-1.5" />
+                    Lock
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleUnlockVault}
+                    className="text-xs text-primary hover:text-primary/80 shrink-0"
+                  >
+                    <LockOpen className="w-3 h-3 mr-1.5" />
+                    Unlock
+                  </Button>
+                )}
+              </div>
+
+              <p className="text-[10px] text-muted-foreground/60 mt-2">
+                To back up a local track, right-click it in the library and choose "Upload to Vault".
+                Vault tracks are shown with a lock icon and survive "Clear Library".
+              </p>
             </section>
           </TabsContent>
 
