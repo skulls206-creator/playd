@@ -131,8 +131,8 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   libraryFilter: { type: 'all' },
   setLibraryFilter: (filter) => set({ libraryFilter: filter }),
 
-  currentTrack: null,
-  isPlaying: false,
+  currentTrack: loadPref<Track | null>('playd_last_track', null),
+  isPlaying: false, // never auto-play on restore — requires explicit user action
   volume: loadPref('playd_volume', 1),
   isMuted: loadPref('playd_muted', false),
   progress: 0,
@@ -232,6 +232,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     }
 
     const lyricsState = nextTrack ? loadLyricsFromStorage(nextTrack.id) : { lyrics: null, lyricsTrackId: null };
+    savePref('playd_last_track', nextTrack);
     return { 
       currentTrack: nextTrack, 
       queue: nextQueue, 
@@ -270,6 +271,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     }
     
     const nextTrackN = state.queue[nextIndex].track;
+    savePref('playd_last_track', nextTrackN);
     return {
       queueIndex: nextIndex,
       currentTrack: nextTrackN,
@@ -294,6 +296,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     }
     
     const prevTrack = state.queue[prevIndex].track;
+    savePref('playd_last_track', prevTrack);
     return {
       queueIndex: prevIndex,
       currentTrack: prevTrack,
@@ -379,6 +382,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   _advanceToIndex: (idx) => set((state) => {
     if (idx < 0 || idx >= state.queue.length) return { isPlaying: false, progress: 0 };
     const advTrack = state.queue[idx].track;
+    savePref('playd_last_track', advTrack);
     return {
       queueIndex: idx,
       currentTrack: advTrack,

@@ -166,6 +166,8 @@ export function TrackListPanel({
   // Hidden file input for iOS: triggered synchronously inside the click handler
   // so iOS Safari's user-gesture requirement is satisfied.
   const iosFileInputRef = useRef<HTMLInputElement>(null);
+  const trackListRef    = useRef<HTMLDivElement>(null);
+  const didInitialScroll = useRef(false);
 
   const handleIosFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -196,6 +198,21 @@ export function TrackListPanel({
     if (prevScanning.current && !isScanning) refreshHasFolders();
     prevScanning.current = isScanning;
   }, [isScanning, refreshHasFolders]);
+
+  // Scroll the list to the current (or last-played) track once the list is populated.
+  // Fires on every render but only acts once (didInitialScroll guard).
+  // This makes reload → rescan → highlight immediately visible.
+  useEffect(() => {
+    if (didInitialScroll.current) return;
+    if (!currentTrack) return;
+    const el = trackListRef.current?.querySelector<HTMLElement>(`[data-track-id="${currentTrack.id}"]`);
+    if (!el) return;
+    didInitialScroll.current = true;
+    // Use requestAnimationFrame so the DOM has fully painted the rows first
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'center' });
+    });
+  });
 
   const [clearConfirm, setClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -606,7 +623,7 @@ export function TrackListPanel({
         {/* Track rows */}
         <ScrollArea className="flex-1">
           {/* w-full overrides Radix's internal display:table wrapper so row widths stay constrained */}
-          <div className="w-full">
+          <div className="w-full" ref={trackListRef}>
           {sorted.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center text-muted-foreground gap-3 py-24 px-6">
               <Music className="w-10 h-10 opacity-20" />
@@ -656,6 +673,7 @@ export function TrackListPanel({
                     onEditInClipStudio={onEditInClipStudio}
                   >
                     <div
+                      data-track-id={track.id}
                       onDoubleClick={() => {
                         setSelectedIds(new Set([track.id]));
                         playRow(track, idx);
