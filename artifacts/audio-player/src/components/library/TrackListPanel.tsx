@@ -157,17 +157,35 @@ export function TrackListPanel({
 }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter, searchQuery, setSearchQuery } = useAudioPlayer();
-  const { isScanning, scanProgress, scanStatus, addFolder, importDroppedItems, rescanAll, getStoredHandles } = useFileSystem();
+  const { isScanning, scanProgress, scanStatus, addFolder, scanFileList, importDroppedItems, rescanAll, getStoredHandles } = useFileSystem();
   const queryClient = useQueryClient();
 
-  // Track whether we already have at least one saved folder handle.
-  // When true the toolbar button becomes "Sync Now" instead of "Add Folder".
+  // iOS Safari doesn't support showDirectoryPicker — detect once on mount.
+  const hasDirectoryPicker = typeof (window as any).showDirectoryPicker === 'function';
+
+  // Hidden file input for iOS: triggered synchronously inside the click handler
+  // so iOS Safari's user-gesture requirement is satisfied.
+  const iosFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleIosFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      await scanFileList(files);
+      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    }
+    e.target.value = '';
+  };
+
+  // "Has content" — true when there are stored folder handles (desktop/Android)
+  // OR when tracks already exist in the DB (iOS, which can't persist handles).
+  // This controls whether the toolbar shows "Add Folder" or "Sync Now".
   const [hasFolders, setHasFolders] = useState(false);
 
   const refreshHasFolders = useCallback(async () => {
     const handles = await getStoredHandles();
-    setHasFolders(handles.length > 0);
-  }, [getStoredHandles]);
+    // On iOS there are never persistent handles; fall back to checking the track list.
+    setHasFolders(handles.length > 0 || allTracks.length > 0);
+  }, [getStoredHandles, allTracks.length]);
 
   // Check on mount
   useEffect(() => { refreshHasFolders(); }, [refreshHasFolders]);
@@ -365,6 +383,17 @@ export function TrackListPanel({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      {/* iOS fallback: a real DOM input triggered synchronously from the click handler.
+          iOS Safari blocks programmatic .click() calls that happen inside async functions,
+          so this must be a rendered element (not created dynamically) clicked synchronously. */}
+      <input
+        ref={iosFileInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        accept="audio/*,.mp3,.flac,.ogg,.opus,.m4a,.wav,.aiff,.aac,.wma"
+        multiple
+        onChange={handleIosFiles}
+      />
 
       {/* ── Drag-over overlay ──────────────────────────────────────────────── */}
       {isDragOver && (
@@ -387,12 +416,20 @@ export function TrackListPanel({
           </button>
         )}
 
-        {/* Add Folder / Sync Now — mode switches once a folder is known */}
+        {/* Add Folder / Sync Now — mode switches once a folder is known.
+            iOS: click must be synchronous (no await before it) to keep the user-gesture
+            context alive. Desktop/Android: use the async addFolder() which saves handles. */}
         {hasFolders ? (
           <button
             onClick={async () => {
-              queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-              await rescanAll();
+              if (hasDirectoryPicker) {
+                // Desktop/Android: rescan saved handles
+                queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+                await rescanAll();
+              } else {
+                // iOS: re-open file picker synchronously so user can add more files
+                iosFileInputRef.current?.click();
+              }
             }}
             disabled={isScanning}
             title="Re-scan your saved music folders"
@@ -409,14 +446,21 @@ export function TrackListPanel({
         ) : (
           <button
             onClick={async () => {
-              const added = await addFolder();
-              if (added) {
-                queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-                await refreshHasFolders();
+              if (hasDirectoryPicker) {
+                // Desktop/Android: async directory picker saves handle to IndexedDB
+                const added = await addFolder();
+                if (added) {
+                  queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+                  await refreshHasFolders();
+                }
+              } else {
+                // iOS Safari: trigger the pre-rendered input synchronously.
+                // Must NOT await anything before this — iOS kills the gesture context.
+                iosFileInputRef.current?.click();
               }
             }}
             disabled={isScanning}
-            title="Add a music folder to your library"
+            title="Add music to your library"
             className={clsx(
               'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
               isScanning
