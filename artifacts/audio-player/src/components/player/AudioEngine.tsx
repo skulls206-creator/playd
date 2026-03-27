@@ -10,6 +10,31 @@ const EQ_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 // Shared analyser node — read by SpectrumBar
 export const sharedAnalyserRef: { current: AnalyserNode | null } = { current: null };
 
+// ── iOS background audio keep-alive ──────────────────────────────────────────
+// iOS suspends the WebAudio context when the screen locks. The ONLY way to
+// prevent this is to have a native <audio> element (NOT in the Web Audio graph)
+// actively playing. We loop a 1-sample silent WAV through a raw <audio> element;
+// iOS treats it as an active audio session and leaves the AudioContext alone.
+function buildSilentWavUri(): string {
+  const buf  = new ArrayBuffer(45);
+  const view = new DataView(buf);
+  const str  = (off: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); view.setUint32(4, 37, true);
+  str(8, 'WAVE');
+  str(12, 'fmt '); view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);    // PCM
+  view.setUint16(22, 1, true);    // mono
+  view.setUint32(24, 8000, true); // sample rate
+  view.setUint32(28, 8000, true); // byte rate
+  view.setUint16(32, 1, true);    // block align
+  view.setUint16(34, 8, true);    // bits per sample
+  str(36, 'data'); view.setUint32(40, 1, true);
+  view.setUint8(44, 0x80);        // 0x80 = silence for unsigned 8-bit PCM
+  let b = ''; new Uint8Array(buf).forEach(x => { b += String.fromCharCode(x); });
+  return 'data:audio/wav;base64,' + btoa(b);
+}
+const SILENT_WAV_URI = buildSilentWavUri();
+
 interface Deck {
   audio: HTMLAudioElement;
   crossGain: GainNode;
@@ -28,6 +53,7 @@ export function AudioEngine() {
   const rgGainRef = useRef<GainNode | null>(null);
   const filtersRef = useRef<BiquadFilterNode[]>([]);
   const lockControllerRef = useRef<AbortController | null>(null);
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const {
     currentTrack, isPlaying, volume, isMuted, progress, eqBands, crossfadeSec,
@@ -83,6 +109,30 @@ export function AudioEngine() {
             lock.addEventListener('release', () => { wakeLockRef.current = null; });
           })
           .catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  // Resume AudioContext + re-start deck audio when the user returns from background.
+  // On iOS the AudioContext is suspended when the screen locks. Even with the silent
+  // audio keep-alive the context may be throttled, so we aggressively resume it the
+  // moment the page becomes visible again to eliminate any gap in playback.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible' || !isPlayingRef.current) return;
+      const ctx = ctxRef.current;
+      const act = (active.current === 'A' ? deckA : deckB).current;
+      if (!ctx || !act) return;
+      const forcePlay = () => {
+        if (act.audio.paused) act.audio.play().catch(() => {});
+        silentAudioRef.current?.play().catch(() => {});
+      };
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(forcePlay).catch(forcePlay);
+      } else {
+        forcePlay();
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -215,6 +265,18 @@ export function AudioEngine() {
     deckA.current = makeDeck(1.0); // active
     deckB.current = makeDeck(0.0); // idle
 
+    // Silent audio keep-alive: a 1-sample WAV looping natively (NOT in the Web
+    // Audio graph). iOS keeps the audio session alive as long as a native <audio>
+    // element is playing, which lets the AudioContext stay running while the
+    // screen is locked. Volume is 0 so the user hears nothing extra.
+    const silent = new Audio(SILENT_WAV_URI);
+    silent.loop   = true;
+    silent.volume = 0;
+    silent.style.cssText = 'position:absolute;width:0;height:0;left:-9999px;top:-9999px;pointer-events:none';
+    silent.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(silent);
+    silentAudioRef.current = silent;
+
     // Auto-resume the AudioContext if the browser suspends it in the background.
     ctx.addEventListener('statechange', () => {
       if (ctx.state === 'suspended' && isPlayingRef.current) {
@@ -242,6 +304,9 @@ export function AudioEngine() {
       if (deckB.current?.objectUrl) URL.revokeObjectURL(deckB.current.objectUrl);
       deckA.current?.audio.parentNode?.removeChild(deckA.current.audio);
       deckB.current?.audio.parentNode?.removeChild(deckB.current.audio);
+      silentAudioRef.current?.pause();
+      silentAudioRef.current?.parentNode?.removeChild(silentAudioRef.current);
+      silentAudioRef.current = null;
       sharedAnalyserRef.current = null;
       ctx.close();
     };
@@ -471,9 +536,16 @@ export function AudioEngine() {
       ctxRef.current?.resume();
       act.audio.play().catch(e => console.warn('Autoplay prevented', e));
       if (xfading.current) idle?.audio.play().catch(() => {});
+      // Keep iOS audio session alive so the AudioContext is never suspended by the OS.
+      silentAudioRef.current?.play().catch(() => {});
     } else {
       act.audio.pause();
       idle?.audio.pause();
+      silentAudioRef.current?.pause();
+    }
+    // Tell iOS the audio session state so lock-screen controls match reality.
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
     }
   }, [isPlaying]);
 
