@@ -10,6 +10,7 @@ import {
   fulfillVaultKey,
   cancelVaultUnlock,
 } from '@/hooks/use-vault-crypto';
+import { sharedAudioContextRef } from '@/lib/audio-context-ref';
 
 export function VaultUnlockModal() {
   const { isUnlocking } = useVaultUnlock();
@@ -21,6 +22,14 @@ export function VaultUnlockModal() {
     if (!password.trim()) { setError('Password is required.'); return; }
     setError(null);
     setIsLoading(true);
+
+    // Resume the AudioContext NOW while we are still inside the button-click
+    // user gesture. Browsers expire the activation window after ~5 seconds, so
+    // by the time PBKDF2 + network fetch + AES-GCM decrypt completes the window
+    // is often gone. Resuming here gives us a guaranteed running AudioContext
+    // for the subsequent audio.play() call in AudioEngine.
+    sharedAudioContextRef.current?.resume().catch(() => {});
+
     try {
       const { salt } = await customFetch<{ salt: string }>('/api/vault/key-salt');
       const key = await deriveVaultKey(password, salt);

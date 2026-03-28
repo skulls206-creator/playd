@@ -5,11 +5,9 @@ import { useNowPlayingNotification } from '@/hooks/use-now-playing-notification'
 import { useToast } from '@/hooks/use-toast';
 import type { Track } from '@workspace/api-client-react';
 import { requestVaultKey, decryptVaultBlob } from '@/hooks/use-vault-crypto';
+import { sharedAnalyserRef, sharedAudioContextRef } from '@/lib/audio-context-ref';
 
 const EQ_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
-
-// Shared analyser node — read by SpectrumBar
-export const sharedAnalyserRef: { current: AnalyserNode | null } = { current: null };
 
 // ── iOS background audio keep-alive ──────────────────────────────────────────
 // iOS suspends the WebAudio context when the screen locks. The ONLY way to
@@ -254,6 +252,7 @@ export function AudioEngine() {
   useEffect(() => {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     ctxRef.current = ctx;
+    sharedAudioContextRef.current = ctx;
 
     // Master gain (volume / mute)
     const master = ctx.createGain();
@@ -559,7 +558,19 @@ export function AudioEngine() {
       const { isPlaying: playing } = useAudioPlayer.getState();
       if (playing) {
         ctx.resume();
-        activeDeck.audio.play().catch(e => console.warn('Autoplay prevented', e));
+        activeDeck.audio.play().catch((e: Error) => {
+          console.warn('Autoplay prevented', e);
+          // For vault tracks the decrypt chain is long enough that browsers may
+          // expire the user-gesture window. Show a clear prompt so they know
+          // exactly what to do — pressing ▶ Play is a fresh gesture that works.
+          if (currentTrack.source === 'vault' && e.name === 'NotAllowedError') {
+            toast({
+              title: 'Tap ▶ Play to start',
+              description: 'Vault track decrypted — press the Play button to begin playback.',
+              duration: 8000,
+            });
+          }
+        });
       }
     };
 

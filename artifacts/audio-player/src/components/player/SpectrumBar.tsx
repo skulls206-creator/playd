@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
-import { sharedAnalyserRef } from './AudioEngine';
+import { sharedAnalyserRef } from '@/lib/audio-context-ref';
 
 const BARS = 24;
 const BAR_H_PX = 32;
