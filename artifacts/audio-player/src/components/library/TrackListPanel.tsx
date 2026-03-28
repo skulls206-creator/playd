@@ -286,9 +286,28 @@ export function TrackListPanel({
     return allTracks;
   }, [allTracks, libraryFilter, searchQuery, isSearching]);
 
+  // Filenames that exist as vault copies anywhere in the full library.
+  // We use allTracks (not filtered) so a vault track outside the current
+  // search/filter still shadows its local duplicate in the visible list.
+  const vaultFileNames = useMemo(
+    () => new Set(
+      allTracks
+        .filter(t => t.source === 'vault' && t.fileName)
+        .map(t => t.fileName as string),
+    ),
+    [allTracks],
+  );
+
+  // Hide local tracks that are shadowed by a vault copy (same fileName).
+  // Vault version is always the canonical one — it's encrypted cloud-stored.
+  const deduplicated = useMemo(
+    () => filtered.filter(t => !(t.source === 'local' && t.fileName && vaultFileNames.has(t.fileName))),
+    [filtered, vaultFileNames],
+  );
+
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
-    return [...filtered].sort((a, b) => {
+    return [...deduplicated].sort((a, b) => {
       const secondary = (x: Track, y: Track) => {
         const ar = (x.artist || '').localeCompare(y.artist || '');
         if (ar !== 0) return ar;
