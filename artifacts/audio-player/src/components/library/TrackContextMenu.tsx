@@ -72,71 +72,81 @@ export function TrackContextMenu({
   // ── Vault upload state ───────────────────────────────────────────────────
   const [vaultState, setVaultState] = useState<VaultUploadState>('idle');
   const [vaultError, setVaultError] = useState<string | null>(null);
+  const [vaultProgress, setVaultProgress] = useState<{ current: number; total: number } | null>(null);
 
-  const handleUploadToVault = async () => {
-    if (track.source === 'vault') return; // already in vault
+  const handleBulkUploadToVault = async (tracksToUpload: Track[]) => {
+    const uploadable = tracksToUpload.filter(t => t.source === 'local');
+    if (uploadable.length === 0) return;
+
     setVaultState('encrypting');
     setVaultError(null);
+    const total = uploadable.length;
+    setVaultProgress(total > 1 ? { current: 1, total } : null);
+
     try {
       // Ensure vault key is available — shows unlock modal if not in session.
       const masterKey = await requestVaultKey();
 
-      const file = await getFileFromPath(track.fileName, track.folderPath);
-      if (!file) throw new Error('Could not access local audio file.');
+      for (let i = 0; i < uploadable.length; i++) {
+        const t = uploadable[i];
+        if (total > 1) setVaultProgress({ current: i + 1, total });
 
-      const { ciphertext, encryptedKey, keyIv, dataIv } = await encryptFile(file, masterKey);
+        setVaultState('encrypting');
+        const file = await getFileFromPath(t.fileName, t.folderPath);
+        if (!file) throw new Error(`Could not access file: ${t.fileName}`);
 
-      setVaultState('uploading');
+        const { ciphertext, encryptedKey, keyIv, dataIv } = await encryptFile(file, masterKey);
 
-      // Reserve track + get presigned upload URL
-      const { trackId, uploadUrl } = await customFetch<{ trackId: number; objectKey: string; uploadUrl: string }>(
-        '/api/vault/upload-url',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title:             track.title,
-            artist:            track.artist,
-            album:             track.album,
-            year:              track.year,
-            genre:             track.genre,
-            duration:          track.duration,
-            trackNumber:       track.trackNumber,
-            fileName:          track.fileName,
-            vaultEncryptedKey: encryptedKey,
-            vaultKeyIv:        keyIv,
-            vaultDataIv:       dataIv,
-            blobSize:          ciphertext.byteLength,
-            contentType:       'application/octet-stream',
-          }),
-        },
-      );
+        setVaultState('uploading');
 
-      // Upload ciphertext directly to R2 via presigned URL (no Auth header — URL is self-authenticating)
-      const putResp = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: ciphertext,
-        headers: { 'Content-Type': 'application/octet-stream' },
-      });
-      if (!putResp.ok) throw new Error(`R2 upload failed: ${putResp.status}`);
+        const { trackId, uploadUrl } = await customFetch<{ trackId: number; objectKey: string; uploadUrl: string }>(
+          '/api/vault/upload-url',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title:             t.title,
+              artist:            t.artist,
+              album:             t.album,
+              year:              t.year,
+              genre:             t.genre,
+              duration:          t.duration,
+              trackNumber:       t.trackNumber,
+              fileName:          t.fileName,
+              vaultEncryptedKey: encryptedKey,
+              vaultKeyIv:        keyIv,
+              vaultDataIv:       dataIv,
+              blobSize:          ciphertext.byteLength,
+              contentType:       'application/octet-stream',
+            }),
+          },
+        );
 
-      // Confirm upload to flip vaultStatus → 'ready'
-      await customFetch(`/api/vault/confirm/${trackId}`, { method: 'POST' });
+        const putResp = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: ciphertext,
+          headers: { 'Content-Type': 'application/octet-stream' },
+        });
+        if (!putResp.ok) throw new Error(`R2 upload failed: ${putResp.status}`);
 
+        await customFetch(`/api/vault/confirm/${trackId}`, { method: 'POST' });
+      }
+
+      setVaultProgress(null);
       setVaultState('done');
       queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-
-      // Reset to idle after 2 seconds so the menu item looks normal again
       setTimeout(() => setVaultState('idle'), 2000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed';
-      // If user cancelled vault unlock, just reset silently
+      setVaultProgress(null);
       if (msg.includes('cancelled')) { setVaultState('idle'); return; }
       setVaultError(msg);
       setVaultState('error');
       setTimeout(() => { setVaultState('idle'); setVaultError(null); }, 4000);
     }
   };
+
+  const handleUploadToVault = () => handleBulkUploadToVault([track]);
 
   const handleRefreshLibrary = async () => {
     queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
@@ -236,6 +246,36 @@ export function TrackContextMenu({
               <ListEnd className="w-3.5 h-3.5 text-zinc-400" />
               Add {count} to end of queue
             </ContextMenuItem>
+
+            {/* Bulk vault upload — only if at least one selected track is local */}
+            {selectedTracks.some(t => t.source === 'local') && (
+              <>
+                <ContextMenuSeparator className="bg-zinc-700/50" />
+                <ContextMenuItem
+                  onClick={() => handleBulkUploadToVault(selectedTracks)}
+                  disabled={vaultState === 'encrypting' || vaultState === 'uploading'}
+                  className={clsx(
+                    'gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100',
+                    vaultState === 'done'  && 'text-emerald-400',
+                    vaultState === 'error' && 'text-red-400',
+                  )}
+                >
+                  {(vaultState === 'encrypting' || vaultState === 'uploading') && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
+                  {vaultState === 'done'  && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                  {vaultState === 'error' && <Lock className="w-3.5 h-3.5 text-red-400" />}
+                  {vaultState === 'idle'  && <Lock className="w-3.5 h-3.5 text-zinc-400" />}
+                  {vaultState === 'encrypting' && vaultProgress
+                    ? `Encrypting ${vaultProgress.current}/${vaultProgress.total}…`
+                    : vaultState === 'encrypting' ? 'Encrypting…' : null}
+                  {vaultState === 'uploading' && vaultProgress
+                    ? `Uploading ${vaultProgress.current}/${vaultProgress.total}…`
+                    : vaultState === 'uploading' ? 'Uploading…' : null}
+                  {vaultState === 'done'  && `Uploaded ${selectedTracks.filter(t => t.source === 'local').length} tracks!`}
+                  {vaultState === 'error' && (vaultError ? `Error: ${vaultError.slice(0, 28)}` : 'Upload failed')}
+                  {vaultState === 'idle'  && `Upload ${selectedTracks.filter(t => t.source === 'local').length} tracks to Vault`}
+                </ContextMenuItem>
+              </>
+            )}
 
             <ContextMenuSeparator className="bg-zinc-700/50" />
 
