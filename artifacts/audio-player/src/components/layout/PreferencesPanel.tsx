@@ -911,7 +911,7 @@ export function PreferencesPanel() {
                     <span className="text-xs font-semibold text-blue-400">Install as an app — runs anywhere</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    playd is a fully installable PWA. Add it to your home screen on iOS or Android, or install it from Chrome/Edge on desktop — it runs like a native app with no browser chrome, offline support, and OS media key integration.
+                    PLAYD is a fully installable PWA. Add it to your home screen on iOS or Android, or install it from Chrome/Edge on desktop — it runs like a native app with no browser chrome, offline support, and OS media key integration.
                   </p>
                 </div>
               </div>
@@ -920,7 +920,7 @@ export function PreferencesPanel() {
             <Separator className="border-border/20" />
 
             <section>
-              <h3 className="text-sm font-semibold mb-2">About playd</h3>
+              <h3 className="text-sm font-semibold mb-2">About PLAYD</h3>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 A foobar2000-inspired web audio player. Fully installable as a PWA.
                 Supports local files via the File System Access API (Chrome / Edge),

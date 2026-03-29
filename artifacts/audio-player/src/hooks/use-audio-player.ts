@@ -368,7 +368,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       state.pause();
       state.clearSleepTimer();
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('playd', { body: 'Sleep timer ended — playback stopped.' });
+        new Notification('PLAYD', { body: 'Sleep timer ended — playback stopped.' });
       }
       return;
     }

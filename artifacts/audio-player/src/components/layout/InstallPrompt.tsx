@@ -62,7 +62,7 @@ export function InstallPrompt() {
         <Download className="w-4 h-4 text-[#FF3C00]" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-zinc-100 leading-tight">Install playd</p>
+        <p className="text-sm font-medium text-zinc-100 leading-tight">Install PLAYD</p>
         <p className="text-xs text-zinc-500 leading-tight mt-0.5">Add to home screen for offline use</p>
       </div>
       <div className="flex items-center gap-2 shrink-0">

@@ -1,6 +1,6 @@
 {
-  "name": "playd",
-  "short_name": "playd",
+  "name": "PLAYD",
+  "short_name": "PLAYD",
   "description": "A foobar2000-style audio player with local files and streaming",
   "start_url": ".",
   "scope": ".",

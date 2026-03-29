@@ -39,7 +39,7 @@ export default function AuthPage() {
               <rect width="32" height="32" rx="6" fill="#0a0a0a"/>
               <path d="M4 16 Q6 10 8 16 Q10 22 12 16 Q14 10 16 16 Q18 22 20 16 Q22 10 24 16 Q26 22 28 16" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
             </svg>
-            <span className="text-xl font-bold text-white tracking-tight">playd</span>
+            <span className="text-xl font-bold text-white tracking-tight">PLAYD</span>
           </div>
           <p className="text-zinc-500 text-sm">Your personal music library</p>
         </div>
@@ -111,7 +111,7 @@ export default function AuthPage() {
 
           <div className="mt-5 pt-4 border-t border-zinc-800 text-center">
             <span className="text-zinc-500 text-xs">
-              {mode === "login" ? "New to playd?" : "Already have an account?"}{" "}
+              {mode === "login" ? "New to PLAYD?" : "Already have an account?"}{" "}
             </span>
             <button
               type="button"
