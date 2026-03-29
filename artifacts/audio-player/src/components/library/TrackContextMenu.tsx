@@ -31,6 +31,7 @@ import {
   Lock,
   Loader2,
   CheckCircle2,
+  Pencil,
 } from 'lucide-react';
 import { requestVaultKey, encryptFile } from '@/hooks/use-vault-crypto';
 
@@ -44,6 +45,7 @@ interface TrackContextMenuProps {
   onPlayNow: () => void;
   onPlaySelected?: () => void;
   onQueueSelected?: () => void;
+  onEditTags?: (track: Track) => void;
   onEditInClipStudio?: (track: Track) => void;
 }
 
@@ -55,6 +57,7 @@ export function TrackContextMenu({
   onPlayNow,
   onPlaySelected,
   onQueueSelected,
+  onEditTags,
   onEditInClipStudio,
 }: TrackContextMenuProps) {
   const {
@@ -347,6 +350,20 @@ export function TrackContextMenu({
                 Go to Album
                 <span className="ml-auto text-[10px] text-zinc-500 truncate max-w-[80px]">{track.album}</span>
               </ContextMenuItem>
+            )}
+
+            {/* Edit Tags */}
+            {onEditTags && (
+              <>
+                <ContextMenuSeparator className="bg-zinc-700/50" />
+                <ContextMenuItem
+                  onClick={() => onEditTags(track)}
+                  className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
+                >
+                  <Pencil className="w-3.5 h-3.5 text-zinc-400" />
+                  Edit Tags…
+                </ContextMenuItem>
+              </>
             )}
 
             {/* Upload to Vault — local tracks only, not already in vault */}

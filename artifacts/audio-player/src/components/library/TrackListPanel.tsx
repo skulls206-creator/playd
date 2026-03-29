@@ -4,9 +4,10 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput, RefreshCw, Lock } from 'lucide-react';
+import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput, RefreshCw, Lock, Pencil } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
+import { TrackEditModal } from './TrackEditModal';
 import type { Track } from '@workspace/api-client-react';
 
 type SortCol = 'trackNumber' | 'title' | 'artist' | 'album' | 'duration' | 'year';
@@ -216,6 +217,9 @@ export function TrackListPanel({
 
   const [clearConfirm, setClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+
+  // ── Tag editor ───────────────────────────────────────────────────────────
+  const [editingTrack, setEditingTrack] = useState<Track | null>(null);
 
   // ── Multi-select ────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -689,6 +693,7 @@ export function TrackListPanel({
                     onQueueSelected={() => {
                       ctxTracks.forEach(t => addToQueueEnd(t));
                     }}
+                    onEditTags={(t) => setEditingTrack(t)}
                     onEditInClipStudio={onEditInClipStudio}
                   >
                     <div
@@ -758,7 +763,7 @@ export function TrackListPanel({
                         )}
                       </div>
 
-                      {/* Right: Vault badge + RG badge + Duration — pinned at right edge */}
+                      {/* Right: Vault badge + RG badge + Edit + Duration — pinned at right edge */}
                       <div className="shrink-0 flex items-center gap-1.5 pl-1">
                         {track.source === 'vault' && (
                           <Lock
@@ -774,6 +779,14 @@ export function TrackListPanel({
                             RG
                           </span>
                         )}
+                        {/* Pencil — edit tags, visible on row hover */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingTrack(track); }}
+                          className="hidden group-hover:flex items-center justify-center w-5 h-5 rounded hover:bg-white/10 text-zinc-500 hover:text-zinc-200 transition-colors shrink-0"
+                          title="Edit tags"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
                         <div className="w-14 text-right">
                           {(track.duration ?? 0) > 0 ? (
                             <span className={clsx(
@@ -796,6 +809,13 @@ export function TrackListPanel({
           </div>
         </ScrollArea>
       </div>
+
+      {/* Tag editor modal — single mount point for the whole list */}
+      <TrackEditModal
+        track={editingTrack}
+        open={editingTrack !== null}
+        onClose={() => setEditingTrack(null)}
+      />
 
       {/* Status bar */}
       <div className="h-6 border-t border-border bg-black/20 flex items-center px-3 gap-4 shrink-0 select-none">
