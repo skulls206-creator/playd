@@ -9,7 +9,8 @@ setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
 
 export interface AuthUser {
   id: number;
-  email: string;
+  username: string | null;
+  email: string | null;
   displayName: string | null;
   createdAt: string;
 }
@@ -21,8 +22,8 @@ interface AuthState {
   isAuthenticated: boolean;
 
   initialize: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName?: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
+  register: (username: string, password: string, email?: string, displayName?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -38,7 +39,7 @@ async function apiFetch<T>(path: string, options?: RequestInit, token?: string |
   return res.json();
 }
 
-export const useAuth = create<AuthState>((set, get) => ({
+export const useAuth = create<AuthState>((set) => ({
   user: null,
   token: null,
   isLoading: true,
@@ -60,19 +61,19 @@ export const useAuth = create<AuthState>((set, get) => ({
     }
   },
 
-  login: async (email, password) => {
+  login: async (identifier, password) => {
     const { token, user } = await apiFetch<{ token: string; user: AuthUser }>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, password }),
     });
     localStorage.setItem(TOKEN_KEY, token);
     set({ user, token, isAuthenticated: true });
   },
 
-  register: async (email, password, displayName) => {
+  register: async (username, password, email, displayName) => {
     const { token, user } = await apiFetch<{ token: string; user: AuthUser }>("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, password, displayName }),
+      body: JSON.stringify({ username, password, email: email || undefined, displayName: displayName || undefined }),
     });
     localStorage.setItem(TOKEN_KEY, token);
     set({ user, token, isAuthenticated: true });

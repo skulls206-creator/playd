@@ -6,7 +6,7 @@ const JWT_EXPIRES_IN = "30d";
 
 export interface AuthPayload {
   userId: number;
-  email: string;
+  email?: string;
 }
 
 declare global {

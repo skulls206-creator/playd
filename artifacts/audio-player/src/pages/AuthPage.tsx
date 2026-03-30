@@ -5,6 +5,8 @@ type Mode = "login" | "register";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<Mode>("login");
+  const [identifier, setIdentifier] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -12,15 +14,25 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const { login, register } = useAuth();
 
+  function switchMode(next: Mode) {
+    setMode(next);
+    setError(null);
+    setIdentifier("");
+    setUsername("");
+    setEmail("");
+    setPassword("");
+    setDisplayName("");
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
       if (mode === "login") {
-        await login(email, password);
+        await login(identifier, password);
       } else {
-        await register(email, password, displayName || undefined);
+        await register(username, password, email || undefined, displayName || undefined);
       }
     } catch (err: any) {
       setError(err?.message ?? "Something went wrong");
@@ -85,32 +97,66 @@ export default function AuthPage() {
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "register" && (
+            {mode === "login" ? (
               <div>
-                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Display name (optional)</label>
+                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Username or email</label>
                 <input
                   type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="e.g. Alex"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="your_username or you@example.com"
+                  required
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 transition-colors"
-                  autoComplete="name"
+                  autoComplete="username"
                 />
               </div>
-            )}
+            ) : (
+              <>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Username</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="your_username"
+                    required
+                    pattern="[a-zA-Z0-9._\-]{3,30}"
+                    title="3–30 characters: letters, numbers, . _ -"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 transition-colors"
+                    autoComplete="username"
+                  />
+                  <p className="text-zinc-600 text-xs mt-1">Letters, numbers, . _ - allowed</p>
+                </div>
 
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 transition-colors"
-                autoComplete="email"
-              />
-            </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1.5 font-medium">
+                    Email <span className="text-zinc-600 font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 transition-colors"
+                    autoComplete="email"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1.5 font-medium">
+                    Display name <span className="text-zinc-600 font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="e.g. Alex"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 transition-colors"
+                    autoComplete="name"
+                  />
+                </div>
+              </>
+            )}
 
             <div>
               <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Password</label>
@@ -149,7 +195,7 @@ export default function AuthPage() {
             </span>
             <button
               type="button"
-              onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(null); }}
+              onClick={() => switchMode(mode === "login" ? "register" : "login")}
               className="text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors"
             >
               {mode === "login" ? "Create an account" : "Sign in"}
