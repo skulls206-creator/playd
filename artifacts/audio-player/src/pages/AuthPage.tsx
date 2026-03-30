@@ -35,9 +35,41 @@ export default function AuthPage() {
         {/* Logo / branding */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="32" height="32" rx="6" fill="#0a0a0a"/>
-              <path d="M4 16 Q6 10 8 16 Q10 22 12 16 Q14 10 16 16 Q18 22 20 16 Q22 10 24 16 Q26 22 28 16" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            <svg width="36" height="36" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <radialGradient id="abg" cx="50%" cy="45%" r="65%">
+                  <stop offset="0%" stopColor="#1a0f3a"/>
+                  <stop offset="100%" stopColor="#07091a"/>
+                </radialGradient>
+                <linearGradient id="agem" x1="25%" y1="20%" x2="80%" y2="80%">
+                  <stop offset="0%"   stopColor="#e0aaff"/>
+                  <stop offset="30%"  stopColor="#c026d3"/>
+                  <stop offset="70%"  stopColor="#7e22ce"/>
+                  <stop offset="100%" stopColor="#3b0764"/>
+                </linearGradient>
+                <linearGradient id="arim" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%"   stopColor="#f0abfc"/>
+                  <stop offset="50%"  stopColor="#a855f7"/>
+                  <stop offset="100%" stopColor="#6b21a8" stopOpacity="0.4"/>
+                </linearGradient>
+                <radialGradient id="aspec" cx="35%" cy="28%" r="38%">
+                  <stop offset="0%"   stopColor="white" stopOpacity="0.95"/>
+                  <stop offset="55%"  stopColor="white" stopOpacity="0.15"/>
+                  <stop offset="100%" stopColor="white" stopOpacity="0"/>
+                </radialGradient>
+                <filter id="aamb" x="-80%" y="-80%" width="260%" height="260%">
+                  <feGaussianBlur stdDeviation="22"/>
+                </filter>
+                <clipPath id="aframe">
+                  <rect width="180" height="180" rx="38"/>
+                </clipPath>
+              </defs>
+              <rect width="180" height="180" rx="38" fill="url(#abg)"/>
+              <ellipse cx="96" cy="92" rx="72" ry="64" fill="#9333ea" opacity="0.35" filter="url(#aamb)" clipPath="url(#aframe)"/>
+              <polygon points="38,36 38,144 148,90" fill="#c084fc" opacity="0.45" filter="url(#aamb)" clipPath="url(#aframe)"/>
+              <polygon points="38,36 38,144 148,90" fill="url(#agem)" stroke="url(#arim)" strokeWidth="2" strokeLinejoin="round"/>
+              <polygon points="38,36 38,144 148,90" fill="url(#aspec)"/>
+              <circle cx="68" cy="50" r="2.5" fill="white" opacity="0.95"/>
             </svg>
             <span className="text-xl font-bold text-white tracking-tight">PLAYD</span>
           </div>

@@ -1,5 +1,16 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "jGL15ZmjEc71mCTULqc-e"
+uri = "file://artifacts/audio-player/public/icons/icon-512.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "JHWdDEPsopL4NMzegZF-O"
+uri = "file://artifacts/audio-player/public/icons/icon-512-maskable.png"
+type = "image"
+title = "generated_image"
 
 [[outputs]]
 id = "6F5uQRSVXY5oRLU4zZoD-"

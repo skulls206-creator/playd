@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
-  Music2, ListMusic, Settings, Search,
+  ListMusic, Settings, Search,
   Library, Disc3, User, ChevronDown, ChevronRight, X, LogOut, Download, FileText,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -95,7 +95,39 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
       <div className="p-3 border-b border-border space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-base font-bold tracking-tight text-primary flex items-center gap-2">
-            <Music2 className="w-5 h-5" />
+            <svg width="22" height="22" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <radialGradient id="sbg" cx="50%" cy="45%" r="65%">
+                  <stop offset="0%" stopColor="#1a0f3a"/>
+                  <stop offset="100%" stopColor="#07091a"/>
+                </radialGradient>
+                <linearGradient id="sgem" x1="25%" y1="20%" x2="80%" y2="80%">
+                  <stop offset="0%"   stopColor="#e0aaff"/>
+                  <stop offset="30%"  stopColor="#c026d3"/>
+                  <stop offset="70%"  stopColor="#7e22ce"/>
+                  <stop offset="100%" stopColor="#3b0764"/>
+                </linearGradient>
+                <linearGradient id="srim" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%"   stopColor="#f0abfc"/>
+                  <stop offset="50%"  stopColor="#a855f7"/>
+                  <stop offset="100%" stopColor="#6b21a8" stopOpacity="0.4"/>
+                </linearGradient>
+                <radialGradient id="sspec" cx="35%" cy="28%" r="38%">
+                  <stop offset="0%"   stopColor="white" stopOpacity="0.9"/>
+                  <stop offset="55%"  stopColor="white" stopOpacity="0.1"/>
+                  <stop offset="100%" stopColor="white" stopOpacity="0"/>
+                </radialGradient>
+                <filter id="samb" x="-80%" y="-80%" width="260%" height="260%">
+                  <feGaussianBlur stdDeviation="22"/>
+                </filter>
+              </defs>
+              <rect width="180" height="180" rx="38" fill="url(#sbg)"/>
+              <ellipse cx="96" cy="92" rx="72" ry="64" fill="#9333ea" opacity="0.35" filter="url(#samb)"/>
+              <polygon points="38,36 38,144 148,90" fill="#c084fc" opacity="0.4" filter="url(#samb)"/>
+              <polygon points="38,36 38,144 148,90" fill="url(#sgem)" stroke="url(#srim)" strokeWidth="2" strokeLinejoin="round"/>
+              <polygon points="38,36 38,144 148,90" fill="url(#sspec)"/>
+              <circle cx="68" cy="50" r="2.5" fill="white" opacity="0.9"/>
+            </svg>
             PLAYD
           </h1>
           {onClose && (
