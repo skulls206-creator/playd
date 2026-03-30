@@ -446,6 +446,21 @@ export function AudioEngine() {
         }
       }
 
+      // Repeat-one: seek directly on the audio element and replay immediately.
+      // We can't rely on store side-effects here because currentTrack and
+      // isPlaying haven't changed, so neither useEffect would re-fire.
+      // The objectUrl / local handle is still valid — it's only revoked when a
+      // *different* track loads, so this is safe for both local and vault tracks.
+      const { repeatMode } = useAudioPlayer.getState();
+      if (repeatMode === 'one') {
+        const actDeck = slot === 'A' ? a : b;
+        actDeck.audio.currentTime = 0;
+        useAudioPlayer.getState().seek(0);
+        ctx?.resume();
+        actDeck.audio.play().catch(() => {});
+        return;
+      }
+
       const { _trackEnded } = useAudioPlayer.getState();
       _trackEnded();
     };
