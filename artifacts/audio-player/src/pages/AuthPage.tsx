@@ -38,38 +38,40 @@ export default function AuthPage() {
             <svg width="36" height="36" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <radialGradient id="abg" cx="50%" cy="45%" r="65%">
-                  <stop offset="0%" stopColor="#1a0f3a"/>
+                  <stop offset="0%" stopColor="#180d38"/>
                   <stop offset="100%" stopColor="#07091a"/>
                 </radialGradient>
-                <linearGradient id="agem" x1="25%" y1="20%" x2="80%" y2="80%">
+                <linearGradient id="abar" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%"   stopColor="#e0aaff"/>
-                  <stop offset="30%"  stopColor="#c026d3"/>
+                  <stop offset="35%"  stopColor="#c026d3"/>
                   <stop offset="70%"  stopColor="#7e22ce"/>
-                  <stop offset="100%" stopColor="#3b0764"/>
+                  <stop offset="100%" stopColor="#3b0764" stopOpacity="0.6"/>
                 </linearGradient>
-                <linearGradient id="arim" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%"   stopColor="#f0abfc"/>
-                  <stop offset="50%"  stopColor="#a855f7"/>
-                  <stop offset="100%" stopColor="#6b21a8" stopOpacity="0.4"/>
-                </linearGradient>
-                <radialGradient id="aspec" cx="35%" cy="28%" r="38%">
+                <radialGradient id="acap" cx="50%" cy="30%" r="55%">
                   <stop offset="0%"   stopColor="white" stopOpacity="0.95"/>
-                  <stop offset="55%"  stopColor="white" stopOpacity="0.15"/>
-                  <stop offset="100%" stopColor="white" stopOpacity="0"/>
+                  <stop offset="60%"  stopColor="#e0aaff" stopOpacity="0.4"/>
+                  <stop offset="100%" stopColor="#9333ea" stopOpacity="0"/>
                 </radialGradient>
-                <filter id="aamb" x="-80%" y="-80%" width="260%" height="260%">
-                  <feGaussianBlur stdDeviation="22"/>
+                <filter id="aglow" x="-60%" y="-60%" width="220%" height="220%">
+                  <feGaussianBlur stdDeviation="18"/>
+                </filter>
+                <filter id="acapglow" x="-80%" y="-80%" width="260%" height="260%">
+                  <feGaussianBlur stdDeviation="6"/>
                 </filter>
                 <clipPath id="aframe">
                   <rect width="180" height="180" rx="38"/>
                 </clipPath>
               </defs>
               <rect width="180" height="180" rx="38" fill="url(#abg)"/>
-              <ellipse cx="96" cy="92" rx="72" ry="64" fill="#9333ea" opacity="0.35" filter="url(#aamb)" clipPath="url(#aframe)"/>
-              <polygon points="38,36 38,144 148,90" fill="#c084fc" opacity="0.45" filter="url(#aamb)" clipPath="url(#aframe)"/>
-              <polygon points="38,36 38,144 148,90" fill="url(#agem)" stroke="url(#arim)" strokeWidth="2" strokeLinejoin="round"/>
-              <polygon points="38,36 38,144 148,90" fill="url(#aspec)"/>
-              <circle cx="68" cy="50" r="2.5" fill="white" opacity="0.95"/>
+              <rect x="42" y="72" width="28" height="90" rx="14" fill="#a855f7" opacity="0.5" filter="url(#aglow)" clipPath="url(#aframe)"/>
+              <rect x="76" y="28" width="28" height="134" rx="14" fill="#a855f7" opacity="0.5" filter="url(#aglow)" clipPath="url(#aframe)"/>
+              <rect x="110" y="94" width="28" height="68" rx="14" fill="#a855f7" opacity="0.5" filter="url(#aglow)" clipPath="url(#aframe)"/>
+              <rect x="44" y="74" width="24" height="86" rx="12" fill="url(#abar)" stroke="#c084fc" strokeWidth="1.5" strokeOpacity="0.7"/>
+              <ellipse cx="56" cy="76" rx="10" ry="7" fill="url(#acap)" filter="url(#acapglow)"/>
+              <rect x="78" y="30" width="24" height="130" rx="12" fill="url(#abar)" stroke="#c084fc" strokeWidth="1.5" strokeOpacity="0.7"/>
+              <ellipse cx="90" cy="32" rx="10" ry="7" fill="url(#acap)" filter="url(#acapglow)"/>
+              <rect x="112" y="96" width="24" height="64" rx="12" fill="url(#abar)" stroke="#c084fc" strokeWidth="1.5" strokeOpacity="0.7"/>
+              <ellipse cx="124" cy="98" rx="10" ry="7" fill="url(#acap)" filter="url(#acapglow)"/>
             </svg>
             <span className="text-xl font-bold text-white tracking-tight">PLAYD</span>
           </div>
