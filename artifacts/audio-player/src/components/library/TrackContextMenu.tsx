@@ -4,7 +4,16 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { openMiniPlayer } from '@/hooks/use-mini-player';
 import { useQueryClient } from '@tanstack/react-query';
-import { getListTracksQueryKey, customFetch } from '@workspace/api-client-react';
+import {
+  getListTracksQueryKey,
+  getGetPlaylistTracksQueryKey,
+  getListPlaylistsQueryKey,
+  customFetch,
+  useListPlaylists,
+  useCreatePlaylist,
+  useAddTrackToPlaylist,
+  useRemoveTrackFromPlaylist,
+} from '@workspace/api-client-react';
 import { clsx } from 'clsx';
 import {
   ContextMenu,
@@ -32,6 +41,8 @@ import {
   Loader2,
   CheckCircle2,
   Pencil,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { requestVaultKey, encryptFile } from '@/hooks/use-vault-crypto';
 
@@ -47,6 +58,7 @@ interface TrackContextMenuProps {
   onQueueSelected?: () => void;
   onEditTags?: (track: Track) => void;
   onEditInClipStudio?: (track: Track) => void;
+  onRemoveFromPlaylist?: (track: Track) => void;
 }
 
 export function TrackContextMenu({
@@ -59,6 +71,7 @@ export function TrackContextMenu({
   onQueueSelected,
   onEditTags,
   onEditInClipStudio,
+  onRemoveFromPlaylist,
 }: TrackContextMenuProps) {
   const {
     addToQueueNext,
@@ -68,9 +81,62 @@ export function TrackContextMenu({
     isQueueOpen,
     toggleQueue,
     isMiniPlayer,
+    libraryFilter,
   } = useAudioPlayer();
   const { rescanAll, isScanning, getFileFromPath } = useFileSystem();
   const queryClient = useQueryClient();
+
+  // ── Playlist hooks ────────────────────────────────────────────────────────
+  const { data: playlists = [] } = useListPlaylists();
+  const addTrackToPlaylist = useAddTrackToPlaylist();
+  const removeTrackFromPlaylist = useRemoveTrackFromPlaylist();
+  const createPlaylist = useCreatePlaylist();
+  const [addingToPlaylist, setAddingToPlaylist] = useState<number | null>(null);
+
+  const handleAddToPlaylist = (playlistId: number) => {
+    setAddingToPlaylist(playlistId);
+    addTrackToPlaylist.mutate(
+      { id: playlistId, data: { trackId: track.id } },
+      {
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: getGetPlaylistTracksQueryKey(playlistId) });
+          setAddingToPlaylist(null);
+        },
+      },
+    );
+  };
+
+  const handleCreateAndAddToPlaylist = () => {
+    const name = `New Playlist`;
+    createPlaylist.mutate(
+      { data: { name } },
+      {
+        onSuccess: (pl) => {
+          queryClient.invalidateQueries({ queryKey: getListPlaylistsQueryKey() });
+          addTrackToPlaylist.mutate(
+            { id: pl.id, data: { trackId: track.id } },
+            { onSettled: () => queryClient.invalidateQueries({ queryKey: getGetPlaylistTracksQueryKey(pl.id) }) },
+          );
+          // Navigate to the new playlist
+          setLibraryFilter({ type: 'playlist', value: String(pl.id), label: pl.name });
+        },
+      },
+    );
+  };
+
+  const handleRemoveFromPlaylist = () => {
+    if (libraryFilter.type !== 'playlist') return;
+    const playlistId = Number(libraryFilter.value);
+    removeTrackFromPlaylist.mutate(
+      { id: playlistId, trackId: track.id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetPlaylistTracksQueryKey(playlistId) });
+        },
+      },
+    );
+    onRemoveFromPlaylist?.(track);
+  };
 
   // ── Vault upload state ───────────────────────────────────────────────────
   const [vaultState, setVaultState] = useState<VaultUploadState>('idle');
@@ -349,6 +415,52 @@ export function TrackContextMenu({
                 <Disc3 className="w-3.5 h-3.5 text-zinc-400" />
                 Go to Album
                 <span className="ml-auto text-[10px] text-zinc-500 truncate max-w-[80px]">{track.album}</span>
+              </ContextMenuItem>
+            )}
+
+            {/* Add to Playlist */}
+            <ContextMenuSeparator className="bg-zinc-700/50" />
+            <ContextMenuSub>
+              <ContextMenuSubTrigger className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100 data-[state=open]:bg-white/8">
+                <ListMusic className="w-3.5 h-3.5 text-zinc-400" />
+                Add to Playlist
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-52 bg-zinc-900 border-zinc-700 text-zinc-100 shadow-2xl max-h-64 overflow-y-auto">
+                {playlists.length === 0 && (
+                  <div className="px-3 py-2 text-[10px] text-zinc-500 italic">No playlists yet</div>
+                )}
+                {playlists.map(pl => (
+                  <ContextMenuItem
+                    key={pl.id}
+                    onClick={() => handleAddToPlaylist(pl.id)}
+                    disabled={addingToPlaylist === pl.id}
+                    className="gap-2 cursor-pointer text-xs focus:bg-white/8 focus:text-zinc-100"
+                  >
+                    {addingToPlaylist === pl.id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                      : <ListMusic className="w-3.5 h-3.5 text-zinc-500" />}
+                    <span className="truncate">{pl.name}</span>
+                  </ContextMenuItem>
+                ))}
+                <ContextMenuSeparator className="bg-zinc-700/50" />
+                <ContextMenuItem
+                  onClick={handleCreateAndAddToPlaylist}
+                  className="gap-2 cursor-pointer text-xs focus:bg-white/8 text-primary focus:text-primary"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New playlist with this track
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+
+            {/* Remove from Playlist — only visible when in a playlist view */}
+            {libraryFilter.type === 'playlist' && (
+              <ContextMenuItem
+                onClick={handleRemoveFromPlaylist}
+                className="gap-2.5 cursor-pointer focus:bg-white/8 text-red-400 focus:text-red-300"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Remove from Playlist
               </ContextMenuItem>
             )}
 

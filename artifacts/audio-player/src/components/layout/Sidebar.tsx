@@ -1,15 +1,31 @@
-import { useState, useMemo } from 'react';
-import { useListTracks, useListPlaylists } from '@workspace/api-client-react';
+import { useState, useMemo, useRef } from 'react';
+import {
+  useListTracks,
+  useListPlaylists,
+  useCreatePlaylist,
+  useUpdatePlaylist,
+  useDeletePlaylist,
+  getListPlaylistsQueryKey,
+} from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useAuth } from '@/hooks/use-auth';
 import { usePwaInstall } from '@/hooks/use-pwa-install';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
+import {
   ListMusic, Settings, Search,
   Library, Disc3, User, ChevronDown, ChevronRight, X, LogOut, Download, FileText,
+  Plus, Pencil, Trash2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -26,10 +42,75 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   const { libraryFilter, setLibraryFilter, togglePrefs, isLyricsOpen, toggleLyrics, searchQuery, setSearchQuery } = useAudioPlayer();
   const { user, logout } = useAuth();
   const { canInstall, install } = usePwaInstall();
+  const queryClient = useQueryClient();
+
+  const createPlaylist = useCreatePlaylist();
+  const updatePlaylist = useUpdatePlaylist();
+  const deletePlaylist = useDeletePlaylist();
 
   const [openSections, setOpenSections] = useState<Record<NavSection, boolean>>({
     artists: true, albums: false, playlists: true,
   });
+
+  // ── New playlist inline creation ─────────────────────────────────────────
+  const [isCreating, setIsCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const newInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Inline rename state ───────────────────────────────────────────────────
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartCreate = () => {
+    setOpenSections(prev => ({ ...prev, playlists: true }));
+    setIsCreating(true);
+    setNewName('');
+    setTimeout(() => newInputRef.current?.focus(), 50);
+  };
+
+  const handleConfirmCreate = () => {
+    const name = newName.trim();
+    if (!name) { setIsCreating(false); return; }
+    createPlaylist.mutate(
+      { data: { name } },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: getListPlaylistsQueryKey() }) },
+    );
+    setIsCreating(false);
+    setNewName('');
+  };
+
+  const handleStartRename = (id: number, currentName: string) => {
+    setRenamingId(id);
+    setRenameValue(currentName);
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  };
+
+  const handleConfirmRename = (id: number) => {
+    const name = renameValue.trim();
+    if (name) {
+      updatePlaylist.mutate(
+        { id, data: { name } },
+        { onSettled: () => queryClient.invalidateQueries({ queryKey: getListPlaylistsQueryKey() }) },
+      );
+    }
+    setRenamingId(null);
+  };
+
+  const handleDeletePlaylist = (id: number) => {
+    deletePlaylist.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListPlaylistsQueryKey() });
+          // If currently viewing this playlist, reset to All Songs
+          if (libraryFilter.type === 'playlist' && libraryFilter.value === String(id)) {
+            setLibraryFilter({ type: 'all', label: 'All Songs' });
+          }
+        },
+      },
+    );
+  };
 
   const toggleSection = (s: NavSection) =>
     setOpenSections(prev => ({ ...prev, [s]: !prev[s] }));
@@ -238,19 +319,96 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
 
           {/* Playlists */}
           <div className="px-2">
-            <SectionHeader label="Playlists" section="playlists" icon={ListMusic} />
+            {/* Section header row with "+" button */}
+            <div className="flex items-center">
+              <button
+                onClick={() => toggleSection('playlists')}
+                className="flex-1 flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {openSections.playlists
+                  ? <ChevronDown className="w-3 h-3" />
+                  : <ChevronRight className="w-3 h-3" />}
+                <ListMusic className="w-3 h-3" />
+                Playlists
+              </button>
+              <button
+                onClick={handleStartCreate}
+                title="New playlist"
+                className="p-1 text-muted-foreground hover:text-primary transition-colors rounded-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
             {openSections.playlists && (
               <div className="mt-0.5 space-y-0.5">
+                {/* Inline new-playlist input */}
+                {isCreating && (
+                  <div className="pl-4 pr-1">
+                    <input
+                      ref={newInputRef}
+                      value={newName}
+                      onChange={e => setNewName(e.target.value)}
+                      onBlur={handleConfirmCreate}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleConfirmCreate();
+                        if (e.key === 'Escape') setIsCreating(false);
+                      }}
+                      placeholder="Playlist name…"
+                      className="w-full bg-black/30 border border-primary/40 rounded-sm px-2 py-0.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/80"
+                    />
+                  </div>
+                )}
+
                 {filteredPlaylists.map(pl => (
-                  <NavItem
-                    key={pl.id}
-                    label={pl.name}
-                    indent
-                    active={libraryFilter.type === 'playlist' && libraryFilter.value === String(pl.id)}
-                    onClick={() => setLibraryFilter({ type: 'playlist', value: String(pl.id), label: pl.name })}
-                  />
+                  <ContextMenu key={pl.id}>
+                    <ContextMenuTrigger asChild>
+                      <div>
+                        {renamingId === pl.id ? (
+                          <div className="pl-4 pr-1">
+                            <input
+                              ref={renameInputRef}
+                              value={renameValue}
+                              onChange={e => setRenameValue(e.target.value)}
+                              onBlur={() => handleConfirmRename(pl.id)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') handleConfirmRename(pl.id);
+                                if (e.key === 'Escape') setRenamingId(null);
+                              }}
+                              className="w-full bg-black/30 border border-primary/40 rounded-sm px-2 py-0.5 text-xs text-foreground outline-none focus:border-primary/80"
+                            />
+                          </div>
+                        ) : (
+                          <NavItem
+                            label={pl.name}
+                            indent
+                            active={libraryFilter.type === 'playlist' && libraryFilter.value === String(pl.id)}
+                            onClick={() => setLibraryFilter({ type: 'playlist', value: String(pl.id), label: pl.name })}
+                          />
+                        )}
+                      </div>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-44 bg-zinc-900 border-zinc-700 text-zinc-100 shadow-2xl">
+                      <ContextMenuItem
+                        className="gap-2 cursor-pointer text-xs focus:bg-white/8 focus:text-zinc-100"
+                        onClick={() => handleStartRename(pl.id, pl.name)}
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-zinc-400" />
+                        Rename
+                      </ContextMenuItem>
+                      <ContextMenuSeparator className="bg-zinc-700/50" />
+                      <ContextMenuItem
+                        className="gap-2 cursor-pointer text-xs focus:bg-white/8 text-red-400 focus:text-red-300"
+                        onClick={() => handleDeletePlaylist(pl.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete playlist
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
                 ))}
-                {filteredPlaylists.length === 0 && (
+
+                {filteredPlaylists.length === 0 && !isCreating && (
                   <p className="pl-6 text-[10px] text-muted-foreground/50 italic py-1">No playlists</p>
                 )}
               </div>

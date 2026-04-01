@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useListTracks, getListTracksQueryKey, customFetch } from '@workspace/api-client-react';
+import { useListTracks, useGetPlaylistTracks, getListTracksQueryKey, customFetch } from '@workspace/api-client-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useQueryClient } from '@tanstack/react-query';
@@ -158,6 +158,13 @@ export function TrackListPanel({
 }: TrackListPanelProps = {}) {
   const { data: allTracks = [] } = useListTracks();
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter, searchQuery, setSearchQuery } = useAudioPlayer();
+
+  // Fetch tracks for the active playlist (disabled when not in a playlist view)
+  const activePlaylistId = libraryFilter.type === 'playlist' ? Number(libraryFilter.value) : undefined;
+  const { data: playlistTracks = [] } = useGetPlaylistTracks(
+    activePlaylistId as number,
+    { query: { enabled: activePlaylistId !== undefined } },
+  );
   const { isScanning, scanProgress, scanStatus, addFolder, scanFileList, importDroppedItems, rescanAll, getStoredHandles } = useFileSystem();
   const queryClient = useQueryClient();
 
@@ -287,8 +294,9 @@ export function TrackListPanel({
     if (libraryFilter.type === 'all') return allTracks;
     if (libraryFilter.type === 'artist') return allTracks.filter(t => t.artist === libraryFilter.value);
     if (libraryFilter.type === 'album') return allTracks.filter(t => t.album === libraryFilter.value);
+    if (libraryFilter.type === 'playlist') return playlistTracks;
     return allTracks;
-  }, [allTracks, libraryFilter, searchQuery, isSearching]);
+  }, [allTracks, playlistTracks, libraryFilter, searchQuery, isSearching]);
 
   // Filenames that exist as vault copies anywhere in the full library.
   // We use allTracks (not filtered) so a vault track outside the current
