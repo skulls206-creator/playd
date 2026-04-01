@@ -2,6 +2,14 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
+// Typed interface for the Periodic Background Sync API (experimental, Chrome/Edge only)
+interface PeriodicSyncManager {
+  register(tag: string, options?: { minInterval?: number }): Promise<void>;
+}
+interface ServiceWorkerRegistrationWithPeriodicSync extends ServiceWorkerRegistration {
+  periodicSync: PeriodicSyncManager;
+}
+
 // Register service worker for PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
@@ -16,7 +24,8 @@ if ('serviceWorker' in navigator) {
         try {
           const status = await navigator.permissions.query({ name: 'periodic-background-sync' as PermissionName });
           if (status.state === 'granted') {
-            await (reg as any).periodicSync.register('playd-periodic-sync', { minInterval: 24 * 60 * 60 * 1000 });
+            const regWithSync = reg as ServiceWorkerRegistrationWithPeriodicSync;
+            await regWithSync.periodicSync.register('playd-periodic-sync', { minInterval: 24 * 60 * 60 * 1000 });
           }
         } catch { /* periodic sync not available */ }
       }
