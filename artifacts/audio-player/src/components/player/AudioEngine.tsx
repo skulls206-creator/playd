@@ -47,6 +47,7 @@ export function AudioEngine() {
   const active = useRef<'A' | 'B'>('A');
   const xfading = useRef(false);
   const xfadeNextIdx = useRef<number | null>(null); // index pinned when crossfade starts
+  const preloadedRef = useRef(false);               // idle deck has next track loaded, not yet playing
   const ctxRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
   const rgGainRef = useRef<GainNode | null>(null);
@@ -356,29 +357,29 @@ export function AudioEngine() {
     const b = deckB.current;
     if (!a || !b) return;
 
-    // Start crossfade when the active deck is close to ending
+    // Preload (and optionally crossfade) the next track when close to end.
+    // Always preloads at least PRELOAD_SEC before end even with no crossfade —
+    // this keeps the audio session alive through the transition on Android/iOS.
+    const PRELOAD_SEC = 5;
     const maybeCrossfade = (myDeck: Deck, otherDeck: Deck, slot: 'A' | 'B') => {
       if (active.current !== slot) return;
-      if (xfading.current) return;
+      if (xfading.current || preloadedRef.current) return; // already handling transition
+
       const secs = crossfadeSecRef.current;
-      if (secs <= 0) return;
-
       const remaining = myDeck.audio.duration - myDeck.audio.currentTime;
-      // Non-finite duration (live streams, some formats): skip crossfade silently
-      if (!isFinite(remaining) || remaining > secs || remaining <= 0) return;
+      // Non-finite duration (live streams, some formats): skip silently
+      if (!isFinite(remaining) || remaining <= 0) return;
 
-      // Peek at the next track without advancing the queue
+      // Trigger: whichever threshold comes first (preload or crossfade start)
+      const triggerAt = secs > 0 ? Math.max(secs, PRELOAD_SEC) : PRELOAD_SEC;
+      if (remaining > triggerAt) return;
+
       const state = useAudioPlayer.getState();
-
-      // Crossfade doesn't make sense in repeat-one mode (next track = same track)
       if (state.repeatMode === 'one') return;
-
-      // End-of-track sleep timer: let the track finish naturally so _trackEnded fires
       if (state.sleepTimerMode === 'track') return;
 
       let nextIdx = state.queueIndex + 1;
       if (state.isShuffle) {
-        // Avoid re-picking the track currently playing
         const cur = state.queueIndex;
         if (state.queue.length > 1) {
           do { nextIdx = Math.floor(Math.random() * state.queue.length); } while (nextIdx === cur);
@@ -393,32 +394,38 @@ export function AudioEngine() {
       const nextTrack = state.queue[nextIdx]?.track;
       if (!nextTrack) return;
 
-      // Pin the chosen index so handleEnded uses the exact same track
+      // Pin index so handleEnded uses the exact same track (shuffle-safe)
       xfadeNextIdx.current = nextIdx;
-      xfading.current = true;
-      const ctx = ctxRef.current!;
-      // Use the full configured crossfade duration for the ramp.
-      // If timeupdate fired a little late (remaining < crossfadeSec), the ramp still
-      // plays for the full duration — the old track ends naturally, handleEnded cancels
-      // its gain and pauses it, while the new track continues fading in to 1.
-      const fadeDur = crossfadeSecRef.current;
+      xfading.current = true; // block re-entry during async load
 
-      // Fire-and-forget async preload + ramp
       (async () => {
         const ok = await loadDeckFile.current(otherDeck, nextTrack);
-        if (!ok || !xfading.current) { xfading.current = false; return; }
+        if (!ok) { xfading.current = false; return; }
 
-        // Start idle deck at gain 0, ramp to 1 over the full crossfade duration
-        otherDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
-        otherDeck.crossGain.gain.setValueAtTime(0, ctx.currentTime);
-        otherDeck.crossGain.gain.linearRampToValueAtTime(1, ctx.currentTime + fadeDur);
-        ctx.resume();
-        otherDeck.audio.play().catch(() => {});
+        const ctx = ctxRef.current!;
 
-        // Ramp active deck from its current value down to 0
-        myDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
-        myDeck.crossGain.gain.setValueAtTime(myDeck.crossGain.gain.value, ctx.currentTime);
-        myDeck.crossGain.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeDur);
+        if (secs > 0) {
+          // ── Crossfade path: start idle deck playing with gain ramp ──────────
+          const fadeDur = crossfadeSecRef.current;
+          otherDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
+          otherDeck.crossGain.gain.setValueAtTime(0, ctx.currentTime);
+          otherDeck.crossGain.gain.linearRampToValueAtTime(1, ctx.currentTime + fadeDur);
+          await ctx.resume().catch(() => {});
+          otherDeck.audio.play().catch(() => {});
+          myDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
+          myDeck.crossGain.gain.setValueAtTime(myDeck.crossGain.gain.value, ctx.currentTime);
+          myDeck.crossGain.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeDur);
+          // xfading stays true; handleEnded will complete the swap
+        } else {
+          // ── Gapless preload path: track ready, NOT yet playing ──────────────
+          // handleEnded will instantly swap + play within the ended event,
+          // keeping the OS audio session alive with no gap.
+          otherDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
+          otherDeck.crossGain.gain.value = 0;
+          otherDeck.audio.pause();
+          xfading.current = false;
+          preloadedRef.current = true;
+        }
       })();
     };
 
@@ -427,6 +434,7 @@ export function AudioEngine() {
       if (active.current !== slot) return;
       const ctx = ctxRef.current;
 
+      // ── Case 1: Crossfade was in progress (both decks already playing) ──────
       if (xfading.current && ctx) {
         const oldActive = slot === 'A' ? a : b;
         swap();
@@ -434,9 +442,6 @@ export function AudioEngine() {
         oldActive.crossGain.gain.value = 0;
         oldActive.audio.pause();
         xfading.current = false;
-
-        // Use the exact same index that was peeked at crossfade start —
-        // prevents re-randomisation in shuffle mode.
         const pinnedIdx = xfadeNextIdx.current;
         xfadeNextIdx.current = null;
         if (pinnedIdx !== null) {
@@ -446,11 +451,36 @@ export function AudioEngine() {
         }
       }
 
-      // Repeat-one: seek directly on the audio element and replay immediately.
-      // We can't rely on store side-effects here because currentTrack and
-      // isPlaying haven't changed, so neither useEffect would re-fire.
-      // The objectUrl / local handle is still valid — it's only revoked when a
-      // *different* track loads, so this is safe for both local and vault tracks.
+      // ── Case 2: Gapless preload ready — instant swap, play immediately ──────
+      // Calling play() here (inside the ended event handler) keeps the OS audio
+      // session alive with no gap, which is what prevents Android from blocking
+      // the play() call on the next track.
+      if (preloadedRef.current) {
+        const oldActive = slot === 'A' ? a : b;
+        const idleDeck  = slot === 'A' ? b : a;
+        const pinnedIdx = xfadeNextIdx.current;
+        xfadeNextIdx.current = null;
+        preloadedRef.current = false;
+
+        swap();
+        oldActive.crossGain.gain.value = 0;
+        oldActive.audio.pause();
+        idleDeck.crossGain.gain.value = 1.0;
+
+        // Resume context then play — chained so play() fires after resume resolves
+        const doPlay = () => idleDeck.audio.play().catch(() => {});
+        ctx ? ctx.resume().then(doPlay).catch(doPlay) : doPlay();
+
+        if (pinnedIdx !== null) {
+          const { _advanceToIndex } = useAudioPlayer.getState();
+          _advanceToIndex(pinnedIdx);
+        } else {
+          useAudioPlayer.getState()._trackEnded();
+        }
+        return;
+      }
+
+      // ── Case 3: Repeat-one ───────────────────────────────────────────────────
       const { repeatMode } = useAudioPlayer.getState();
       if (repeatMode === 'one') {
         const actDeck = slot === 'A' ? a : b;
@@ -461,6 +491,9 @@ export function AudioEngine() {
         return;
       }
 
+      // ── Case 4: Fallback (very short track / preload didn't fire in time) ───
+      // Proactively resume the context now so it's ready before the async load.
+      ctx?.resume().catch(() => {});
       const { _trackEnded } = useAudioPlayer.getState();
       _trackEnded();
     };
@@ -556,9 +589,9 @@ export function AudioEngine() {
 
     // Normal load: cancel any in-progress crossfade, reset gains, load on active deck
     const doLoad = async () => {
-      if (xfading.current) {
-        xfading.current = false;
-      }
+      xfading.current = false;
+      preloadedRef.current = false;
+      xfadeNextIdx.current = null;
 
       const idleDeck = getIdle();
       activeDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
@@ -572,7 +605,14 @@ export function AudioEngine() {
 
       const { isPlaying: playing } = useAudioPlayer.getState();
       if (playing) {
-        ctx.resume();
+        // Await resume so the AudioContext is definitely running before play().
+        // On Android the context can be suspended in the background; calling
+        // play() before it resumes results in silent audio that looks like a pause.
+        if (ctx.state === 'suspended') {
+          try { await ctx.resume(); } catch { /* best-effort */ }
+        } else {
+          ctx.resume().catch(() => {});
+        }
         activeDeck.audio.play().catch((e: Error) => {
           console.warn('Autoplay prevented', e);
           // For vault tracks the decrypt chain is long enough that browsers may
@@ -598,11 +638,14 @@ export function AudioEngine() {
     const idle = getIdle();
     if (!act) return;
     if (isPlaying) {
-      ctxRef.current?.resume();
-      act.audio.play().catch(e => console.warn('Autoplay prevented', e));
-      if (xfading.current) idle?.audio.play().catch(() => {});
-      // Keep iOS audio session alive so the AudioContext is never suspended by the OS.
-      silentAudioRef.current?.play().catch(() => {});
+      const ctx = ctxRef.current;
+      const doPlay = () => {
+        act.audio.play().catch(e => console.warn('Autoplay prevented', e));
+        if (xfading.current) idle?.audio.play().catch(() => {});
+        silentAudioRef.current?.play().catch(() => {});
+      };
+      // Chain play() after resume() so the AudioContext is running first.
+      ctx ? ctx.resume().then(doPlay).catch(doPlay) : doPlay();
     } else {
       act.audio.pause();
       idle?.audio.pause();
