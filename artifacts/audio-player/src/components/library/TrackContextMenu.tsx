@@ -418,7 +418,21 @@ export function TrackContextMenu({
               </ContextMenuItem>
             )}
 
-            {/* Add to Playlist */}
+            {/* Edit Tags — below navigation, above playlist/vault */}
+            {onEditTags && (
+              <>
+                <ContextMenuSeparator className="bg-zinc-700/50" />
+                <ContextMenuItem
+                  onClick={() => onEditTags(track)}
+                  className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
+                >
+                  <Pencil className="w-3.5 h-3.5 text-zinc-400" />
+                  Edit Tags…
+                </ContextMenuItem>
+              </>
+            )}
+
+            {/* Add to Playlist + Remove from Playlist */}
             <ContextMenuSeparator className="bg-zinc-700/50" />
             <ContextMenuSub>
               <ContextMenuSubTrigger className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100 data-[state=open]:bg-white/8">
@@ -453,7 +467,7 @@ export function TrackContextMenu({
               </ContextMenuSubContent>
             </ContextMenuSub>
 
-            {/* Remove from Playlist — only visible when in a playlist view */}
+            {/* Remove from Playlist — only visible when inside a playlist view */}
             {libraryFilter.type === 'playlist' && (
               <ContextMenuItem
                 onClick={handleRemoveFromPlaylist}
@@ -462,20 +476,6 @@ export function TrackContextMenu({
                 <Trash2 className="w-3.5 h-3.5" />
                 Remove from Playlist
               </ContextMenuItem>
-            )}
-
-            {/* Edit Tags */}
-            {onEditTags && (
-              <>
-                <ContextMenuSeparator className="bg-zinc-700/50" />
-                <ContextMenuItem
-                  onClick={() => onEditTags(track)}
-                  className="gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100"
-                >
-                  <Pencil className="w-3.5 h-3.5 text-zinc-400" />
-                  Edit Tags…
-                </ContextMenuItem>
-              </>
             )}
 
             {/* Upload to Vault — local tracks only, not already in vault */}

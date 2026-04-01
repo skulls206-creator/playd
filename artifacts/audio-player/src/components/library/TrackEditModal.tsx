@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Pencil, Loader2, CheckCircle2 } from 'lucide-react';
-import { useUpdateTrack, getListTracksQueryKey } from '@workspace/api-client-react';
+import { useUpdateTrack, getListTracksQueryKey, getGetPlaylistTracksQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAudioPlayer } from '@/hooks/use-audio-player';
 import type { Track } from '@workspace/api-client-react';
 
 interface TrackEditModalProps {
@@ -37,6 +38,7 @@ function toForm(track: Track): FormState {
 export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
   const queryClient   = useQueryClient();
   const updateTrack   = useUpdateTrack();
+  const { libraryFilter } = useAudioPlayer();
   const [form, setForm] = useState<FormState>(track ? toForm(track) : toForm({} as Track));
   const [saved, setSaved] = useState(false);
 
@@ -71,6 +73,12 @@ export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+          // Also refresh the active playlist view so tag edits appear immediately
+          if (libraryFilter.type === 'playlist') {
+            queryClient.invalidateQueries({
+              queryKey: getGetPlaylistTracksQueryKey(Number(libraryFilter.value)),
+            });
+          }
           setSaved(true);
           setTimeout(() => { setSaved(false); onClose(); }, 900);
         },

@@ -787,14 +787,6 @@ export function TrackListPanel({
                             RG
                           </span>
                         )}
-                        {/* Pencil — edit tags, visible on row hover */}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setEditingTrack(track); }}
-                          className="hidden group-hover:flex items-center justify-center w-5 h-5 rounded hover:bg-white/10 text-zinc-500 hover:text-zinc-200 transition-colors shrink-0"
-                          title="Edit tags"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
                         <div className="w-14 text-right">
                           {(track.duration ?? 0) > 0 ? (
                             <span className={clsx(
@@ -807,6 +799,14 @@ export function TrackListPanel({
                             <span className="text-[11px] font-mono text-muted-foreground/30">—</span>
                           )}
                         </div>
+                        {/* Pencil — edit tags; opacity toggle keeps row width stable */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingTrack(track); }}
+                          className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-5 h-5 rounded hover:bg-white/10 text-zinc-500 hover:text-zinc-200 transition-opacity shrink-0"
+                          title="Edit tags"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
                   </TrackContextMenu>
