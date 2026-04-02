@@ -239,8 +239,40 @@ export function TransportBar() {
 
       {/* ── Mobile layout (< sm) ─────────────────────────────────── */}
       <div className="sm:hidden">
-        {/* Seek bar — full width, no padding, flush to top */}
-        <div className="px-3 pt-2">
+
+        {/* ── Row 1: Info strip ─────────────────────────────────────── */}
+        <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-1">
+          {/* Album art — tap to open now-playing sheet */}
+          <button
+            className="w-9 h-9 bg-black/40 rounded-sm overflow-hidden border border-white/5 shrink-0 hover:ring-1 hover:ring-primary/50 transition-all"
+            onClick={toggleNowPlaying}
+            title="Now Playing"
+          >
+            <img src={coverSrc} alt="Cover" className="w-full h-full object-cover" />
+          </button>
+
+          {/* Title + artist — tap to open now-playing sheet */}
+          <button
+            className="flex-1 min-w-0 text-left overflow-hidden"
+            onClick={toggleNowPlaying}
+          >
+            <div className="text-sm font-semibold truncate text-foreground leading-tight">
+              {currentTrack?.title || 'No track playing'}
+            </div>
+            <div className="text-xs text-muted-foreground truncate leading-tight mt-0.5">
+              {currentTrack?.artist || '—'}
+            </div>
+          </button>
+
+          {/* Elapsed / total — right-aligned, stacked */}
+          <div className="shrink-0 text-right font-mono leading-tight tabular-nums">
+            <div className="text-xs text-foreground/70">{formatTime(progress)}</div>
+            <div className="text-[10px] text-muted-foreground/50">{formatTime(duration)}</div>
+          </div>
+        </div>
+
+        {/* ── Row 2: Seek bar ────────────────────────────────────────── */}
+        <div className="px-3 py-1.5">
           <Slider
             value={[progress]}
             max={duration || 100}
@@ -250,74 +282,69 @@ export function TransportBar() {
           />
         </div>
 
-        {/* Track info + core controls */}
-        <div className="flex items-center gap-2 px-3 py-2">
-          {/* Album art — clickable to open now playing */}
-          <button
-            className="w-10 h-10 bg-black/40 rounded-sm overflow-hidden border border-white/5 shrink-0 hover:ring-1 hover:ring-primary/50 transition-all"
-            onClick={toggleNowPlaying}
-            title="Now Playing"
-          >
-            <img src={coverSrc} alt="Cover" className="w-full h-full object-cover" />
-          </button>
+        {/* ── Row 3: Controls ───────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-2 pb-2">
 
-          {/* Title + artist — clickable to open now playing */}
-          <button
-            className="flex-1 min-w-0 overflow-hidden text-left"
-            onClick={toggleNowPlaying}
-          >
-            <div className="text-sm font-medium truncate text-foreground leading-tight">
-              {currentTrack?.title || 'No track playing'}
-            </div>
-            <div className="text-xs text-muted-foreground truncate leading-tight">
-              {currentTrack?.artist || '—'}
-            </div>
-            <div className="flex gap-1 text-[10px] font-mono text-muted-foreground/60 mt-0.5">
-              <span>{formatTime(progress)}</span>
-              <span>/</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-          </button>
+          {/* Transport + mode cluster */}
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost" size="icon"
+              className={clsx('h-8 w-8 hover:bg-white/5', isShuffle ? 'text-primary' : 'text-foreground/60')}
+              onClick={toggleShuffle}
+              title="Shuffle"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+            </Button>
 
-          {/* Prev / Play / Next */}
-          <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={prev}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-foreground/80" onClick={prev}>
               <SkipBack className="w-4 h-4 fill-current" />
             </Button>
+
             <Button
               variant="default" size="icon"
-              className="h-10 w-10 rounded-full bg-foreground text-background hover:bg-primary hover:scale-105 transition-all shadow-lg"
+              className="h-10 w-10 rounded-full bg-foreground text-background hover:bg-primary hover:scale-105 transition-all shadow-lg mx-0.5"
               onClick={togglePlay}
             >
               {isPlaying
                 ? <Pause className="w-5 h-5 fill-current" />
                 : <Play className="w-5 h-5 fill-current ml-0.5" />}
             </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={next}>
+
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-foreground/80" onClick={next}>
               <SkipForward className="w-4 h-4 fill-current" />
+            </Button>
+
+            <Button
+              variant="ghost" size="icon"
+              className={clsx('h-8 w-8 hover:bg-white/5', repeatMode !== 'off' ? 'text-primary' : 'text-foreground/60')}
+              onClick={() => setRepeatMode(repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off')}
+              title={repeatMode === 'one' ? 'Repeat one' : repeatMode === 'all' ? 'Repeat all' : 'Repeat off'}
+            >
+              {repeatMode === 'one'
+                ? <Repeat1 className="w-3.5 h-3.5" />
+                : <Repeat className="w-3.5 h-3.5" />}
             </Button>
           </div>
 
-          {/* Volume: tap = mute, hold = vertical slider popup */}
-          <div className="flex items-center gap-1 shrink-0">
+          {/* Secondary controls cluster */}
+          <div className="flex items-center gap-0.5">
+            {/* Volume: tap = mute, hold = vertical slider popup */}
             <div className="relative">
-              {/* Backdrop to dismiss popup on outside tap */}
               {mobileVolOpen && (
                 <div
                   className="fixed inset-0 z-40"
                   onPointerDown={() => setMobileVolOpen(false)}
                 />
               )}
-
-              {/* Vertical volume popup — slides up from the button */}
               {mobileVolOpen && (
-                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 bg-card/95 backdrop-blur border border-border rounded-2xl shadow-2xl px-3 py-4"
+                <div
+                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 bg-card/95 backdrop-blur border border-border rounded-2xl shadow-2xl px-3 py-4"
                   onPointerDown={e => e.stopPropagation()}
                 >
                   <span className="text-[10px] font-mono text-foreground/60 tabular-nums">
                     {Math.round(isMuted ? 0 : volume * 100)}%
                   </span>
-                  <div className="h-36 flex items-center justify-center">
+                  <div className="h-32 flex items-center justify-center">
                     <Slider
                       orientation="vertical"
                       min={0}
@@ -328,7 +355,7 @@ export function TransportBar() {
                         setVolume(val / 100);
                         if (val > 0 && isMuted) toggleMute();
                       }}
-                      className="h-36"
+                      className="h-32"
                     />
                   </div>
                   <button
@@ -341,10 +368,8 @@ export function TransportBar() {
                   </button>
                 </div>
               )}
-
-              {/* The actual volume button */}
               <button
-                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors select-none touch-none"
+                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-foreground/60 hover:text-foreground hover:bg-white/5 transition-colors select-none touch-none"
                 onPointerDown={onVolPointerDown}
                 onPointerUp={onVolPointerUp}
                 onPointerLeave={onVolPointerCancel}
@@ -352,26 +377,29 @@ export function TransportBar() {
                 onContextMenu={e => e.preventDefault()}
               >
                 {isMuted || volume === 0
-                  ? <VolumeX className="w-4 h-4" />
-                  : <Volume2 className="w-4 h-4" />}
+                  ? <VolumeX className="w-3.5 h-3.5" />
+                  : <Volume2 className="w-3.5 h-3.5" />}
               </button>
             </div>
 
             <SleepTimerButton />
+
             <Button
               variant="ghost" size="icon"
               className={clsx('h-8 w-8', isMiniPlayer && 'text-primary bg-primary/10')}
               onClick={() => isMiniPlayer ? closeMiniPlayer() : openMiniPlayer()}
               title="Mini Player"
             >
-              <PictureInPicture2 className="w-4 h-4" />
+              <PictureInPicture2 className="w-3.5 h-3.5" />
             </Button>
+
             <Button
               variant="ghost" size="icon"
               className={clsx('h-8 w-8', isPrefsOpen && 'text-primary')}
               onClick={togglePrefs}
+              title="Preferences"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
