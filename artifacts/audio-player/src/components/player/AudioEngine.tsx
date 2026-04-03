@@ -304,10 +304,17 @@ export function AudioEngine() {
     deckA.current = makeDeck(1.0); // active
     deckB.current = makeDeck(0.0); // idle
 
-    // Silent audio keep-alive: a 1-sample WAV looping natively (NOT in the Web
-    // Audio graph). iOS keeps the audio session alive as long as a native <audio>
-    // element is playing, which lets the AudioContext stay running while the
-    // screen is locked. Volume is 0 so the user hears nothing extra.
+    // Silent audio keep-alive: a 1-sample WAV looping through BOTH the native
+    // media layer AND the Web Audio graph (via a zero-gain node).
+    //
+    // Why both?
+    // - Native layer: tells iOS an audio session is active → OS won't revoke
+    //   the audio session while the screen is locked.
+    // - Web Audio node: iOS only keeps an AudioContext in the "running" state
+    //   while there is at least one active MediaElementAudioSourceNode producing
+    //   frames. Without this, when the current track ends the context gets
+    //   interrupted and ctx.resume() won't resolve until the app is foregrounded
+    //   — which is exactly the "have to open the app to start the next song" bug.
     const silent = new Audio(SILENT_WAV_URI);
     silent.loop   = true;
     silent.volume = 0;
@@ -315,6 +322,14 @@ export function AudioEngine() {
     silent.setAttribute('aria-hidden', 'true');
     document.body.appendChild(silent);
     silentAudioRef.current = silent;
+
+    // Route the silent element through a gain-0 node so the AudioContext always
+    // has an active source, preventing iOS from interrupting it between tracks.
+    const silentSrc  = ctx.createMediaElementSource(silent);
+    const silentGain = ctx.createGain();
+    silentGain.gain.value = 0;
+    silentSrc.connect(silentGain);
+    silentGain.connect(ctx.destination);
 
     // Auto-resume the AudioContext if the browser suspends it in the background.
     ctx.addEventListener('statechange', () => {
@@ -467,9 +482,14 @@ export function AudioEngine() {
         oldActive.audio.pause();
         idleDeck.crossGain.gain.value = 1.0;
 
-        // Resume context then play — chained so play() fires after resume resolves
-        const doPlay = () => idleDeck.audio.play().catch(() => {});
-        ctx ? ctx.resume().then(doPlay).catch(doPlay) : doPlay();
+        // Fire play() immediately WITHOUT waiting for ctx.resume().
+        // On iOS in the background, ctx.resume() won't resolve until the app is
+        // foregrounded — chaining play() after it is what caused the bug where
+        // users had to open the app to start the next song. The silent keep-alive
+        // node (above) keeps the AudioContext alive between tracks so play()
+        // succeeds in the background on its own.
+        idleDeck.audio.play().catch(() => {});
+        ctx?.resume().catch(() => {}); // best-effort, fire-and-forget
 
         if (pinnedIdx !== null) {
           const { _advanceToIndex } = useAudioPlayer.getState();
