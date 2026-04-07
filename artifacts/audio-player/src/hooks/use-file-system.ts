@@ -744,6 +744,32 @@ function isMp3File(fileName: string): boolean  { return /\.mp3$/i.test(fileName)
 function isFlacFile(fileName: string): boolean { return /\.flac$/i.test(fileName); }
 function isWavFile(fileName: string): boolean  { return /\.(wav|wave)$/i.test(fileName); }
 
+/**
+ * Probe the real duration of any audio file using the browser's native decoder.
+ * This is the universal fallback — it works for every format the browser can
+ * play (MP3, FLAC, OPUS, WAV, M4A, AAC, WEBM, …) regardless of whether our
+ * custom binary parsers could read the container. We use `preload="metadata"`
+ * so the browser only fetches the header, not the whole file. Returns 0 if the
+ * file cannot be decoded (corrupted / unsupported format).
+ */
+async function probeDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    const cleanup = (val: number) => {
+      audio.src = '';
+      URL.revokeObjectURL(url);
+      resolve(val);
+    };
+    audio.addEventListener('loadedmetadata', () => {
+      cleanup(isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0);
+    }, { once: true });
+    audio.addEventListener('error', () => cleanup(0), { once: true });
+    audio.preload = 'metadata';
+    audio.src = url;
+  });
+}
+
 export function useFileSystem() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -817,7 +843,8 @@ export function useFileSystem() {
             const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
             const bytes = new Uint8Array(tagBuf);
             const tags = parseVorbisComments(bytes);
-            const duration = await getOpusDuration(file);
+            let dur = await getOpusDuration(file);
+            if (!(dur > 0)) dur = await probeDuration(file);
 
             const artKey = `${folderPath}/${fileName}`;
             if (tags.albumArtDataUrl) {
@@ -830,7 +857,7 @@ export function useFileSystem() {
               album: tags.album || 'Unknown Album',
               year: tags.year ?? null,
               genre: tags.genre ?? null,
-              duration: Math.round(duration),
+              duration: Math.round(dur),
               trackNumber: tags.trackNumber ?? null,
               fileName,
               folderPath,
@@ -839,11 +866,12 @@ export function useFileSystem() {
             });
           } catch (err) {
             console.error(`[playd] vorbis parse error for "${fileName}":`, err);
+            const dur = await probeDuration(file);
             tracks.push({
               title: fileMeta.title || fileName,
               artist: fileMeta.artist || '',
               album: 'Unknown Album',
-              year: null, genre: null, duration: 0, trackNumber: null,
+              year: null, genre: null, duration: Math.round(dur), trackNumber: null,
               fileName, folderPath, albumArtDataUrl: null, source: 'local',
             });
           }
@@ -855,20 +883,22 @@ export function useFileSystem() {
             const flac = parseFlac(new Uint8Array(tagBuf));
             const artKey = `${folderPath}/${fileName}`;
             if (flac.albumArtDataUrl) artStore[artKey] = flac.albumArtDataUrl;
+            const dur = flac.duration > 0 ? flac.duration : await probeDuration(file);
             tracks.push({
               title: flac.tags.title || fileMeta.title || fileName,
               artist: flac.tags.artist || fileMeta.artist || '',
               album: flac.tags.album || 'Unknown Album',
               year: flac.tags.year ?? null,
               genre: flac.tags.genre ?? null,
-              duration: Math.round(flac.duration),
+              duration: Math.round(dur),
               trackNumber: flac.tags.trackNumber ?? null,
               fileName, folderPath, albumArtDataUrl: null, source: 'local',
             });
           } catch (err) {
             console.error(`[playd] flac parse error for "${fileName}":`, err);
+            const dur = await probeDuration(file);
             tracks.push({ title: fileMeta.title || fileName, artist: fileMeta.artist || '', album: 'Unknown Album',
-              year: null, genre: null, duration: 0, trackNumber: null, fileName, folderPath, albumArtDataUrl: null, source: 'local' });
+              year: null, genre: null, duration: Math.round(dur), trackNumber: null, fileName, folderPath, albumArtDataUrl: null, source: 'local' });
           }
         } else if (isWavFile(fileName)) {
           // ── Native WAV parser ─────────────────────────────────────────────
@@ -878,20 +908,22 @@ export function useFileSystem() {
             const wav = parseWav(new Uint8Array(tagBuf));
             const artKey = `${folderPath}/${fileName}`;
             if (wav.albumArtDataUrl) artStore[artKey] = wav.albumArtDataUrl;
+            const dur = wav.duration > 0 ? wav.duration : await probeDuration(file);
             tracks.push({
               title: wav.tags.title || fileMeta.title || fileName,
               artist: wav.tags.artist || fileMeta.artist || '',
               album: wav.tags.album || 'Unknown Album',
               year: wav.tags.year ?? null,
               genre: wav.tags.genre ?? null,
-              duration: Math.round(wav.duration),
+              duration: Math.round(dur),
               trackNumber: wav.tags.trackNumber ?? null,
               fileName, folderPath, albumArtDataUrl: null, source: 'local',
             });
           } catch (err) {
             console.error(`[playd] wav parse error for "${fileName}":`, err);
+            const dur = await probeDuration(file);
             tracks.push({ title: fileMeta.title || fileName, artist: fileMeta.artist || '', album: 'Unknown Album',
-              year: null, genre: null, duration: 0, trackNumber: null, fileName, folderPath, albumArtDataUrl: null, source: 'local' });
+              year: null, genre: null, duration: Math.round(dur), trackNumber: null, fileName, folderPath, albumArtDataUrl: null, source: 'local' });
           }
         } else if (isMp3File(fileName)) {
           // ── Native ID3v2 parser for MP3 files ─────────────────────────────
@@ -901,7 +933,8 @@ export function useFileSystem() {
             const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
             const bytes = new Uint8Array(tagBuf);
             const tags = parseID3v2(bytes);
-            const duration = await getMp3Duration(file);
+            let dur = await getMp3Duration(file);
+            if (!(dur > 0)) dur = await probeDuration(file);
 
             const artKey = `${folderPath}/${fileName}`;
             if (tags.albumArtDataUrl) {
@@ -914,7 +947,7 @@ export function useFileSystem() {
               album: tags.album || 'Unknown Album',
               year: tags.year ?? null,
               genre: tags.genre ?? null,
-              duration: Math.round(duration),
+              duration: Math.round(dur),
               trackNumber: tags.trackNumber ?? null,
               fileName,
               folderPath,
@@ -923,11 +956,12 @@ export function useFileSystem() {
             });
           } catch (err) {
             console.error(`[playd] id3 parse error for "${fileName}":`, err);
+            const dur = await probeDuration(file);
             tracks.push({
               title: fileMeta.title || fileName,
               artist: fileMeta.artist || '',
               album: 'Unknown Album',
-              year: null, genre: null, duration: 0, trackNumber: null,
+              year: null, genre: null, duration: Math.round(dur), trackNumber: null,
               fileName, folderPath, albumArtDataUrl: null, source: 'local',
             });
           }
@@ -939,13 +973,14 @@ export function useFileSystem() {
             const m4a = parseM4A(new Uint8Array(tagBuf));
             const artKey = `${folderPath}/${fileName}`;
             if (m4a.albumArtDataUrl) artStore[artKey] = m4a.albumArtDataUrl;
+            const dur = m4a.duration > 0 ? m4a.duration : await probeDuration(file);
             tracks.push({
               title: m4a.title || fileMeta.title || fileName,
               artist: m4a.artist || fileMeta.artist || '',
               album: m4a.album || 'Unknown Album',
               year: m4a.year ?? null,
               genre: m4a.genre ?? null,
-              duration: Math.round(m4a.duration),
+              duration: Math.round(dur),
               trackNumber: m4a.trackNumber ?? null,
               fileName,
               folderPath,
@@ -954,11 +989,12 @@ export function useFileSystem() {
             });
           } catch (err) {
             console.error(`[playd] m4a parse error for "${fileName}":`, err);
+            const dur = await probeDuration(file);
             tracks.push({
               title: fileMeta.title || fileName,
               artist: fileMeta.artist || '',
               album: 'Unknown Album',
-              year: null, genre: null, duration: 0, trackNumber: null,
+              year: null, genre: null, duration: Math.round(dur), trackNumber: null,
               fileName, folderPath, albumArtDataUrl: null, source: 'local',
             });
           }
