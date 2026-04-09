@@ -425,7 +425,7 @@ export function AudioEngine() {
           otherDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
           otherDeck.crossGain.gain.setValueAtTime(0, ctx.currentTime);
           otherDeck.crossGain.gain.linearRampToValueAtTime(1, ctx.currentTime + fadeDur);
-          await ctx.resume().catch(() => {});
+          ctx.resume().catch(() => {}); // fire-and-forget — don't stall play() waiting for resume
           otherDeck.audio.play().catch(() => {});
           myDeck.crossGain.gain.cancelScheduledValues(ctx.currentTime);
           myDeck.crossGain.gain.setValueAtTime(myDeck.crossGain.gain.value, ctx.currentTime);
@@ -625,14 +625,13 @@ export function AudioEngine() {
 
       const { isPlaying: playing } = useAudioPlayer.getState();
       if (playing) {
-        // Await resume so the AudioContext is definitely running before play().
-        // On Android the context can be suspended in the background; calling
-        // play() before it resumes results in silent audio that looks like a pause.
-        if (ctx.state === 'suspended') {
-          try { await ctx.resume(); } catch { /* best-effort */ }
-        } else {
-          ctx.resume().catch(() => {});
-        }
+        // Fire resume and play together — do NOT await resume before play().
+        // On iOS in the background, ctx.resume() returns a Promise that won't
+        // resolve until the app is foregrounded. Chaining play() after it means
+        // music only starts when the user opens the app. The silent keep-alive
+        // MediaElementSourceNode keeps the AudioContext alive between tracks so
+        // play() succeeds immediately without waiting for an explicit resume.
+        ctx.resume().catch(() => {}); // fire-and-forget
         activeDeck.audio.play().catch((e: Error) => {
           console.warn('Autoplay prevented', e);
           // For vault tracks the decrypt chain is long enough that browsers may
@@ -664,8 +663,11 @@ export function AudioEngine() {
         if (xfading.current) idle?.audio.play().catch(() => {});
         silentAudioRef.current?.play().catch(() => {});
       };
-      // Chain play() after resume() so the AudioContext is running first.
-      ctx ? ctx.resume().then(doPlay).catch(doPlay) : doPlay();
+      // Call play() immediately. ctx.resume() is fire-and-forget — do NOT chain
+      // doPlay() after it. On iOS in the background, resume() never resolves until
+      // the app is foregrounded, so any .then(doPlay) silently defers playback.
+      ctx?.resume().catch(() => {});
+      doPlay();
     } else {
       act.audio.pause();
       idle?.audio.pause();
