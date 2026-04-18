@@ -471,9 +471,20 @@ export function TrackListPanel({
           <button
             onClick={() => {
               if (hasDirectoryPicker) {
-                // Desktop/Android: fire-and-forget rescan (async work via .then)
-                queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-                rescanAll();
+                // Desktop/Android: check for saved handles first.
+                // If handles exist → rescan them.
+                // If not (e.g. browser cleared storage) → open the picker so the
+                // user can re-select their folder rather than seeing an error.
+                getStoredHandles().then(handles => {
+                  queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+                  if (handles.length > 0) {
+                    rescanAll();
+                  } else {
+                    addFolder().then(added => {
+                      if (added) refreshHasFolders();
+                    });
+                  }
+                });
               } else {
                 // iOS: plain synchronous .click() — no async keyword anywhere above
                 iosFileInputRef.current?.click();
