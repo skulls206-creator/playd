@@ -8,7 +8,7 @@ export function PlaydLogo({ size = 36 }: Props) {
       alt="PLAYD"
       width={size}
       height={size}
-      style={{ display: 'block', imageRendering: 'auto' }}
+      style={{ display: 'block', borderRadius: '22%' }}
     />
   );
 }
