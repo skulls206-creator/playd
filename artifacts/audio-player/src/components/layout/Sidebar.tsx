@@ -28,6 +28,7 @@ import {
   Plus, Pencil, Trash2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { PlaydLogo } from '@/components/ui/PlaydLogo';
 
 type NavSection = 'artists' | 'albums' | 'playlists';
 
@@ -176,41 +177,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
       <div className="p-3 border-b border-border space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-base font-bold tracking-tight text-primary flex items-center gap-2">
-            <svg width="22" height="22" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <radialGradient id="sbg" cx="50%" cy="45%" r="65%">
-                  <stop offset="0%" stopColor="#180d38"/>
-                  <stop offset="100%" stopColor="#07091a"/>
-                </radialGradient>
-                <linearGradient id="sbar" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%"   stopColor="#e0aaff"/>
-                  <stop offset="35%"  stopColor="#c026d3"/>
-                  <stop offset="70%"  stopColor="#7e22ce"/>
-                  <stop offset="100%" stopColor="#3b0764" stopOpacity="0.6"/>
-                </linearGradient>
-                <radialGradient id="scap" cx="50%" cy="30%" r="55%">
-                  <stop offset="0%"   stopColor="white" stopOpacity="0.95"/>
-                  <stop offset="60%"  stopColor="#e0aaff" stopOpacity="0.4"/>
-                  <stop offset="100%" stopColor="#9333ea" stopOpacity="0"/>
-                </radialGradient>
-                <filter id="sglow" x="-60%" y="-60%" width="220%" height="220%">
-                  <feGaussianBlur stdDeviation="18"/>
-                </filter>
-                <filter id="scapglow" x="-80%" y="-80%" width="260%" height="260%">
-                  <feGaussianBlur stdDeviation="6"/>
-                </filter>
-              </defs>
-              <rect width="180" height="180" rx="38" fill="url(#sbg)"/>
-              <rect x="42" y="72" width="28" height="90" rx="14" fill="#a855f7" opacity="0.5" filter="url(#sglow)"/>
-              <rect x="76" y="28" width="28" height="134" rx="14" fill="#a855f7" opacity="0.5" filter="url(#sglow)"/>
-              <rect x="110" y="94" width="28" height="68" rx="14" fill="#a855f7" opacity="0.5" filter="url(#sglow)"/>
-              <rect x="44" y="74" width="24" height="86" rx="12" fill="url(#sbar)" stroke="#c084fc" strokeWidth="1.5" strokeOpacity="0.7"/>
-              <ellipse cx="56" cy="76" rx="10" ry="7" fill="url(#scap)" filter="url(#scapglow)"/>
-              <rect x="78" y="30" width="24" height="130" rx="12" fill="url(#sbar)" stroke="#c084fc" strokeWidth="1.5" strokeOpacity="0.7"/>
-              <ellipse cx="90" cy="32" rx="10" ry="7" fill="url(#scap)" filter="url(#scapglow)"/>
-              <rect x="112" y="96" width="24" height="64" rx="12" fill="url(#sbar)" stroke="#c084fc" strokeWidth="1.5" strokeOpacity="0.7"/>
-              <ellipse cx="124" cy="98" rx="10" ry="7" fill="url(#scap)" filter="url(#scapglow)"/>
-            </svg>
+            <PlaydLogo size={22} />
             PLAYD
           </h1>
           {onClose && (
