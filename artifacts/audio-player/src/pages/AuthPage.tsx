@@ -48,7 +48,7 @@ export default function AuthPage() {
         {/* Logo / branding */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <PlaydLogo size={36} />
+            <span className="text-primary"><PlaydLogo size={36} /></span>
             <span className="text-xl font-bold text-white tracking-tight">PLAYD</span>
           </div>
           <p className="text-zinc-500 text-sm">Your personal music library</p>
