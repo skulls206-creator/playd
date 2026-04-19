@@ -41,3 +41,9 @@ id = "VaSG1JFMUAT9F0a18C07n"
 uri = "file://artifacts/audio-player/public/favicon.svg"
 type = "image"
 title = "playd.music favicon — SVG (scalable, any size)"
+
+[[outputs]]
+id = "hhh3s1Cr2nBU6mbysMJ4i"
+uri = "file://artifacts/audio-player/public/icons/icon-512-ai.png"
+type = "image"
+title = "PLAYD Icon (1024×1024 PNG)"
