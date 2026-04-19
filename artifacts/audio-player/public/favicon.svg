@@ -1,42 +1,37 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
-      <stop offset="0%"   stop-color="#18083e"/>
-      <stop offset="55%"  stop-color="#0c0520"/>
-      <stop offset="100%" stop-color="#060210"/>
+    <radialGradient id="bg" cx="50%" cy="44%" r="70%">
+      <stop offset="0%"   stop-color="#160936"/>
+      <stop offset="100%" stop-color="#060010"/>
     </radialGradient>
     <linearGradient id="hb" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#efc8ff"/>
-      <stop offset="22%"  stop-color="#d946ef"/>
-      <stop offset="58%"  stop-color="#8b21e8"/>
-      <stop offset="100%" stop-color="#6b1fc8"/>
+      <stop offset="0%"   stop-color="#ddb0ff"/>
+      <stop offset="20%"  stop-color="#c026d3"/>
+      <stop offset="60%"  stop-color="#9333ea"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
     </linearGradient>
-    <radialGradient id="lc" cx="32%" cy="26%" r="72%" gradientUnits="objectBoundingBox">
-      <stop offset="0%"   stop-color="#b87ef5"/>
-      <stop offset="50%"  stop-color="#7c3aed"/>
-      <stop offset="100%" stop-color="#4a1a95"/>
+    <radialGradient id="lc" cx="35%" cy="28%" r="76%">
+      <stop offset="0%"   stop-color="#cc88ff"/>
+      <stop offset="42%"  stop-color="#9333ea"/>
+      <stop offset="100%" stop-color="#4a18a0"/>
     </radialGradient>
-    <radialGradient id="rc" cx="68%" cy="26%" r="72%" gradientUnits="objectBoundingBox">
-      <stop offset="0%"   stop-color="#b87ef5"/>
-      <stop offset="50%"  stop-color="#7c3aed"/>
-      <stop offset="100%" stop-color="#4a1a95"/>
+    <radialGradient id="rc" cx="65%" cy="28%" r="76%">
+      <stop offset="0%"   stop-color="#cc88ff"/>
+      <stop offset="42%"  stop-color="#9333ea"/>
+      <stop offset="100%" stop-color="#4a18a0"/>
     </radialGradient>
-    <radialGradient id="ov" cx="40%" cy="30%" r="68%">
-      <stop offset="0%"   stop-color="#6b28d9" stop-opacity="0.9"/>
-      <stop offset="100%" stop-color="#1c0d38"/>
-    </radialGradient>
-    <radialGradient id="cap" cx="50%" cy="25%" r="70%">
+    <radialGradient id="cap" cx="50%" cy="20%" r="75%">
       <stop offset="0%"   stop-color="white"   stop-opacity="1"/>
-      <stop offset="35%"  stop-color="#f0d0ff" stop-opacity="0.85"/>
+      <stop offset="38%"  stop-color="#f0d4ff" stop-opacity="0.75"/>
       <stop offset="100%" stop-color="#9333ea" stop-opacity="0"/>
     </radialGradient>
-    <filter id="wide" x="-120%" y="-120%" width="340%" height="340%">
-      <feGaussianBlur stdDeviation="24"/>
+    <filter id="bloom" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="18"/>
     </filter>
-    <filter id="mid" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="14"/>
+    <filter id="halo" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="9"/>
     </filter>
-    <filter id="shine" x="-180%" y="-180%" width="460%" height="460%">
+    <filter id="shine" x="-200%" y="-200%" width="500%" height="500%">
       <feGaussianBlur stdDeviation="8"/>
     </filter>
     <clipPath id="frame">
@@ -47,46 +42,40 @@
   <!-- Background -->
   <rect width="180" height="180" rx="38" fill="url(#bg)"/>
 
-  <!-- Ambient purple glow -->
-  <ellipse cx="90" cy="100" rx="85" ry="78" fill="#7c3aed" opacity="0.15" filter="url(#wide)" clip-path="url(#frame)"/>
-  <ellipse cx="90" cy="88"  rx="58" ry="52" fill="#9333ea" opacity="0.20" filter="url(#mid)"  clip-path="url(#frame)"/>
-
-  <!-- Wide bloom layer -->
-  <g filter="url(#wide)" clip-path="url(#frame)" opacity="0.75">
-    <path d="M 34,108 A 56,56 0 0,1 146,108"
-          stroke="#8b21e8" stroke-width="32" stroke-linecap="round" fill="none"/>
-    <rect x="5"   y="94" width="58" height="66" rx="20" fill="#7c3aed"/>
-    <rect x="117" y="94" width="58" height="66" rx="20" fill="#7c3aed"/>
+  <!-- Bloom silhouette -->
+  <g filter="url(#bloom)" clip-path="url(#frame)" opacity="0.72">
+    <path d="M 36,106 A 54,54 0 0,1 144,106"
+          stroke="#9333ea" stroke-width="28" stroke-linecap="round" fill="none"/>
+    <ellipse cx="36"  cy="130" rx="30" ry="34" fill="#8b3af7"/>
+    <ellipse cx="144" cy="130" rx="30" ry="34" fill="#8b3af7"/>
   </g>
 
   <!-- Left ear cup -->
-  <rect x="5" y="94" width="58" height="66" rx="20"
-        fill="url(#lc)" stroke="#c090f8" stroke-width="2.5" stroke-opacity="0.6"/>
-  <!-- Left inner oval -->
-  <ellipse cx="34" cy="128" rx="18" ry="22"
-           fill="url(#ov)" stroke="#9d64f0" stroke-width="2" stroke-opacity="0.55"/>
+  <ellipse cx="36" cy="130" rx="28" ry="32"
+           fill="url(#lc)" stroke="#b87ef5" stroke-width="2.5" stroke-opacity="0.55"/>
+  <ellipse cx="36" cy="130" rx="18" ry="21"
+           fill="none" stroke="#d8b4fe" stroke-width="1.5" stroke-opacity="0.25"/>
 
   <!-- Right ear cup -->
-  <rect x="117" y="94" width="58" height="66" rx="20"
-        fill="url(#rc)" stroke="#c090f8" stroke-width="2.5" stroke-opacity="0.6"/>
-  <!-- Right inner oval -->
-  <ellipse cx="146" cy="128" rx="18" ry="22"
-           fill="url(#ov)" stroke="#9d64f0" stroke-width="2" stroke-opacity="0.55"/>
+  <ellipse cx="144" cy="130" rx="28" ry="32"
+           fill="url(#rc)" stroke="#b87ef5" stroke-width="2.5" stroke-opacity="0.55"/>
+  <ellipse cx="144" cy="130" rx="18" ry="21"
+           fill="none" stroke="#d8b4fe" stroke-width="1.5" stroke-opacity="0.25"/>
 
   <!-- Headband halo -->
-  <path d="M 34,108 A 56,56 0 0,1 146,108"
-        stroke="#a855f7" stroke-width="28" stroke-linecap="round" fill="none"
-        filter="url(#mid)" opacity="0.55" clip-path="url(#frame)"/>
+  <path d="M 36,106 A 54,54 0 0,1 144,106"
+        stroke="#a855f7" stroke-width="22" stroke-linecap="round" fill="none"
+        filter="url(#halo)" opacity="0.5" clip-path="url(#frame)"/>
 
-  <!-- Headband main tube -->
-  <path d="M 34,108 A 56,56 0 0,1 146,108"
-        stroke="url(#hb)" stroke-width="28" stroke-linecap="round" fill="none"/>
-  <!-- Convex highlight stripe -->
-  <path d="M 34,108 A 56,56 0 0,1 146,108"
-        stroke="#efc8ff" stroke-width="11" stroke-linecap="round" fill="none" opacity="0.30"/>
+  <!-- Headband main -->
+  <path d="M 36,106 A 54,54 0 0,1 144,106"
+        stroke="url(#hb)" stroke-width="22" stroke-linecap="round" fill="none"/>
+  <!-- Tube sheen -->
+  <path d="M 36,106 A 54,54 0 0,1 144,106"
+        stroke="#e8c8ff" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.26"/>
 
-  <!-- Crystal cap at top of arc -->
-  <ellipse cx="90" cy="53" rx="26" ry="18" fill="#d4a8ff" filter="url(#shine)" opacity="0.75"/>
-  <ellipse cx="90" cy="52" rx="13" ry="9"  fill="url(#cap)"/>
-  <ellipse cx="90" cy="51" rx="5.5" ry="4" fill="white" opacity="0.98"/>
+  <!-- Crystal cap -->
+  <ellipse cx="90" cy="53" rx="24" ry="16" fill="#c084fc" filter="url(#shine)" opacity="0.85"/>
+  <ellipse cx="90" cy="52" rx="12" ry="8"  fill="url(#cap)"/>
+  <ellipse cx="90" cy="51" rx="5"  ry="3.5" fill="white" opacity="0.96"/>
 </svg>

@@ -12,6 +12,12 @@ uri = "file://artifacts/audio-player/public/icons/icon-512-maskable.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "dPI6j5gAj--PBZDI85FOl"
+uri = "file://artifacts/audio-player/public/icons/icon-512-ai.png"
+type = "image"
+title = "purple headphones music app icon"
+
 [[outputs]]
 id = "6F5uQRSVXY5oRLU4zZoD-"
 uri = "file://artifacts/audio-player/public/test-tone.wav"
