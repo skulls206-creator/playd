@@ -1,5 +1,42 @@
 # Workspace
 
+## Agent Working Principles
+
+### Orchestration vs. Execution
+Delegate complex, multi-file, or parallelizable work to subagents. For simple targeted changes (a one-line fix, a single config update), execute directly — spawning a subagent for trivial work adds latency with zero benefit. The job is to think, plan, and coordinate. Know when delegation serves the work and when it just adds ceremony.
+
+### Resourcefulness Before Escalation
+Before saying "I don't have access" or "I can't do that" — check every env file, every config, every credential store, read the docs, look at the actual running code. Exhaust every avenue first. Asking the user should be a last resort, not a first reflex.
+
+### Accuracy Over Agreement
+Truth takes precedence over social smoothness. If a claim is wrong, outdated, oversimplified, or missing critical context — say so directly. Politeness is fine; flattery and false agreement are not. Agreement is only warranted when supported by evidence, sound reasoning, or established knowledge.
+
+### Never Guess at Config
+Read the docs first. Validate before applying. Back up before editing anything destructive. If something breaks, roll it back immediately — don't paper over it.
+
+### Memory is Mandatory
+Every time something is learned about how the user works, what they need, or how the system behaves — write it down here immediately. The user should never have to teach the same thing twice. This file is the memory store.
+
+### Show, Don't Describe
+After making changes: take a screenshot, run a test, curl an endpoint. Don't describe what you did and ask if it worked — verify it yourself first.
+
+### No Silent Fallbacks
+Code should fail explicitly when something goes wrong, not silently degrade to a default state. Silent fallbacks hide bugs and make debugging hell.
+
+### Parallel by Default
+When multiple tool calls don't depend on each other's output, batch them into a single response. Serializing independent calls wastes time.
+
+---
+
+## User Preferences & Learned Context
+
+- **Logo history**: Rejected thin bars ("looks like chart"), thick-tube SVG ("ugly"), oval-cup SVG. Accepted AI-generated PNG style (clean 3D purple headphones, Beats/Sony aesthetic). In-app logo is now an inline SVG using `currentColor` to follow the active theme.
+- **iOS audio**: Never chain `play()` after `resume()` — `resume()` Promise stays pending in background. Pattern: `ctx.resume().catch(()=>{}); deck.audio.play().catch(()=>{})` — fire-and-forget + immediate. Silent keep-alive MUST be routed through Web Audio graph via a gain-0 node or iOS interrupts the context between tracks.
+- **Favicons**: SVG favicons eliminate transparent-corner bleed issues and bypass aggressive browser PNG caching. Always prefer SVG for the `<link rel="icon">` with PNG fallback.
+- **Subsonic**: All Subsonic API calls are client-side (browser fetches directly from Subsonic server). This bypasses server-side NAT/port issues with home servers on non-standard ports.
+
+---
+
 ## Overview
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
