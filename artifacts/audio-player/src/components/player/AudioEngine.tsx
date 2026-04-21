@@ -488,6 +488,11 @@ export function AudioEngine() {
         // users had to open the app to start the next song. The silent keep-alive
         // node (above) keeps the AudioContext alive between tracks so play()
         // succeeds in the background on its own.
+        //
+        // Explicitly re-assert the silent keep-alive here as well. Android Chrome
+        // tracks audio focus per-element; if the silent audio somehow paused, this
+        // re-starts it before the main play() so Chrome never sees a gap.
+        silentAudioRef.current?.play().catch(() => {});
         idleDeck.audio.play().catch(() => {});
         ctx?.resume().catch(() => {}); // best-effort, fire-and-forget
 
@@ -512,7 +517,9 @@ export function AudioEngine() {
       }
 
       // ── Case 4: Fallback (very short track / preload didn't fire in time) ───
-      // Proactively resume the context now so it's ready before the async load.
+      // Proactively resume the context and re-assert the silent keep-alive so
+      // Android Chrome doesn't drop audio focus during the async load gap.
+      silentAudioRef.current?.play().catch(() => {});
       ctx?.resume().catch(() => {});
       const { _trackEnded } = useAudioPlayer.getState();
       _trackEnded();
@@ -598,10 +605,14 @@ export function AudioEngine() {
 
     const activeDeck = getActive();
 
-    // Already preloaded by crossfade on the active deck — just ensure it's playing
+    // Already preloaded by crossfade on the active deck — only call play() if it
+    // is actually paused. On Android Chrome, calling play() on an already-playing
+    // MediaElement from a React effect (outside a trusted event handler) is treated
+    // as a fresh autoplay request; Chrome gives it ~1 s then kills it. Guarding on
+    // .paused prevents that second redundant call entirely.
     if (activeDeck.loadedTrackId === currentTrack.id) {
-      if (isPlayingRef.current) {
-        ctx.resume();
+      if (isPlayingRef.current && activeDeck.audio.paused) {
+        ctx.resume().catch(() => {});
         activeDeck.audio.play().catch(() => {});
       }
       return;
