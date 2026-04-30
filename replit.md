@@ -17,6 +17,9 @@ Read the docs first. Validate before applying. Back up before editing anything d
 ### Memory is Mandatory
 Every time something is learned about how the user works, what they need, or how the system behaves — write it down here immediately. The user should never have to teach the same thing twice. This file is the memory store.
 
+### Testing Protocol
+Always sign into the test account before testing or reviewing any feature. Credentials are in env secrets `TEST_ACCOUNT_NAME` / `TEST_ACCOUNT_PASS` (username: `tester`). Never screenshot the login page — get past it first, then screenshot the actual feature being tested.
+
 ### Show, Don't Describe
 After making changes: take a screenshot, run a test, curl an endpoint. Don't describe what you did and ask if it worked — verify it yourself first.
 
