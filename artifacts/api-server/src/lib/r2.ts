@@ -3,9 +3,11 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   PutObjectCommand,
+  HeadObjectCommand,
   type GetObjectCommandOutput,
+  type HeadObjectCommandOutput,
 } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { Readable } from "node:stream";
 
 const R2_ENDPOINT        = process.env.R2_ENDPOINT!;
 const R2_BUCKET_NAME     = process.env.R2_BUCKET_NAME!;
@@ -29,28 +31,41 @@ export const r2Client = new S3Client({
 });
 
 /**
- * Generate a presigned PUT URL so the browser can upload encrypted ciphertext
- * directly to R2 without routing gigabytes through the API server.
- *
- * @param key         - R2 object key (e.g. "vault/42/7/uuid")
- * @param contentType - MIME type to set on the object (e.g. "application/octet-stream")
- * @param expiresIn   - Seconds until the URL expires (default: 3600)
+ * Upload a stream to R2. ContentLength is required so the AWS SDK can set
+ * the Content-Length header, which R2 uses to enforce the transfer size.
+ * The caller is responsible for enforcing that the stream does not exceed
+ * contentLength bytes before handing it to this function.
  */
-export async function getPresignedPutUrl(
+export async function putObject(
   key: string,
   contentType: string,
-  expiresIn = 3600
-): Promise<string> {
-  const cmd = new PutObjectCommand({
-    Bucket:      R2_BUCKET_NAME,
-    Key:         key,
-    ContentType: contentType,
-  });
-  return getSignedUrl(r2Client, cmd, { expiresIn });
+  contentLength: number,
+  body: Readable
+): Promise<void> {
+  await r2Client.send(
+    new PutObjectCommand({
+      Bucket:        R2_BUCKET_NAME,
+      Key:           key,
+      ContentType:   contentType,
+      ContentLength: contentLength,
+      Body:          body,
+    })
+  );
 }
 
 /**
- * Delete an object from R2. Used when a vault track is removed.
+ * Fetch metadata for an object without downloading its body.
+ * Used after upload to verify the object exists and its size matches
+ * the declared blobSize — the authoritative server-side size check.
+ */
+export async function headObject(key: string): Promise<HeadObjectCommandOutput> {
+  return r2Client.send(
+    new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key })
+  );
+}
+
+/**
+ * Delete an object from R2.
  */
 export async function deleteObject(key: string): Promise<void> {
   await r2Client.send(

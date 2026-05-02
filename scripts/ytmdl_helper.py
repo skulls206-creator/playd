@@ -6,8 +6,8 @@ Reads a single JSON command from stdin, writes JSON result to stdout.
 Commands:
   {"cmd": "search", "q": "<query>", "limit": 10}
   {"cmd": "stream", "videoId": "<id>"}
-  {"cmd": "resolve-youtube-playlist", "url": "<playlist_url>"}
-  {"cmd": "resolve-spotify", "url": "<spotify_url>", "client_id": "...", "client_secret": "..."}
+  {"cmd": "resolve-youtube-playlist", "url": "<playlist_url>", "max_items": 200}
+  {"cmd": "resolve-spotify", "url": "<spotify_url>", "client_id": "...", "client_secret": "...", "max_items": 200}
 """
 
 import sys
@@ -15,6 +15,10 @@ import json
 import os
 import subprocess
 import re
+
+# Hard cap on playlist/album items processed per request.
+# The caller may supply a lower value; we never exceed this.
+ABSOLUTE_MAX_ITEMS = 200
 
 
 def ytdlp(args: list[str]) -> dict:
@@ -92,7 +96,8 @@ def do_stream(video_id: str) -> dict:
     }
 
 
-def do_resolve_youtube_playlist(url: str) -> list[dict]:
+def do_resolve_youtube_playlist(url: str, max_items: int = ABSOLUTE_MAX_ITEMS) -> list[dict]:
+    cap = min(max_items, ABSOLUTE_MAX_ITEMS)
     raw = ytdlp([
         url,
         "--dump-json",
@@ -100,11 +105,15 @@ def do_resolve_youtube_playlist(url: str) -> list[dict]:
         "--quiet",
         "--no-warnings",
         "--flat-playlist",
+        # Limit the number of playlist entries fetched at the yt-dlp level.
+        "--playlist-end", str(cap),
     ])
     tracks = []
     for line in raw.splitlines():
         if not line.strip():
             continue
+        if len(tracks) >= cap:
+            break
         info = json.loads(line)
         video_id = info.get("id")
         tracks.append({
@@ -136,12 +145,14 @@ def spotify_search_yt(query: str) -> str | None:
     return None
 
 
-def do_resolve_spotify(url: str, client_id: str, client_secret: str) -> list[dict]:
+def do_resolve_spotify(url: str, client_id: str, client_secret: str, max_items: int = ABSOLUTE_MAX_ITEMS) -> list[dict]:
     try:
         import spotipy
         from spotipy.oauth2 import SpotifyClientCredentials
     except ImportError:
         raise RuntimeError("spotipy is not installed. Run: pip install spotipy")
+
+    cap = min(max_items, ABSOLUTE_MAX_ITEMS)
 
     sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
         client_id=client_id,
@@ -167,21 +178,21 @@ def do_resolve_spotify(url: str, client_id: str, client_secret: str) -> list[dic
         raw_tracks = [t]
 
     elif kind == "playlist":
-        results = sp.playlist_items(spotify_id, additional_types=["track"])
+        results = sp.playlist_items(spotify_id, additional_types=["track"], limit=min(cap, 100))
         items = results["items"]
-        while results.get("next"):
+        # Paginate only up to the cap — stop fetching once we have enough.
+        while results.get("next") and len(items) < cap:
             results = sp.next(results)
             items.extend(results["items"])
-        raw_tracks = [item["track"] for item in items if item.get("track")]
+        raw_tracks = [item["track"] for item in items[:cap] if item.get("track")]
 
     elif kind == "album":
-        results = sp.album_tracks(spotify_id)
+        results = sp.album_tracks(spotify_id, limit=min(cap, 50))
         items = results["items"]
-        while results.get("next"):
+        while results.get("next") and len(items) < cap:
             results = sp.next(results)
             items.extend(results["items"])
-        # album tracks don't have full artist info inline but have artists list
-        raw_tracks = items
+        raw_tracks = items[:cap]
 
     tracks = []
     for t in raw_tracks:
@@ -216,6 +227,7 @@ def main():
         sys.exit(1)
 
     cmd = cmd_data.get("cmd")
+    max_items = int(cmd_data.get("max_items", ABSOLUTE_MAX_ITEMS))
 
     try:
         if cmd == "search":
@@ -231,7 +243,7 @@ def main():
 
         elif cmd == "resolve-youtube-playlist":
             url = cmd_data.get("url", "")
-            result = do_resolve_youtube_playlist(url)
+            result = do_resolve_youtube_playlist(url, max_items=max_items)
             print(json.dumps({"ok": True, "tracks": result}))
 
         elif cmd == "resolve-spotify":
@@ -241,7 +253,7 @@ def main():
             if not client_id or not client_secret:
                 print(json.dumps({"error": "Spotify not configured: SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are required"}))
                 sys.exit(0)
-            result = do_resolve_spotify(url, client_id, client_secret)
+            result = do_resolve_spotify(url, client_id, client_secret, max_items=max_items)
             print(json.dumps({"ok": True, "tracks": result}))
 
         else:

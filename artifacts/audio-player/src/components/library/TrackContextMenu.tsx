@@ -168,7 +168,7 @@ export function TrackContextMenu({
 
         setVaultState('uploading');
 
-        const { trackId, uploadUrl } = await customFetch<{ trackId: number; objectKey: string; uploadUrl: string }>(
+        const { trackId } = await customFetch<{ trackId: number }>(
           '/api/vault/upload-url',
           {
             method: 'POST',
@@ -191,14 +191,14 @@ export function TrackContextMenu({
           },
         );
 
-        const putResp = await fetch(uploadUrl, {
+        // Upload the encrypted binary through the API server, which enforces
+        // size limits server-side before writing to R2.
+        // Note: Content-Length is set automatically by the browser for binary bodies.
+        await customFetch(`/api/vault/upload/${trackId}`, {
           method: 'PUT',
-          body: ciphertext,
           headers: { 'Content-Type': 'application/octet-stream' },
+          body: ciphertext,
         });
-        if (!putResp.ok) throw new Error(`R2 upload failed: ${putResp.status}`);
-
-        await customFetch(`/api/vault/confirm/${trackId}`, { method: 'POST' });
       }
 
       setVaultProgress(null);
