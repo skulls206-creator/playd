@@ -562,16 +562,52 @@ export function AudioEngine() {
     const onDcB = () => { if (active.current === 'B' && isFinite(b.audio.duration)) { const { _setDuration: sd } = useAudioPlayer.getState(); sd(b.audio.duration); } };
 
     // ── YouTube stream URL expiry recovery ────────────────────────────────────
-    // YouTube CDN URLs expire after a period of time. When a deck fires an
-    // 'error' event and the current track is a youtube source, re-fetch a fresh
-    // stream URL from /api/yt/stream/:videoId and retry playback (once per track
-    // to prevent infinite retry loops).
+    // YouTube CDN stream URLs expire after ~6 hours. When a deck fires an
+    // 'error' event for a YouTube track, we:
+    //  1. Confirm the error is network-level (not a decode error).
+    //  2. Probe the current CDN URL to confirm it returned 403/410 (expired).
+    //  3. Re-fetch a fresh stream URL from /api/yt/stream/:videoId and resume
+    //     from the saved position. Each track is retried at most once.
     const ytRetrySet = new Set<number>(); // track IDs that have already been retried
+
     const handleYtError = async (deck: Deck) => {
       const state = useAudioPlayer.getState();
       const track = state.currentTrack;
       if (!track || track.source !== 'youtube') return;
+
+      // Only attempt recovery for network-level errors — decode errors
+      // (MEDIA_ERR_DECODE = 3) are unrelated to URL expiry.
+      const errCode = deck.audio.error?.code;
+      const isNetworkError =
+        errCode === MediaError.MEDIA_ERR_NETWORK ||           // 2
+        errCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;   // 4
+      if (!isNetworkError) return;
+
       if (ytRetrySet.has(track.id)) return; // already retried once — give up
+
+      // Probe the current CDN URL to confirm it is expired (HTTP 403/410).
+      // We use a byte-range GET so the probe is lightweight.
+      // - If the server responds with 403 or 410 → URL expired → proceed.
+      // - If the server responds with any other success/redirect → not expired → bail.
+      // - If the fetch itself throws (CORS / network failure on the probe) → treat
+      //   as potential expiry and proceed; worst case we do one unnecessary re-fetch.
+      const currentSrc = deck.audio.src;
+      if (currentSrc) {
+        try {
+          const probe = await fetch(currentSrc, {
+            method: 'GET',
+            headers: { Range: 'bytes=0-0' },
+          });
+          if (probe.status !== 403 && probe.status !== 410) {
+            // Not an expiry error — don't consume the one-shot retry slot.
+            return;
+          }
+        } catch {
+          // CORS or network failure on the probe — treat as potential expiry.
+        }
+      }
+
+      // Mark as retried before the async work to prevent concurrent retries.
       ytRetrySet.add(track.id);
 
       const videoId = track.fileName;
@@ -579,16 +615,44 @@ export function AudioEngine() {
       const qs = jwt ? `?token=${encodeURIComponent(jwt)}` : '';
       try {
         const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}${qs}`);
-        if (!resp.ok) return;
+        if (!resp.ok) {
+          toast({
+            title: 'Stream unavailable',
+            description: 'Could not refresh the YouTube stream. Try playing the track again.',
+            duration: 7000,
+          });
+          return;
+        }
         const data: { streamUrl?: string } = await resp.json();
-        if (!data.streamUrl) return;
+        if (!data.streamUrl) {
+          toast({
+            title: 'Stream unavailable',
+            description: 'Could not refresh the YouTube stream. Try playing the track again.',
+            duration: 7000,
+          });
+          return;
+        }
         const saved = deck.audio.currentTime;
+        const wasPlaying = state.isPlaying;
         deck.audio.src = data.streamUrl;
         deck.audio.load();
-        deck.audio.currentTime = saved;
-        if (state.isPlaying) deck.audio.play().catch(() => {});
+        // Wait for canplay so currentTime assignment takes effect reliably.
+        // Setting currentTime before media metadata is ready silently no-ops.
+        const onReady = () => {
+          deck.audio.removeEventListener('canplay', onReady);
+          deck.audio.currentTime = saved;
+          if (wasPlaying) deck.audio.play().catch(() => {});
+        };
+        // Clear the retry slot after a successful refresh so that if this same
+        // track's refreshed URL also expires in a later session, it can retry again.
+        ytRetrySet.delete(track.id);
+        deck.audio.addEventListener('canplay', onReady);
       } catch {
-        // stream re-fetch failed — let playback remain stopped
+        toast({
+          title: 'Stream unavailable',
+          description: 'Could not refresh the YouTube stream. Try playing the track again.',
+          duration: 7000,
+        });
       }
     };
 
