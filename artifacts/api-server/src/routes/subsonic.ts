@@ -266,7 +266,10 @@ router.post("/subsonic-servers/:id/sync", requireAuth, async (req, res): Promise
 
 // ── STREAM PROXY ──────────────────────────────────────────────────────────────
 
-router.get("/subsonic-servers/:id/stream/:subsonicTrackId", requireStreamAuth, async (req: Request, res: Response): Promise<void> => {
+router.get(
+  "/subsonic-servers/:id/stream/:subsonicTrackId",
+  requireStreamAuth((req) => `subsonic:${req.params.id}:${req.params.subsonicTrackId}`),
+  async (req: Request, res: Response): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const subsonicTrackId = req.params.subsonicTrackId;
   if (isNaN(id)) { res.status(400).end(); return; }

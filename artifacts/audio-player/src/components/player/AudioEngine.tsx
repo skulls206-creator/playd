@@ -174,6 +174,30 @@ export function AudioEngine() {
   const getIdle   = () => (active.current === 'A' ? deckB : deckA).current!;
   const swap      = () => { active.current = active.current === 'A' ? 'B' : 'A'; };
 
+  // Helper: exchange the long-lived account JWT for a short-lived stream-scoped
+  // token bound to a single resource (e.g. `subsonic:42:trackId`). Used for
+  // `<audio src>` URLs which cannot set custom headers.
+  const fetchStreamToken = async (resource: string): Promise<string | null> => {
+    const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
+    if (!jwt) return null;
+    try {
+      const resp = await fetch('/api/auth/stream-token', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${jwt}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resource }),
+      });
+      if (!resp.ok) {
+        console.error('AudioEngine: failed to obtain stream token', resp.status);
+        return null;
+      }
+      const data: { token?: string } = await resp.json();
+      return data.token ?? null;
+    } catch (e) {
+      console.error('AudioEngine: stream token fetch error', e);
+      return null;
+    }
+  };
+
   // Resolve a playable URL for any track source
   const resolveTrackSrc = useRef(async (track: Track): Promise<string | null> => {
     if (track.source === 'local') {
@@ -183,20 +207,27 @@ export function AudioEngine() {
     }
 
     if (track.source === 'subsonic' && track.subsonicServerId && track.subsonicId) {
-      // Audio elements cannot set custom headers, so we embed the JWT token as a
-      // query param. The API's requireAuth middleware accepts ?token= on GET requests.
-      const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-      const qs = jwt ? `?token=${encodeURIComponent(jwt)}` : '';
+      // Audio elements cannot set custom headers, so we embed a resource-bound
+      // stream token in the URL. We exchange the account JWT (sent via the
+      // Authorization header) for a short-lived stream-scoped token bound to
+      // this exact track. A leaked stream URL is therefore replayable for at
+      // most ~5 minutes and only against this one resource — never against
+      // normal APIs and never against other tracks.
+      const resource = `subsonic:${track.subsonicServerId}:${track.subsonicId}`;
+      const streamToken = await fetchStreamToken(resource);
+      if (!streamToken) return null;
+      const qs = `?token=${encodeURIComponent(streamToken)}`;
       return `/api/subsonic-servers/${track.subsonicServerId}/stream/${encodeURIComponent(track.subsonicId)}${qs}`;
     }
 
     if (track.source === 'youtube') {
-      // YouTube stream: call /api/yt/stream/:videoId to get CDN URL
+      // YouTube stream: call /api/yt/stream/:videoId to get CDN URL.
+      // Use Authorization header to avoid placing the JWT in the URL.
       const videoId = track.fileName;
       const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-      const qs = jwt ? `?token=${encodeURIComponent(jwt)}` : '';
+      const headers: HeadersInit = jwt ? { Authorization: `Bearer ${jwt}` } : {};
       try {
-        const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}${qs}`);
+        const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}`, { headers });
         if (!resp.ok) {
           console.error('AudioEngine: YouTube stream fetch failed', resp.status);
           return null;
@@ -612,9 +643,9 @@ export function AudioEngine() {
 
       const videoId = track.fileName;
       const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-      const qs = jwt ? `?token=${encodeURIComponent(jwt)}` : '';
+      const headers: HeadersInit = jwt ? { Authorization: `Bearer ${jwt}` } : {};
       try {
-        const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}${qs}`);
+        const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}`, { headers });
         if (!resp.ok) {
           toast({
             title: 'Stream unavailable',

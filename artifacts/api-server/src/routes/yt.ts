@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { db, ytSearchHistoryTable } from "@workspace/db";
 import { and, eq, desc } from "drizzle-orm";
-import { requireAuth, requireStreamAuth } from "../middlewares/auth";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -77,7 +77,7 @@ router.get("/yt/search", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.get("/yt/stream/:videoId", requireStreamAuth, async (req, res): Promise<void> => {
+router.get("/yt/stream/:videoId", requireAuth, async (req, res): Promise<void> => {
   const { videoId } = req.params;
 
   if (!videoId || !/^[\w-]{5,20}$/.test(videoId)) {

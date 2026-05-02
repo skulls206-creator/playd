@@ -2,11 +2,17 @@ import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 import { eq, or } from "drizzle-orm";
-import { signToken, requireAuth } from "../middlewares/auth";
+import { signToken, signStreamToken, requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
 const USERNAME_RE = /^[a-zA-Z0-9._-]{3,30}$/;
+
+// Pre-computed bcrypt hash used to keep login timing constant when the
+// supplied identifier does not match any user. Generated once at startup so
+// that bcrypt.compare() always performs real work, preventing a timing-based
+// account enumeration oracle.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("dummy-password-for-timing-parity", 12);
 
 router.post("/auth/register", async (req, res): Promise<void> => {
   const { username, password, email, displayName } = req.body as {
@@ -31,28 +37,26 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   const normalizedUsername = username.trim().toLowerCase();
 
-  const [existingUsername] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.username, normalizedUsername))
-    .limit(1);
-  if (existingUsername) {
-    res.status(409).json({ error: "That username is already taken" });
-    return;
-  }
-
   let normalizedEmail: string | null = null;
   if (email && email.trim()) {
     normalizedEmail = email.trim().toLowerCase();
-    const [existingEmail] = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(eq(usersTable.email, normalizedEmail))
-      .limit(1);
-    if (existingEmail) {
-      res.status(409).json({ error: "An account with that email already exists" });
-      return;
-    }
+  }
+
+  // Look up username and (if provided) email collisions in a single query so
+  // we can return a uniform error message that does not leak which identifier
+  // is already registered (no account-enumeration oracle).
+  const collisions = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(
+      normalizedEmail
+        ? or(eq(usersTable.username, normalizedUsername), eq(usersTable.email, normalizedEmail))
+        : eq(usersTable.username, normalizedUsername),
+    )
+    .limit(1);
+  if (collisions.length > 0) {
+    res.status(409).json({ error: "Username or email is already in use" });
+    return;
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
@@ -93,13 +97,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     .where(isEmail ? eq(usersTable.email, normalized) : eq(usersTable.username, normalized))
     .limit(1);
 
-  if (!user) {
-    res.status(401).json({ error: "Invalid username/email or password" });
-    return;
-  }
+  // Always run bcrypt to prevent timing-based account enumeration.
+  const valid = await bcrypt.compare(password, user ? user.passwordHash : DUMMY_PASSWORD_HASH);
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
+  if (!user || !valid) {
     res.status(401).json({ error: "Invalid username/email or password" });
     return;
   }
@@ -139,6 +140,23 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
 
 router.post("/auth/logout", (_req, res): void => {
   res.sendStatus(200);
+});
+
+/**
+ * Issue a short-lived, stream-scoped token bound to a single resource for
+ * audio stream URLs the browser consumes via `<audio src>` (where custom
+ * headers are not possible). Requires a regular account session and a
+ * `resource` body field naming the specific stream the token authorises.
+ */
+const STREAM_RESOURCE_RE = /^[a-zA-Z]{2,16}:[A-Za-z0-9._:/+=-]{1,256}$/;
+router.post("/auth/stream-token", requireAuth, (req, res): void => {
+  const { resource } = req.body as { resource?: string };
+  if (!resource || typeof resource !== "string" || !STREAM_RESOURCE_RE.test(resource)) {
+    res.status(400).json({ error: "resource is required (e.g. 'yt:<videoId>' or 'subsonic:<serverId>:<trackId>')" });
+    return;
+  }
+  const token = signStreamToken({ userId: req.userId!, email: req.userEmail }, resource);
+  res.json({ token, expiresIn: 300 });
 });
 
 export default router;
