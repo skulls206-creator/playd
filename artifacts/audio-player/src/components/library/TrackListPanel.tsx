@@ -452,15 +452,16 @@ export function TrackListPanel({
       )}
 
       {/* ── Action toolbar ─────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 px-2 h-8 border-b border-border bg-black/20 shrink-0">
+      <div className="flex items-center gap-1 px-2 h-14 sm:h-8 border-b border-border bg-black/20 shrink-0">
         {/* Mobile hamburger */}
         {onMenuOpen && (
           <button
-            className="sm:hidden mr-1 text-muted-foreground hover:text-foreground transition-colors"
+            className="sm:hidden flex items-center justify-center w-11 h-11 -ml-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors shrink-0"
             onClick={onMenuOpen}
             title="Open library"
+            aria-label="Open library menu"
           >
-            <Menu className="w-4 h-4" />
+            <Menu className="w-6 h-6" />
           </button>
         )}
 
@@ -493,13 +494,13 @@ export function TrackListPanel({
             disabled={isScanning}
             title="Re-scan your saved music folders"
             className={clsx(
-              'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
+              'flex items-center gap-1.5 px-3 h-11 sm:px-2 sm:h-5 sm:gap-1 rounded text-xs sm:text-[10px] font-medium transition-colors shrink-0',
               isScanning
                 ? 'text-primary/50 cursor-not-allowed'
-                : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+                : 'text-muted-foreground hover:text-foreground hover:bg-white/5 active:bg-white/10',
             )}
           >
-            <RefreshCw className={clsx('w-3 h-3', isScanning && 'animate-spin')} />
+            <RefreshCw className={clsx('w-4 h-4 sm:w-3 sm:h-3', isScanning && 'animate-spin')} />
             <span>{isScanning ? 'Syncing…' : 'Sync Now'}</span>
           </button>
         ) : (
@@ -521,13 +522,13 @@ export function TrackListPanel({
             disabled={isScanning}
             title="Add music to your library"
             className={clsx(
-              'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
+              'flex items-center gap-1.5 px-3 h-11 sm:px-2 sm:h-5 sm:gap-1 rounded text-xs sm:text-[10px] font-medium transition-colors shrink-0',
               isScanning
                 ? 'text-primary/50 cursor-not-allowed'
-                : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+                : 'text-muted-foreground hover:text-foreground hover:bg-white/5 active:bg-white/10',
             )}
           >
-            <FolderOpen className="w-3 h-3" />
+            <FolderOpen className="w-4 h-4 sm:w-3 sm:h-3" />
             <span>{isScanning ? 'Importing…' : 'Add Folder'}</span>
           </button>
         )}
@@ -581,14 +582,14 @@ export function TrackListPanel({
           disabled={isClearing}
           title={clearConfirm ? 'Click again to confirm clear' : 'Clear local library'}
           className={clsx(
-            'flex items-center gap-1 px-2 h-5 rounded text-[10px] transition-colors shrink-0',
+            'flex items-center gap-1.5 px-3 h-11 sm:px-2 sm:h-5 sm:gap-1 rounded text-xs sm:text-[10px] font-medium transition-colors shrink-0',
             clearConfirm
               ? 'text-red-400 bg-red-950/40 hover:bg-red-950/60'
-              : 'text-muted-foreground hover:text-red-400 hover:bg-white/5',
+              : 'text-muted-foreground hover:text-red-400 hover:bg-white/5 active:bg-white/10',
             isClearing && 'opacity-50 cursor-not-allowed',
           )}
         >
-          <Trash2 className="w-3 h-3" />
+          <Trash2 className="w-4 h-4 sm:w-3 sm:h-3" />
           <span className={clearConfirm ? 'inline' : 'hidden sm:inline'}>{clearConfirm ? 'Confirm?' : 'Clear'}</span>
         </button>
       </div>

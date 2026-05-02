@@ -60,7 +60,7 @@ export default function MainPlayer() {
         </div>
 
         {playdPlusMode ? (
-          <PlaydPlusPanel />
+          <PlaydPlusPanel onMenuOpen={() => setMobileSidebarOpen(true)} />
         ) : (
           <>
             <TrackListPanel

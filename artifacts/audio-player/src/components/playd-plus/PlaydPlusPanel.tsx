@@ -5,11 +5,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
   Search, X, Play, Bookmark, Loader2, Clock,
-  Music, AlertCircle, ListPlus, Check,
+  Music, AlertCircle, ListPlus, Check, Menu,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { YtTrack, YtHistoryItem } from '@/types/yt-track';
 import { SaveDestinationModal } from './SaveDestinationModal';
+import { PlaydPlusToggle } from '@/components/ui/PlaydPlusToggle';
 
 const YT_URL_REGEX = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i;
 const SPOTIFY_URL_REGEX = /^https?:\/\/(open\.)?spotify\.com\//i;
@@ -136,7 +137,11 @@ function TrackRow({ track, onPlay, onSave, onAddToQueue, isPlaying }: TrackRowPr
   );
 }
 
-export function PlaydPlusPanel() {
+interface PlaydPlusPanelProps {
+  onMenuOpen?: () => void;
+}
+
+export function PlaydPlusPanel({ onMenuOpen }: PlaydPlusPanelProps = {}) {
   const { playYtTrack, addToYtQueue, currentTrack } = useAudioPlayer();
 
   const [input, setInput] = useState('');
@@ -291,6 +296,22 @@ export function PlaydPlusPanel() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background">
+      {/* ── Mobile-only top bar: hamburger + mode toggle ──────────────────── */}
+      <div className="sm:hidden flex items-center gap-2 px-2 h-14 border-b border-border bg-black/20 shrink-0">
+        {onMenuOpen && (
+          <button
+            className="flex items-center justify-center w-11 h-11 -ml-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors shrink-0"
+            onClick={onMenuOpen}
+            title="Open library"
+            aria-label="Open library menu"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        )}
+        <PlaydPlusToggle />
+        <div className="flex-1" />
+      </div>
+
       {/* Search bar */}
       <div className="px-4 pt-4 pb-3 border-b border-border/50">
         <div className="relative max-w-2xl mx-auto">
