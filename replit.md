@@ -174,7 +174,8 @@ Search-first music discovery backend. All endpoints are JWT-protected via `requi
 | `/api/yt/stream/:videoId` | GET | Resolves a direct CDN audio URL for the given YouTube videoId. Accepts JWT via `?token=` param for `<audio>` element use. |
 | `/api/yt/resolve-url` | POST | Smart dispatcher: accepts a YouTube playlist URL or Spotify URL (track/playlist/album). YouTube → yt-dlp flat playlist dump. Spotify → Spotify Web API metadata + yt-dlp search to get videoIds. |
 | `/api/yt/history` | GET | Returns user's search history (most recent first). |
-| `/api/yt/history/:id` | DELETE | Removes a search history entry (only the owner can delete). |
+| `/api/yt/history` | DELETE | Clears all search history for the authenticated user. |
+| `/api/yt/history/:id` | DELETE | Removes a specific search history entry (only the owner can delete). |
 
 **Python helper**: `scripts/ytmdl_helper.py` — accepts a JSON command on stdin (`search`, `stream`, `resolve-youtube-playlist`, `resolve-spotify`), returns JSON on stdout. Spawned by Express via `child_process.spawn`. Requires `yt-dlp` (system) and `spotipy` (pip).
 

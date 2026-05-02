@@ -169,6 +169,17 @@ router.get("/yt/history", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
+router.delete("/yt/history", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!;
+  try {
+    await db.delete(ytSearchHistoryTable).where(eq(ytSearchHistoryTable.userId, userId));
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to clear history";
+    res.status(500).json({ error: message });
+  }
+});
+
 router.delete("/yt/history/:id", requireAuth, async (req, res): Promise<void> => {
   const userId = req.userId!;
   const id = Number(req.params.id);

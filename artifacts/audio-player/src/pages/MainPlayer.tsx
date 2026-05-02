@@ -9,7 +9,7 @@ import { EqPanel } from '@/components/player/EqPanel';
 import { SpectrumBar } from '@/components/player/SpectrumBar';
 import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
 import { ClipStudioModal } from '@/components/editor/ClipStudioModal';
-import { PlaydPlusPlaceholder } from '@/components/playd-plus/PlaydPlusPlaceholder';
+import { PlaydPlusPanel } from '@/components/playd-plus/PlaydPlusPanel';
 import { useEffect, useState, useCallback } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
@@ -60,7 +60,7 @@ export default function MainPlayer() {
         </div>
 
         {playdPlusMode ? (
-          <PlaydPlusPlaceholder />
+          <PlaydPlusPanel />
         ) : (
           <>
             <TrackListPanel

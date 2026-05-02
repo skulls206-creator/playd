@@ -190,6 +190,25 @@ export function AudioEngine() {
       return `/api/subsonic-servers/${track.subsonicServerId}/stream/${encodeURIComponent(track.subsonicId)}${qs}`;
     }
 
+    if (track.source === 'youtube') {
+      // YouTube stream: call /api/yt/stream/:videoId to get CDN URL
+      const videoId = track.fileName;
+      const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
+      const qs = jwt ? `?token=${encodeURIComponent(jwt)}` : '';
+      try {
+        const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}${qs}`);
+        if (!resp.ok) {
+          console.error('AudioEngine: YouTube stream fetch failed', resp.status);
+          return null;
+        }
+        const data = await resp.json();
+        return data.streamUrl ?? null;
+      } catch (e) {
+        console.error('AudioEngine: YouTube stream error', e);
+        return null;
+      }
+    }
+
     if (track.source === 'vault') {
       // Vault track: fetch encrypted blob from the API, decrypt in-browser, return blob URL.
       // If the vault key is not in session, requestVaultKey() opens the unlock modal and waits.
@@ -541,6 +560,41 @@ export function AudioEngine() {
     };
     const onDcA = () => { if (active.current === 'A' && isFinite(a.audio.duration)) { const { _setDuration: sd } = useAudioPlayer.getState(); sd(a.audio.duration); } };
     const onDcB = () => { if (active.current === 'B' && isFinite(b.audio.duration)) { const { _setDuration: sd } = useAudioPlayer.getState(); sd(b.audio.duration); } };
+
+    // ── YouTube stream URL expiry recovery ────────────────────────────────────
+    // YouTube CDN URLs expire after a period of time. When a deck fires an
+    // 'error' event and the current track is a youtube source, re-fetch a fresh
+    // stream URL from /api/yt/stream/:videoId and retry playback (once per track
+    // to prevent infinite retry loops).
+    const ytRetrySet = new Set<number>(); // track IDs that have already been retried
+    const handleYtError = async (deck: Deck) => {
+      const state = useAudioPlayer.getState();
+      const track = state.currentTrack;
+      if (!track || track.source !== 'youtube') return;
+      if (ytRetrySet.has(track.id)) return; // already retried once — give up
+      ytRetrySet.add(track.id);
+
+      const videoId = track.fileName;
+      const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
+      const qs = jwt ? `?token=${encodeURIComponent(jwt)}` : '';
+      try {
+        const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}${qs}`);
+        if (!resp.ok) return;
+        const data: { streamUrl?: string } = await resp.json();
+        if (!data.streamUrl) return;
+        const saved = deck.audio.currentTime;
+        deck.audio.src = data.streamUrl;
+        deck.audio.load();
+        deck.audio.currentTime = saved;
+        if (state.isPlaying) deck.audio.play().catch(() => {});
+      } catch {
+        // stream re-fetch failed — let playback remain stopped
+      }
+    };
+
+    const onErrA = () => { if (active.current === 'A') handleYtError(a); };
+    const onErrB = () => { if (active.current === 'B') handleYtError(b); };
+
     const onEndA = () => handleEnded('A');
     const onEndB = () => handleEnded('B');
 
@@ -550,6 +604,8 @@ export function AudioEngine() {
     b.audio.addEventListener('durationchange', onDcB);
     a.audio.addEventListener('ended',          onEndA);
     b.audio.addEventListener('ended',          onEndB);
+    a.audio.addEventListener('error',          onErrA);
+    b.audio.addEventListener('error',          onErrB);
 
     return () => {
       a.audio.removeEventListener('timeupdate',     onTuA);
@@ -558,6 +614,8 @@ export function AudioEngine() {
       b.audio.removeEventListener('durationchange', onDcB);
       a.audio.removeEventListener('ended',          onEndA);
       b.audio.removeEventListener('ended',          onEndB);
+      a.audio.removeEventListener('error',          onErrA);
+      b.audio.removeEventListener('error',          onErrB);
     };
   }, []);
 

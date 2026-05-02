@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { get } from 'idb-keyval';
 import type { Track, QueueItem, EqPreset } from '@workspace/api-client-react';
 import type { LyricLine } from '@/lib/lrc-parser';
+import type { YtTrack } from '@/types/yt-track';
+import { ytTrackToFakeTrack } from '@/types/yt-track';
 
 /** Sync localStorage read — used by store actions that change currentTrack. */
 function loadLyricsFromStorage(trackId: number): { lyrics: LyricLine[] | null; lyricsTrackId: number | null } {
@@ -77,6 +79,13 @@ interface PlayerState {
   // PLAYD+ mode
   playdPlusMode: boolean;
   togglePlaydPlusMode: () => void;
+
+  // PLAYD+ YouTube playback
+  playdPlusQueue: YtTrack[];
+  currentYtTrack: YtTrack | null;
+  setPlaydPlusQueue: (tracks: YtTrack[]) => void;
+  playYtTrack: (track: YtTrack, queue?: YtTrack[], index?: number) => void;
+  clearYtPlayback: () => void;
 
   // Global search
   searchQuery: string;
@@ -168,6 +177,23 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     savePref('playd_plus_mode', next);
     return { playdPlusMode: next };
   }),
+
+  playdPlusQueue: [],
+  currentYtTrack: null,
+  setPlaydPlusQueue: (tracks) => set({ playdPlusQueue: tracks }),
+  playYtTrack: (track, queue, index) => {
+    const fakeTrack = ytTrackToFakeTrack(track);
+    const fakeQueue = (queue ?? [track]).map((t, i) => ({
+      id: i,
+      trackId: ytTrackToFakeTrack(t).id,
+      position: i,
+      track: ytTrackToFakeTrack(t),
+    }));
+    const startIdx = index ?? 0;
+    set({ playdPlusQueue: queue ?? [track], currentYtTrack: track });
+    get().play(fakeTrack, fakeQueue, startIdx);
+  },
+  clearYtPlayback: () => set({ playdPlusQueue: [], currentYtTrack: null }),
 
   // Sleep Timer — restore from localStorage, discarding expired timestamps
   sleepTimerExpiry: (() => {

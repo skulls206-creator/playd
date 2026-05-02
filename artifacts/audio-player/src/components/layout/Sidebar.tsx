@@ -25,7 +25,7 @@ import {
 import {
   ListMusic, Settings, Search,
   Library, Disc3, User, ChevronDown, ChevronRight, X, LogOut, Download, FileText,
-  Plus, Pencil, Trash2, Sparkles, TrendingUp, Radio, Star,
+  Plus, Pencil, Trash2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlaydLogo } from '@/components/ui/PlaydLogo';
@@ -212,34 +212,12 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
 
         {playdPlusMode ? (
           /* ── PLAYD+ Discovery Nav ──────────────────────────────────────── */
-          <>
-            <div className="px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Discover</p>
-              <div className="space-y-0.5">
-                {[
-                  { icon: Sparkles, label: 'For You' },
-                  { icon: TrendingUp, label: 'Trending' },
-                  { icon: Radio, label: 'Radio' },
-                  { icon: Star, label: 'Saved' },
-                ].map(({ icon: Icon, label }) => (
-                  <button
-                    key={label}
-                    disabled
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-xs font-medium text-muted-foreground/50 cursor-not-allowed"
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    {label}
-                    <span className="ml-auto text-[9px] text-primary/40 font-semibold uppercase tracking-widest">soon</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="mx-3 border-t border-border/30 pt-3">
-              <p className="text-[10px] text-muted-foreground/50 italic leading-relaxed px-2">
-                PLAYD+ streams music from YouTube. Search and discovery features are coming soon.
-              </p>
-            </div>
-          </>
+          <div className="px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Discovery</p>
+            <p className="text-[10px] text-muted-foreground/50 leading-relaxed px-1">
+              Search for any song or paste a YouTube / Spotify URL to import tracks.
+            </p>
+          </div>
         ) : (
           /* ── Local Library Nav ─────────────────────────────────────────── */
           <>
