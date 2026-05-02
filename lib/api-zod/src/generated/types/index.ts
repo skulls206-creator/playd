@@ -23,6 +23,7 @@ export * from "./playlistTrack";
 export * from "./queueItem";
 export * from "./replaceQueueBody";
 export * from "./setActiveEqPresetBody";
+export * from "./setTrackReplaygainBody";
 export * from "./subsonicServer";
 export * from "./subsonicTestResult";
 export * from "./track";

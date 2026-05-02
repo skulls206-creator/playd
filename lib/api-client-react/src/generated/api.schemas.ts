@@ -39,17 +39,6 @@ export interface Track {
   replaygainGain?: number | null;
   createdAt: string;
   updatedAt: string;
-  // Zero-knowledge vault fields (populated only when source = 'vault')
-  /** @nullable */
-  vaultEncryptedKey?: string | null;
-  /** @nullable */
-  vaultKeyIv?: string | null;
-  /** @nullable */
-  vaultDataIv?: string | null;
-  /** @nullable */
-  vaultStatus?: string | null;
-  /** @nullable */
-  vaultBlobSize?: number | null;
 }
 
 export interface CreateTrackBody {
@@ -75,6 +64,10 @@ export interface CreateTrackBody {
   subsonicServerId?: number | null;
 }
 
+export interface SetTrackReplaygainBody {
+  gain: number;
+}
+
 export interface UpdateTrackBody {
   title?: string;
   artist?: string;
@@ -90,10 +83,6 @@ export interface UpdateTrackBody {
   albumArtDataUrl?: string | null;
   /** @nullable */
   replaygainGain?: number | null;
-}
-
-export interface SetTrackReplaygainBody {
-  gain: number;
 }
 
 export interface BulkUpsertTracksBody {

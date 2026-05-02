@@ -43,11 +43,6 @@ export const ListTracksResponseItem = zod.object({
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
   replaygainGain: zod.number().nullish(),
-  vaultEncryptedKey: zod.string().nullish(),
-  vaultKeyIv: zod.string().nullish(),
-  vaultDataIv: zod.string().nullish(),
-  vaultStatus: zod.string().nullish(),
-  vaultBlobSize: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -124,6 +119,38 @@ export const BulkUpsertTracksResponse = zod.object({
 });
 
 /**
+ * @summary Set the ReplayGain value for a track
+ */
+export const SetTrackReplaygainParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SetTrackReplaygainBody = zod.object({
+  gain: zod.number(),
+});
+
+export const SetTrackReplaygainResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  artist: zod.string(),
+  album: zod.string(),
+  year: zod.number().nullish(),
+  genre: zod.string().nullish(),
+  duration: zod.number(),
+  trackNumber: zod.number().nullish(),
+  fileName: zod.string(),
+  folderPath: zod.string(),
+  albumArtDataUrl: zod.string().nullish(),
+  rating: zod.number(),
+  source: zod.string(),
+  subsonicId: zod.string().nullish(),
+  subsonicServerId: zod.number().nullish(),
+  replaygainGain: zod.number().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+/**
  * @summary Get a track
  */
 export const GetTrackParams = zod.object({
@@ -147,11 +174,6 @@ export const GetTrackResponse = zod.object({
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
   replaygainGain: zod.number().nullish(),
-  vaultEncryptedKey: zod.string().nullish(),
-  vaultKeyIv: zod.string().nullish(),
-  vaultDataIv: zod.string().nullish(),
-  vaultStatus: zod.string().nullish(),
-  vaultBlobSize: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -192,11 +214,6 @@ export const UpdateTrackResponse = zod.object({
   subsonicId: zod.string().nullish(),
   subsonicServerId: zod.number().nullish(),
   replaygainGain: zod.number().nullish(),
-  vaultEncryptedKey: zod.string().nullish(),
-  vaultKeyIv: zod.string().nullish(),
-  vaultDataIv: zod.string().nullish(),
-  vaultStatus: zod.string().nullish(),
-  vaultBlobSize: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });

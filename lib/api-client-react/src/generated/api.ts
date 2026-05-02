@@ -34,6 +34,7 @@ import type {
   QueueItem,
   ReplaceQueueBody,
   SetActiveEqPresetBody,
+  SetTrackReplaygainBody,
   SubsonicServer,
   SubsonicTestResult,
   Track,
@@ -391,6 +392,93 @@ export const useBulkUpsertTracks = <
   TContext
 > => {
   return useMutation(getBulkUpsertTracksMutationOptions(options));
+};
+
+/**
+ * @summary Set the ReplayGain value for a track
+ */
+export const getSetTrackReplaygainUrl = (id: number) => {
+  return `/api/tracks/${id}/replaygain`;
+};
+
+export const setTrackReplaygain = async (
+  id: number,
+  setTrackReplaygainBody: SetTrackReplaygainBody,
+  options?: RequestInit,
+): Promise<Track> => {
+  return customFetch<Track>(getSetTrackReplaygainUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setTrackReplaygainBody),
+  });
+};
+
+export const getSetTrackReplaygainMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setTrackReplaygain>>,
+    TError,
+    { id: number; data: BodyType<SetTrackReplaygainBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setTrackReplaygain>>,
+  TError,
+  { id: number; data: BodyType<SetTrackReplaygainBody> },
+  TContext
+> => {
+  const mutationKey = ["setTrackReplaygain"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setTrackReplaygain>>,
+    { id: number; data: BodyType<SetTrackReplaygainBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setTrackReplaygain(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetTrackReplaygainMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setTrackReplaygain>>
+>;
+export type SetTrackReplaygainMutationBody = BodyType<SetTrackReplaygainBody>;
+export type SetTrackReplaygainMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Set the ReplayGain value for a track
+ */
+export const useSetTrackReplaygain = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setTrackReplaygain>>,
+    TError,
+    { id: number; data: BodyType<SetTrackReplaygainBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setTrackReplaygain>>,
+  TError,
+  { id: number; data: BodyType<SetTrackReplaygainBody> },
+  TContext
+> => {
+  return useMutation(getSetTrackReplaygainMutationOptions(options));
 };
 
 /**

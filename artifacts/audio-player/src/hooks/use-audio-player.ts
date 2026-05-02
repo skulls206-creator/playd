@@ -154,18 +154,71 @@ function savePref(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
+const YT_TRACK_KEY = 'playd_plus_current';
+const PLAYD_PLUS_QUEUE_KEY = 'playd_plus_queue';
+
+function buildYtFakeQueue(tracks: YtTrack[]): QueueItem[] {
+  return tracks.map((t, i) => {
+    const fake = ytTrackToFakeTrack(t);
+    return {
+      id: i,
+      trackId: fake.id,
+      position: i,
+      track: fake as unknown as Track,
+    };
+  });
+}
+
+interface InitialPlayback {
+  currentTrack: Track | null;
+  queue: QueueItem[];
+  queueIndex: number;
+  currentYtTrack: YtTrack | null;
+  playdPlusQueue: YtTrack[];
+}
+
+function buildInitialPlayback(): InitialPlayback {
+  const restoredYt = loadPref<YtTrack | null>(YT_TRACK_KEY, null);
+  const restoredQueue = loadPref<YtTrack[]>(PLAYD_PLUS_QUEUE_KEY, []);
+  const lastTrack = loadPref<Track | null>('playd_last_track', null);
+
+  if (restoredYt && restoredQueue.length > 0) {
+    const idx = restoredQueue.findIndex((t) => t.videoId === restoredYt.videoId);
+    if (idx >= 0) {
+      const fakeQueue = buildYtFakeQueue(restoredQueue);
+      return {
+        currentTrack: fakeQueue[idx].track,
+        queue: fakeQueue,
+        queueIndex: idx,
+        currentYtTrack: restoredYt,
+        playdPlusQueue: restoredQueue,
+      };
+    }
+  }
+
+  return {
+    currentTrack: lastTrack,
+    queue: [],
+    queueIndex: -1,
+    currentYtTrack: restoredYt,
+    playdPlusQueue: restoredQueue,
+  };
+}
+
+const __initialPlayback = buildInitialPlayback();
+
 export const useAudioPlayer = create<PlayerState>((set, get) => ({
   libraryFilter: { type: 'all' },
   setLibraryFilter: (filter) => set({ libraryFilter: filter }),
 
-  currentTrack: loadPref<Track | null>('playd_last_track', null),
+  currentTrack: __initialPlayback.currentTrack,
   isPlaying: false, // never auto-play on restore — requires explicit user action
   volume: loadPref('playd_volume', 1),
   isMuted: loadPref('playd_muted', false),
   progress: 0,
   duration: 0,
-  queue: [],
-  queueIndex: -1,
+  queue: __initialPlayback.queue,
+  queueIndex: __initialPlayback.queueIndex,
   
   isMiniPlayer: false,
   isCompactMiniPlayer: false,
@@ -192,31 +245,26 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     return { playdPlusMode: next };
   }),
 
-  playdPlusQueue: loadPref<YtTrack[]>('playd_plus_queue', []),
-  currentYtTrack: loadPref<YtTrack | null>('playd_plus_current', null),
+  playdPlusQueue: __initialPlayback.playdPlusQueue,
+  currentYtTrack: __initialPlayback.currentYtTrack,
   setPlaydPlusQueue: (tracks) => {
-    savePref('playd_plus_queue', tracks);
+    savePref(PLAYD_PLUS_QUEUE_KEY, tracks);
     set({ playdPlusQueue: tracks });
   },
   playYtTrack: (track, queue, index) => {
-    const fakeTrack = ytTrackToFakeTrack(track);
-    const finalQueue = queue ?? [track];
-    const fakeQueue = finalQueue.map((t, i) => ({
-      id: i,
-      trackId: ytTrackToFakeTrack(t).id,
-      position: i,
-      track: ytTrackToFakeTrack(t),
-    }));
+    const queueArr = queue ?? [track];
+    const fakeQueue = buildYtFakeQueue(queueArr);
     const startIdx = index ?? 0;
-    savePref('playd_plus_queue', finalQueue);
-    savePref('playd_plus_current', track);
-    set({ playdPlusQueue: finalQueue, currentYtTrack: track });
+    const fakeTrack = fakeQueue[startIdx]?.track ?? (ytTrackToFakeTrack(track) as unknown as Track);
+    savePref(PLAYD_PLUS_QUEUE_KEY, queueArr);
+    savePref(YT_TRACK_KEY, track);
+    set({ playdPlusQueue: queueArr, currentYtTrack: track });
     get().play(fakeTrack, fakeQueue, startIdx);
   },
   addToYtQueue: (track) => set((state) => {
     const fakeTrack = ytTrackToFakeTrack(track);
     const newPlaydPlus = [...state.playdPlusQueue, track];
-    savePref('playd_plus_queue', newPlaydPlus);
+    savePref(PLAYD_PLUS_QUEUE_KEY, newPlaydPlus);
     const newItem: QueueItem = {
       id: nextQueueItemId(),
       trackId: fakeTrack.id,
@@ -226,8 +274,8 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     return { playdPlusQueue: newPlaydPlus, queue: [...state.queue, newItem] };
   }),
   clearYtPlayback: () => {
-    savePref('playd_plus_queue', []);
-    savePref('playd_plus_current', null);
+    savePref(PLAYD_PLUS_QUEUE_KEY, []);
+    savePref(YT_TRACK_KEY, null);
     set({ playdPlusQueue: [], currentYtTrack: null });
   },
 
@@ -306,10 +354,14 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
 
     const lyricsState = nextTrack ? loadLyricsFromStorage(nextTrack.id) : { lyrics: null, lyricsTrackId: null };
     savePref('playd_last_track', nextTrack);
-    return { 
-      currentTrack: nextTrack, 
-      queue: nextQueue, 
+    const nextYt = syncYtForTrack(nextTrack, state.playdPlusQueue);
+    savePref(YT_TRACK_KEY, nextYt);
+
+    return {
+      currentTrack: nextTrack,
+      queue: nextQueue,
       queueIndex: nextIndex,
+      currentYtTrack: nextYt,
       isPlaying: !!nextTrack,
       ...lyricsState,
     };
@@ -346,7 +398,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     const nextTrackN = state.queue[nextIndex].track;
     savePref('playd_last_track', nextTrackN);
     const nextYt = syncYtForTrack(nextTrackN, state.playdPlusQueue);
-    savePref('playd_plus_current', nextYt);
+    savePref(YT_TRACK_KEY, nextYt);
     return {
       queueIndex: nextIndex,
       currentTrack: nextTrackN,
@@ -374,7 +426,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     const prevTrack = state.queue[prevIndex].track;
     savePref('playd_last_track', prevTrack);
     const prevYt = syncYtForTrack(prevTrack, state.playdPlusQueue);
-    savePref('playd_plus_current', prevYt);
+    savePref(YT_TRACK_KEY, prevYt);
     return {
       queueIndex: prevIndex,
       currentTrack: prevTrack,
@@ -463,7 +515,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     const advTrack = state.queue[idx].track;
     savePref('playd_last_track', advTrack);
     const advYt = syncYtForTrack(advTrack, state.playdPlusQueue);
-    savePref('playd_plus_current', advYt);
+    savePref(YT_TRACK_KEY, advYt);
     return {
       queueIndex: idx,
       currentTrack: advTrack,
