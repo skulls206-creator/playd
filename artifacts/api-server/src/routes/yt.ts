@@ -1,13 +1,18 @@
 import { Router, type IRouter } from "express";
 import { spawn } from "child_process";
 import path from "path";
+import { fileURLToPath } from "url";
 import { db, ytSearchHistoryTable } from "@workspace/db";
 import { and, eq, desc } from "drizzle-orm";
 import { requireAuth, requireStreamAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
-const HELPER_SCRIPT = path.join(process.cwd(), "../../scripts/ytmdl_helper.py");
+// Resolve helper relative to the bundled file, not process.cwd().
+// build.mjs copies scripts/ytmdl_helper.py into dist/ at build time, so
+// it lives next to dist/index.mjs in both dev and prod.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const HELPER_SCRIPT = path.join(__dirname, "ytmdl_helper.py");
 
 function runHelper(command: object): Promise<unknown> {
   return new Promise((resolve, reject) => {
