@@ -25,10 +25,11 @@ import {
 import {
   ListMusic, Settings, Search,
   Library, Disc3, User, ChevronDown, ChevronRight, X, LogOut, Download, FileText,
-  Plus, Pencil, Trash2,
+  Plus, Pencil, Trash2, Sparkles, TrendingUp, Radio, Star,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlaydLogo } from '@/components/ui/PlaydLogo';
+import { PlaydPlusToggle } from '@/components/ui/PlaydPlusToggle';
 
 type NavSection = 'artists' | 'albums' | 'playlists';
 
@@ -40,7 +41,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   const { data: tracks = [] } = useListTracks();
   const { data: playlists = [] } = useListPlaylists();
   const { isScanning } = useFileSystem();
-  const { libraryFilter, setLibraryFilter, togglePrefs, isLyricsOpen, toggleLyrics, searchQuery, setSearchQuery } = useAudioPlayer();
+  const { libraryFilter, setLibraryFilter, togglePrefs, isLyricsOpen, toggleLyrics, searchQuery, setSearchQuery, playdPlusMode } = useAudioPlayer();
   const { user, logout } = useAuth();
   const { canInstall, install } = usePwaInstall();
   const queryClient = useQueryClient();
@@ -175,13 +176,13 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
     <div className="w-72 sm:w-52 flex-shrink-0 bg-sidebar border-r border-border flex flex-col h-full overflow-hidden">
       {/* Logo + Search */}
       <div className="p-3 border-b border-border space-y-3">
-        <div className="flex items-center justify-between">
-          <h1 className="text-base font-bold tracking-tight text-primary flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <h1 className="text-base font-bold tracking-tight text-primary flex items-center gap-1.5 shrink-0">
             <PlaydLogo size={22} />
-            PLAYD
           </h1>
+          <PlaydPlusToggle />
           {onClose && (
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={onClose}>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground ml-auto shrink-0" onClick={onClose}>
               <X className="w-4 h-4" />
             </Button>
           )}
@@ -209,6 +210,39 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
       <ScrollArea className="flex-1">
         <div className="py-2 space-y-1">
 
+        {playdPlusMode ? (
+          /* ── PLAYD+ Discovery Nav ──────────────────────────────────────── */
+          <>
+            <div className="px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Discover</p>
+              <div className="space-y-0.5">
+                {[
+                  { icon: Sparkles, label: 'For You' },
+                  { icon: TrendingUp, label: 'Trending' },
+                  { icon: Radio, label: 'Radio' },
+                  { icon: Star, label: 'Saved' },
+                ].map(({ icon: Icon, label }) => (
+                  <button
+                    key={label}
+                    disabled
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-xs font-medium text-muted-foreground/50 cursor-not-allowed"
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {label}
+                    <span className="ml-auto text-[9px] text-primary/40 font-semibold uppercase tracking-widest">soon</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mx-3 border-t border-border/30 pt-3">
+              <p className="text-[10px] text-muted-foreground/50 italic leading-relaxed px-2">
+                PLAYD+ streams music from YouTube. Search and discovery features are coming soon.
+              </p>
+            </div>
+          </>
+        ) : (
+          /* ── Local Library Nav ─────────────────────────────────────────── */
+          <>
           {/* All Songs */}
           <div className="px-2 mb-1">
             <button
@@ -381,6 +415,8 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
               </div>
             )}
           </div>
+          </>
+        )}
 
         </div>
       </ScrollArea>

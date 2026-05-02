@@ -74,6 +74,10 @@ interface PlayerState {
   replaygainEnabled: boolean;
   setReplaygainEnabled: (enabled: boolean) => void;
 
+  // PLAYD+ mode
+  playdPlusMode: boolean;
+  togglePlaydPlusMode: () => void;
+
   // Global search
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -157,6 +161,13 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
 
   replaygainEnabled: loadPref('playd_replaygain', false),
   setReplaygainEnabled: (enabled) => { savePref('playd_replaygain', enabled); set({ replaygainEnabled: enabled }); },
+
+  playdPlusMode: loadPref('playd_plus_mode', false),
+  togglePlaydPlusMode: () => set((state) => {
+    const next = !state.playdPlusMode;
+    savePref('playd_plus_mode', next);
+    return { playdPlusMode: next };
+  }),
 
   // Sleep Timer — restore from localStorage, discarding expired timestamps
   sleepTimerExpiry: (() => {
