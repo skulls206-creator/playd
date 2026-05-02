@@ -4,3 +4,4 @@ export * from "./queue";
 export * from "./eq_presets";
 export * from "./subsonic_servers";
 export * from "./users";
+export * from "./yt_search_history";

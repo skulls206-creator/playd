@@ -6,6 +6,7 @@ import queueRouter from "./queue";
 import eqPresetsRouter from "./eq_presets";
 import authRouter from "./auth";
 import vaultRouter from "./vault";
+import ytRouter from "./yt";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(playlistsRouter);
 router.use(queueRouter);
 router.use(eqPresetsRouter);
 router.use(vaultRouter);
+router.use(ytRouter);
 
 export default router;

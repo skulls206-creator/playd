@@ -163,3 +163,21 @@ foobar2000-style audio player PWA. Served at `/`.
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+## PLAYD+ Search & Stream API (`/api/yt/*`)
+
+Search-first music discovery backend. All endpoints are JWT-protected via `requireAuth` (or `requireStreamAuth` for stream).
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/yt/search?q=` | GET | YouTube search via yt-dlp. Returns title, artist, duration, thumbnail, videoId. Also saves query to search history. |
+| `/api/yt/stream/:videoId` | GET | Resolves a direct CDN audio URL for the given YouTube videoId. Accepts JWT via `?token=` param for `<audio>` element use. |
+| `/api/yt/resolve-url` | POST | Smart dispatcher: accepts a YouTube playlist URL or Spotify URL (track/playlist/album). YouTube → yt-dlp flat playlist dump. Spotify → Spotify Web API metadata + yt-dlp search to get videoIds. |
+| `/api/yt/history` | GET | Returns user's search history (most recent first). |
+| `/api/yt/history/:id` | DELETE | Removes a search history entry (only the owner can delete). |
+
+**Python helper**: `scripts/ytmdl_helper.py` — accepts a JSON command on stdin (`search`, `stream`, `resolve-youtube-playlist`, `resolve-spotify`), returns JSON on stdout. Spawned by Express via `child_process.spawn`. Requires `yt-dlp` (system) and `spotipy` (pip).
+
+**Spotify**: Uses Client Credentials flow via `spotipy`. Requires `SPOTIFY_CLIENT_ID` + `SPOTIFY_CLIENT_SECRET` env secrets. If not set, `/api/yt/resolve-url` returns HTTP 422 with a clear error instead of crashing.
+
+**DB**: `yt_search_history` table (`id`, `user_id`, `query`, `created_at`). Schema in `lib/db/src/schema/yt_search_history.ts`.
