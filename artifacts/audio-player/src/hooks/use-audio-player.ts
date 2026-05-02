@@ -5,6 +5,19 @@ import type { LyricLine } from '@/lib/lrc-parser';
 import type { YtTrack } from '@/types/yt-track';
 import { ytTrackToFakeTrack } from '@/types/yt-track';
 
+/** Resolve currentYtTrack for a track being switched to. Returns YT match or null (clears badge for local tracks). */
+function syncYtForTrack(track: Track | null, ytQueue: YtTrack[]): YtTrack | null {
+  if (!track || track.source !== 'youtube') return null;
+  return ytQueue.find((yt) => yt.videoId === track.fileName) ?? null;
+}
+
+/** Monotonic ID generator — avoids Date.now() collisions on rapid clicks. */
+let _queueItemIdCounter = Date.now();
+function nextQueueItemId(): number {
+  _queueItemIdCounter += 1;
+  return _queueItemIdCounter;
+}
+
 /** Sync localStorage read — used by store actions that change currentTrack. */
 function loadLyricsFromStorage(trackId: number): { lyrics: LyricLine[] | null; lyricsTrackId: number | null } {
   try {
@@ -85,6 +98,7 @@ interface PlayerState {
   currentYtTrack: YtTrack | null;
   setPlaydPlusQueue: (tracks: YtTrack[]) => void;
   playYtTrack: (track: YtTrack, queue?: YtTrack[], index?: number) => void;
+  addToYtQueue: (track: YtTrack) => void;
   clearYtPlayback: () => void;
 
   // Global search
@@ -178,22 +192,44 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     return { playdPlusMode: next };
   }),
 
-  playdPlusQueue: [],
-  currentYtTrack: null,
-  setPlaydPlusQueue: (tracks) => set({ playdPlusQueue: tracks }),
+  playdPlusQueue: loadPref<YtTrack[]>('playd_plus_queue', []),
+  currentYtTrack: loadPref<YtTrack | null>('playd_plus_current', null),
+  setPlaydPlusQueue: (tracks) => {
+    savePref('playd_plus_queue', tracks);
+    set({ playdPlusQueue: tracks });
+  },
   playYtTrack: (track, queue, index) => {
     const fakeTrack = ytTrackToFakeTrack(track);
-    const fakeQueue = (queue ?? [track]).map((t, i) => ({
+    const finalQueue = queue ?? [track];
+    const fakeQueue = finalQueue.map((t, i) => ({
       id: i,
       trackId: ytTrackToFakeTrack(t).id,
       position: i,
       track: ytTrackToFakeTrack(t),
     }));
     const startIdx = index ?? 0;
-    set({ playdPlusQueue: queue ?? [track], currentYtTrack: track });
+    savePref('playd_plus_queue', finalQueue);
+    savePref('playd_plus_current', track);
+    set({ playdPlusQueue: finalQueue, currentYtTrack: track });
     get().play(fakeTrack, fakeQueue, startIdx);
   },
-  clearYtPlayback: () => set({ playdPlusQueue: [], currentYtTrack: null }),
+  addToYtQueue: (track) => set((state) => {
+    const fakeTrack = ytTrackToFakeTrack(track);
+    const newPlaydPlus = [...state.playdPlusQueue, track];
+    savePref('playd_plus_queue', newPlaydPlus);
+    const newItem: QueueItem = {
+      id: nextQueueItemId(),
+      trackId: fakeTrack.id,
+      position: state.queue.length,
+      track: fakeTrack as Track,
+    };
+    return { playdPlusQueue: newPlaydPlus, queue: [...state.queue, newItem] };
+  }),
+  clearYtPlayback: () => {
+    savePref('playd_plus_queue', []);
+    savePref('playd_plus_current', null);
+    set({ playdPlusQueue: [], currentYtTrack: null });
+  },
 
   // Sleep Timer — restore from localStorage, discarding expired timestamps
   sleepTimerExpiry: (() => {
@@ -309,9 +345,12 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     
     const nextTrackN = state.queue[nextIndex].track;
     savePref('playd_last_track', nextTrackN);
+    const nextYt = syncYtForTrack(nextTrackN, state.playdPlusQueue);
+    savePref('playd_plus_current', nextYt);
     return {
       queueIndex: nextIndex,
       currentTrack: nextTrackN,
+      currentYtTrack: nextYt,
       isPlaying: true,
       progress: 0,
       ...loadLyricsFromStorage(nextTrackN.id),
@@ -334,9 +373,12 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     
     const prevTrack = state.queue[prevIndex].track;
     savePref('playd_last_track', prevTrack);
+    const prevYt = syncYtForTrack(prevTrack, state.playdPlusQueue);
+    savePref('playd_plus_current', prevYt);
     return {
       queueIndex: prevIndex,
       currentTrack: prevTrack,
+      currentYtTrack: prevYt,
       isPlaying: true,
       progress: 0,
       ...loadLyricsFromStorage(prevTrack.id),
@@ -420,9 +462,12 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     if (idx < 0 || idx >= state.queue.length) return { isPlaying: false, progress: 0 };
     const advTrack = state.queue[idx].track;
     savePref('playd_last_track', advTrack);
+    const advYt = syncYtForTrack(advTrack, state.playdPlusQueue);
+    savePref('playd_plus_current', advYt);
     return {
       queueIndex: idx,
       currentTrack: advTrack,
+      currentYtTrack: advYt,
       isPlaying: true,
       progress: 0,
       ...loadLyricsFromStorage(advTrack.id),

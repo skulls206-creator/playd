@@ -22,6 +22,9 @@ Every time something is learned about how the user works, what they need, or how
 - `best_thumbnail()` helper filters `/sb/` storyboard URLs from yt-dlp thumbnail arrays.
 - `yt_search_history` table must be manually created if migrations don't run it. SQL: `CREATE TABLE IF NOT EXISTS yt_search_history (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL, query TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());`
 - Stream URLs are HLS manifests (`manifest.googlevideo.com`) — browsers play these natively, seeking works.
+- **YT playback persistence** (`use-audio-player.ts`): `currentYtTrack` and `playdPlusQueue` are persisted to localStorage under keys `playd_plus_current` and `playd_plus_queue`. Mutations in `playYtTrack`, `addToYtQueue`, `setPlaydPlusQueue`, and `clearYtPlayback` all call `savePref` to keep them in sync. Restored on store init via `loadPref`.
+- **YT/local hybrid queue** (`addToYtQueue`): appends a YT track to both `playdPlusQueue` and the main playback `queue` (as a fakeTrack). Lets users mix YouTube tracks into their local library queue without switching modes. AudioEngine routes by `currentTrack.source === 'youtube'`.
+- **YT source badge**: `<YtSourceBadge>` in `TransportBar.tsx` — shown next to track title in all 3 transport layouts (hero/desktop/mobile) when `currentTrack?.source === 'youtube'`.
 
 ### Testing Protocol
 Always sign into the test account before testing or reviewing any feature. Credentials are in env secrets `TEST_ACCOUNT_NAME` / `TEST_ACCOUNT_PASS` (username: `tester`). Never screenshot the login page — get past it first, then screenshot the actual feature being tested.

@@ -5,7 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
   Search, X, Play, Bookmark, Loader2, Clock,
-  Music, AlertCircle,
+  Music, AlertCircle, ListPlus, Check,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { YtTrack, YtHistoryItem } from '@/types/yt-track';
@@ -42,10 +42,17 @@ interface TrackRowProps {
   track: YtTrack;
   onPlay: () => void;
   onSave: () => void;
+  onAddToQueue: () => void;
   isPlaying?: boolean;
 }
 
-function TrackRow({ track, onPlay, onSave, isPlaying }: TrackRowProps) {
+function TrackRow({ track, onPlay, onSave, onAddToQueue, isPlaying }: TrackRowProps) {
+  const [queuedFlash, setQueuedFlash] = useState(false);
+  const handleQueueClick = () => {
+    onAddToQueue();
+    setQueuedFlash(true);
+    setTimeout(() => setQueuedFlash(false), 900);
+  };
   const [imgError, setImgError] = useState(false);
 
   return (
@@ -106,6 +113,18 @@ function TrackRow({ track, onPlay, onSave, isPlaying }: TrackRowProps) {
           <Play className="w-3.5 h-3.5" />
         </button>
         <button
+          onClick={handleQueueClick}
+          title="Add to queue"
+          className={clsx(
+            'h-7 w-7 flex items-center justify-center rounded-sm transition-colors',
+            queuedFlash
+              ? 'text-primary bg-primary/15'
+              : 'text-muted-foreground hover:text-primary hover:bg-primary/10',
+          )}
+        >
+          {queuedFlash ? <Check className="w-3.5 h-3.5" /> : <ListPlus className="w-3.5 h-3.5" />}
+        </button>
+        <button
           onClick={onSave}
           title="Save to playlist"
           className="h-7 w-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-emerald-400 hover:bg-emerald-950/30 transition-colors"
@@ -118,7 +137,7 @@ function TrackRow({ track, onPlay, onSave, isPlaying }: TrackRowProps) {
 }
 
 export function PlaydPlusPanel() {
-  const { playYtTrack, currentTrack } = useAudioPlayer();
+  const { playYtTrack, addToYtQueue, currentTrack } = useAudioPlayer();
 
   const [input, setInput] = useState('');
   const [mode, setMode] = useState<'idle' | 'searching' | 'results' | 'import-loading' | 'import'>('idle');
@@ -442,6 +461,7 @@ export function PlaydPlusPanel() {
                     track={track}
                     isPlaying={currentTrack?.source === 'youtube' && currentTrack?.fileName === track.videoId}
                     onPlay={() => handlePlay(track, results, idx)}
+                    onAddToQueue={() => addToYtQueue(track)}
                     onSave={() => handleSaveOne(track)}
                   />
                 ))}
@@ -494,6 +514,7 @@ export function PlaydPlusPanel() {
                     track={track}
                     isPlaying={currentTrack?.source === 'youtube' && currentTrack?.fileName === track.videoId}
                     onPlay={() => handlePlay(track, importTracks, idx)}
+                    onAddToQueue={() => addToYtQueue(track)}
                     onSave={() => handleSaveOne(track)}
                   />
                 ))}

@@ -9,9 +9,24 @@ import {
   Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Volume2, VolumeX,
   SlidersHorizontal, ListMusic, Settings, ChevronDown, Moon,
-  PictureInPicture2,
+  PictureInPicture2, Youtube,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+
+function YtSourceBadge({ size = 'sm' }: { size?: 'sm' | 'md' }) {
+  return (
+    <span
+      title="Streaming from YouTube"
+      className={clsx(
+        'inline-flex items-center gap-1 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 shrink-0 font-bold tracking-wide uppercase',
+        size === 'md' ? 'px-1.5 py-0.5 text-[10px]' : 'px-1 py-px text-[9px]',
+      )}
+    >
+      <Youtube className={size === 'md' ? 'w-3 h-3' : 'w-2.5 h-2.5'} />
+      YT
+    </span>
+  );
+}
 
 function formatTime(seconds: number) {
   if (isNaN(seconds) || !isFinite(seconds)) return "0:00";
@@ -230,9 +245,12 @@ export function TransportBar() {
             <p className="text-xl font-bold truncate text-foreground">
               {currentTrack?.title || '—'}
             </p>
-            <p className="text-sm text-primary truncate mt-1">
-              {currentTrack?.artist || '—'}
-            </p>
+            <div className="flex items-center justify-center gap-2 mt-1">
+              <p className="text-sm text-primary truncate">
+                {currentTrack?.artist || '—'}
+              </p>
+              {currentTrack?.source === 'youtube' && <YtSourceBadge size="md" />}
+            </div>
           </div>
         </div>
       </div>
@@ -256,8 +274,11 @@ export function TransportBar() {
             className="flex-1 min-w-0 text-left overflow-hidden"
             onClick={toggleNowPlaying}
           >
-            <div className="text-sm font-semibold truncate text-foreground leading-tight">
-              {currentTrack?.title || 'No track playing'}
+            <div className="flex items-center gap-1.5">
+              <div className="text-sm font-semibold truncate text-foreground leading-tight">
+                {currentTrack?.title || 'No track playing'}
+              </div>
+              {currentTrack?.source === 'youtube' && <YtSourceBadge />}
             </div>
             <div className="text-xs text-muted-foreground truncate leading-tight mt-0.5">
               {currentTrack?.artist || '—'}
@@ -422,8 +443,11 @@ export function TransportBar() {
             />
           </div>
           <div className="overflow-hidden flex flex-col justify-center">
-            <div className="text-sm font-medium truncate text-foreground group-hover:text-primary transition-colors">
-              {currentTrack?.title || 'No track playing'}
+            <div className="flex items-center gap-1.5">
+              <div className="text-sm font-medium truncate text-foreground group-hover:text-primary transition-colors">
+                {currentTrack?.title || 'No track playing'}
+              </div>
+              {currentTrack?.source === 'youtube' && <YtSourceBadge />}
             </div>
             <div className="text-xs text-muted-foreground truncate">
               {currentTrack?.artist || '—'}
