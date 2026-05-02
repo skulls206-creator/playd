@@ -17,6 +17,12 @@ Read the docs first. Validate before applying. Back up before editing anything d
 ### Memory is Mandatory
 Every time something is learned about how the user works, what they need, or how the system behaves — write it down here immediately. The user should never have to teach the same thing twice. This file is the memory store.
 
+### PLAYD+ Architecture Notes
+- Python helper at `scripts/ytmdl_helper.py` — use `--get-url` not `--dump-json` for stream URLs. `--dump-json` returns storyboard thumbnail URLs in the last format entry; `--get-url -f bestaudio[ext=m4a]/bestaudio/best` returns the real HLS/CDN audio URL.
+- `best_thumbnail()` helper filters `/sb/` storyboard URLs from yt-dlp thumbnail arrays.
+- `yt_search_history` table must be manually created if migrations don't run it. SQL: `CREATE TABLE IF NOT EXISTS yt_search_history (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL, query TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());`
+- Stream URLs are HLS manifests (`manifest.googlevideo.com`) — browsers play these natively, seeking works.
+
 ### Testing Protocol
 Always sign into the test account before testing or reviewing any feature. Credentials are in env secrets `TEST_ACCOUNT_NAME` / `TEST_ACCOUNT_PASS` (username: `tester`). Never screenshot the login page — get past it first, then screenshot the actual feature being tested.
 

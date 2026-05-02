@@ -30,6 +30,16 @@ def ytdlp(args: list[str]) -> dict:
     return result.stdout.strip()
 
 
+def best_thumbnail(info: dict) -> str | None:
+    """Pick the best non-storyboard thumbnail from yt-dlp info."""
+    thumbs = info.get("thumbnails") or []
+    real = [t for t in thumbs if "/sb/" not in (t.get("url") or "") and "i.ytimg.com/sb" not in (t.get("url") or "")]
+    if real:
+        real.sort(key=lambda t: (t.get("width") or t.get("preference") or 0), reverse=True)
+        return real[0].get("url")
+    return info.get("thumbnail")
+
+
 def do_search(q: str, limit: int = 10) -> list[dict]:
     raw = ytdlp([
         f"ytsearch{limit}:{q}",
@@ -48,43 +58,37 @@ def do_search(q: str, limit: int = 10) -> list[dict]:
             "title": info.get("title"),
             "artist": info.get("uploader") or info.get("channel"),
             "duration": info.get("duration"),
-            "thumbnail": (info.get("thumbnails") or [{}])[-1].get("url") if info.get("thumbnails") else info.get("thumbnail"),
+            "thumbnail": best_thumbnail(info),
         })
     return tracks
 
 
 def do_stream(video_id: str) -> dict:
-    raw = ytdlp([
-        f"https://www.youtube.com/watch?v={video_id}",
+    yt_url = f"https://www.youtube.com/watch?v={video_id}"
+    # Get metadata for title/duration/thumbnail
+    meta_raw = ytdlp([
+        yt_url,
         "--dump-json",
         "--no-playlist",
         "--quiet",
         "--no-warnings",
-        "-f", "bestaudio/best",
     ])
-    info = json.loads(raw)
-    # Find the best audio format URL
-    url = None
-    formats = info.get("formats", [])
-    # prefer audio-only formats
-    audio_formats = [f for f in formats if f.get("vcodec") == "none" and f.get("url")]
-    if audio_formats:
-        audio_formats.sort(key=lambda f: f.get("tbr") or 0, reverse=True)
-        url = audio_formats[0]["url"]
-    else:
-        # fallback to any format with a url
-        for f in reversed(formats):
-            if f.get("url"):
-                url = f["url"]
-                break
-    if not url:
-        url = info.get("url")
+    info = json.loads(meta_raw)
+    # Get actual audio CDN/HLS URL via --get-url (reliable, no storyboard risk)
+    stream_url = ytdlp([
+        yt_url,
+        "--get-url",
+        "--no-playlist",
+        "--quiet",
+        "--no-warnings",
+        "-f", "bestaudio[ext=m4a]/bestaudio/best",
+    ]).splitlines()[0].strip()
     return {
         "videoId": video_id,
-        "streamUrl": url,
+        "streamUrl": stream_url,
         "title": info.get("title"),
         "duration": info.get("duration"),
-        "thumbnail": (info.get("thumbnails") or [{}])[-1].get("url") if info.get("thumbnails") else info.get("thumbnail"),
+        "thumbnail": best_thumbnail(info),
     }
 
 
@@ -108,7 +112,7 @@ def do_resolve_youtube_playlist(url: str) -> list[dict]:
             "title": info.get("title"),
             "artist": info.get("uploader") or info.get("channel"),
             "duration": info.get("duration"),
-            "thumbnail": (info.get("thumbnails") or [{}])[-1].get("url") if info.get("thumbnails") else info.get("thumbnail"),
+            "thumbnail": best_thumbnail(info),
         })
     return tracks
 
