@@ -49,18 +49,31 @@ interface TrackRowProps {
 
 function TrackRow({ track, onPlay, onSave, onAddToQueue, isPlaying }: TrackRowProps) {
   const [queuedFlash, setQueuedFlash] = useState(false);
-  const handleQueueClick = () => {
+  const handleQueueClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     onAddToQueue();
     setQueuedFlash(true);
     setTimeout(() => setQueuedFlash(false), 900);
+  };
+  const handlePlayClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onPlay();
+  };
+  const handleSaveClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSave();
   };
   const [imgError, setImgError] = useState(false);
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={onPlay}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlay(); } }}
       className={clsx(
-        'group flex items-center gap-3 px-3 py-2 rounded-md transition-colors',
-        isPlaying ? 'bg-primary/10' : 'hover:bg-white/5',
+        'group flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer select-none',
+        isPlaying ? 'bg-primary/10' : 'hover:bg-white/5 active:bg-white/10',
       )}
     >
       {/* Thumbnail */}
@@ -104,10 +117,11 @@ function TrackRow({ track, onPlay, onSave, onAddToQueue, isPlaying }: TrackRowPr
         </span>
       )}
 
-      {/* Actions — always visible on mobile (no hover); fade-in on hover for desktop */}
+      {/* Actions — always visible on mobile (no hover); fade-in on hover for desktop.
+          Tapping the row itself also plays — these buttons stopPropagation. */}
       <div className="flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
         <button
-          onClick={onPlay}
+          onClick={handlePlayClick}
           title="Play"
           aria-label="Play"
           className="h-11 w-11 sm:h-7 sm:w-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/15 transition-colors"
@@ -130,7 +144,7 @@ function TrackRow({ track, onPlay, onSave, onAddToQueue, isPlaying }: TrackRowPr
             : <ListPlus className="w-5 h-5 sm:w-3.5 sm:h-3.5" />}
         </button>
         <button
-          onClick={onSave}
+          onClick={handleSaveClick}
           title="Save to playlist"
           aria-label="Save to playlist"
           className="h-11 w-11 sm:h-7 sm:w-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-emerald-400 hover:bg-emerald-950/30 active:bg-emerald-950/40 transition-colors"

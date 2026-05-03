@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'playd-v4';
+const CACHE_VERSION = 'playd-v5';
 const SHELL_CACHE   = `${CACHE_VERSION}-shell`;
 const ASSET_CACHE   = `${CACHE_VERSION}-assets`;
 
