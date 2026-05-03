@@ -4,6 +4,9 @@ modules = ["nodejs-24", "python-3.11", "postgresql-16"]
 id = "artifacts/api-server"
 
 [[artifacts]]
+id = "artifacts/audio-player"
+
+[[artifacts]]
 id = "artifacts/mockup-sandbox"
 
 [deployment]
