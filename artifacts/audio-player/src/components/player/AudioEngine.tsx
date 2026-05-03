@@ -179,7 +179,14 @@ export function AudioEngine() {
   // `<audio src>` URLs which cannot set custom headers.
   const fetchStreamToken = async (resource: string): Promise<string | null> => {
     const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-    if (!jwt) return null;
+    if (!jwt) {
+      toast({
+        title: 'Not signed in',
+        description: 'Please sign in again to play this track.',
+        duration: 8000,
+      });
+      return null;
+    }
     try {
       const resp = await fetch('/api/auth/stream-token', {
         method: 'POST',
@@ -187,13 +194,26 @@ export function AudioEngine() {
         body: JSON.stringify({ resource }),
       });
       if (!resp.ok) {
-        console.error('AudioEngine: failed to obtain stream token', resp.status);
+        const body = await resp.text().catch(() => '');
+        console.error('AudioEngine: failed to obtain stream token', resp.status, body);
+        toast({
+          title: `Stream token failed (${resp.status})`,
+          description: resp.status === 401
+            ? 'Your session expired. Sign out and sign back in.'
+            : (body.slice(0, 140) || 'Could not obtain a playback token.'),
+          duration: 9000,
+        });
         return null;
       }
       const data: { token?: string } = await resp.json();
       return data.token ?? null;
     } catch (e) {
       console.error('AudioEngine: stream token fetch error', e);
+      toast({
+        title: 'Network error',
+        description: `Could not reach stream-token endpoint: ${(e as Error).message ?? e}`,
+        duration: 9000,
+      });
       return null;
     }
   };
@@ -225,17 +245,52 @@ export function AudioEngine() {
       // Use Authorization header to avoid placing the JWT in the URL.
       const videoId = track.fileName;
       const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-      const headers: HeadersInit = jwt ? { Authorization: `Bearer ${jwt}` } : {};
+      if (!jwt) {
+        toast({
+          title: 'Not signed in',
+          description: 'Sign in again to stream from YouTube.',
+          duration: 8000,
+        });
+        return null;
+      }
+      const headers: HeadersInit = { Authorization: `Bearer ${jwt}` };
+      console.log('[AudioEngine] YT resolve →', { videoId, title: track.title });
       try {
         const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}`, { headers });
         if (!resp.ok) {
-          console.error('AudioEngine: YouTube stream fetch failed', resp.status);
+          const body = await resp.text().catch(() => '');
+          console.error('[AudioEngine] YT stream fetch failed', resp.status, body);
+          toast({
+            title: `YouTube stream failed (${resp.status})`,
+            description:
+              resp.status === 401 ? 'Session expired — sign out and back in.' :
+              resp.status === 404 ? `Video not found: ${videoId}` :
+              resp.status === 429 ? 'Too many requests. Wait a minute and try again.' :
+              resp.status === 503 ? 'Server busy — too many concurrent streams. Try again in a moment.' :
+              (body.slice(0, 180) || `Could not resolve a stream URL for "${track.title}".`),
+            duration: 10000,
+          });
           return null;
         }
         const data = await resp.json();
-        return data.streamUrl ?? null;
+        if (!data.streamUrl) {
+          console.error('[AudioEngine] YT response missing streamUrl', data);
+          toast({
+            title: 'No stream URL returned',
+            description: `Server response had no streamUrl for "${track.title}".`,
+            duration: 9000,
+          });
+          return null;
+        }
+        console.log('[AudioEngine] YT resolved OK', { len: data.streamUrl.length });
+        return data.streamUrl;
       } catch (e) {
-        console.error('AudioEngine: YouTube stream error', e);
+        console.error('[AudioEngine] YT stream network error', e);
+        toast({
+          title: 'Network error',
+          description: `Could not reach YT stream endpoint: ${(e as Error).message ?? e}`,
+          duration: 9000,
+        });
         return null;
       }
     }
@@ -609,10 +664,29 @@ export function AudioEngine() {
       // Only attempt recovery for network-level errors — decode errors
       // (MEDIA_ERR_DECODE = 3) are unrelated to URL expiry.
       const errCode = deck.audio.error?.code;
+      const errMsg = deck.audio.error?.message ?? '';
+      const codeName =
+        errCode === MediaError.MEDIA_ERR_ABORTED ? 'ABORTED' :
+        errCode === MediaError.MEDIA_ERR_NETWORK ? 'NETWORK' :
+        errCode === MediaError.MEDIA_ERR_DECODE ? 'DECODE' :
+        errCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ? 'SRC_NOT_SUPPORTED' :
+        `code=${errCode}`;
+      console.error('[AudioEngine] YT <audio> error', { codeName, errCode, errMsg, src: deck.audio.src.slice(0, 120) });
+
       const isNetworkError =
         errCode === MediaError.MEDIA_ERR_NETWORK ||           // 2
         errCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;   // 4
-      if (!isNetworkError) return;
+      if (!isNetworkError) {
+        // DECODE / ABORTED — surface to the user so they're not staring at a silent player
+        toast({
+          title: `Playback error (${codeName})`,
+          description: errMsg
+            ? errMsg.slice(0, 180)
+            : 'The browser could not decode this audio stream. Try another track.',
+          duration: 9000,
+        });
+        return;
+      }
 
       if (ytRetrySet.has(track.id)) return; // already retried once — give up
 
@@ -785,7 +859,12 @@ export function AudioEngine() {
       idleDeck.audio.pause();
 
       const ok = await loadDeckFile.current(activeDeck, currentTrack);
-      if (!ok) return;
+      if (!ok) {
+        // resolveTrackSrc already showed a specific toast; surface a generic
+        // fallback in case it didn't (e.g. unsupported track source).
+        console.warn('[AudioEngine] loadDeckFile failed', { id: currentTrack.id, source: currentTrack.source, title: currentTrack.title });
+        return;
+      }
 
       const { isPlaying: playing } = useAudioPlayer.getState();
       if (playing) {
