@@ -15,6 +15,31 @@ import json
 import os
 import subprocess
 import re
+import tempfile
+import atexit
+
+# If YT_COOKIES_TXT is set (Netscape-format cookies.txt contents), write it
+# to a temp file once at startup and pass --cookies to every yt-dlp call.
+# This is required in production (Replit Autoscale = GCP IPs) because Google
+# bot-blocks its own cloud range against YouTube regardless of player_client.
+_COOKIES_FILE_PATH: str | None = None
+
+
+def _cookies_file() -> str | None:
+    global _COOKIES_FILE_PATH
+    if _COOKIES_FILE_PATH is not None:
+        return _COOKIES_FILE_PATH or None
+    raw = os.environ.get("YT_COOKIES_TXT")
+    if not raw:
+        _COOKIES_FILE_PATH = ""
+        return None
+    fd, path = tempfile.mkstemp(prefix="yt_cookies_", suffix=".txt")
+    with os.fdopen(fd, "w") as f:
+        f.write(raw)
+    os.chmod(path, 0o600)
+    atexit.register(lambda p=path: os.path.exists(p) and os.remove(p))
+    _COOKIES_FILE_PATH = path
+    return path
 
 # Hard cap on playlist/album items processed per request.
 # The caller may supply a lower value; we never exceed this.
@@ -32,6 +57,9 @@ def ytdlp(args: list[str]) -> dict:
         "--extractor-args",
         "youtube:player_client=android,web_safari,tv_embedded",
     ]
+    cookies_path = _cookies_file()
+    if cookies_path:
+        base_args += ["--cookies", cookies_path]
     result = subprocess.run(
         ["yt-dlp"] + base_args + args,
         capture_output=True,
