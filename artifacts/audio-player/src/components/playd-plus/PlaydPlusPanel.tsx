@@ -4,13 +4,70 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from '@/components/ui/context-menu';
+import {
   Search, X, Play, Bookmark, Loader2, Clock,
   Music, AlertCircle, ListPlus, Check, Menu,
+  Copy, ExternalLink,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { YtTrack, YtHistoryItem } from '@/types/yt-track';
 import { SaveDestinationModal } from './SaveDestinationModal';
 import { PlaydPlusToggle } from '@/components/ui/PlaydPlusToggle';
+
+// Long-press → synthesize a `contextmenu` event so Radix's ContextMenuTrigger
+// opens the menu on touch devices (which otherwise never fire contextmenu on divs).
+function useLongPressContextMenu(thresholdMs = 500) {
+  const timerRef = useRef<number | null>(null);
+  const movedRef = useRef(false);
+  const startRef = useRef<{ x: number; y: number } | null>(null);
+  const firedRef = useRef(false);
+
+  const clear = () => {
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (!t) return;
+    movedRef.current = false;
+    firedRef.current = false;
+    startRef.current = { x: t.clientX, y: t.clientY };
+    const target = e.currentTarget as HTMLElement;
+    const x = t.clientX;
+    const y = t.clientY;
+    clear();
+    timerRef.current = window.setTimeout(() => {
+      if (movedRef.current) return;
+      firedRef.current = true;
+      try { (navigator as Navigator & { vibrate?: (p: number) => boolean }).vibrate?.(15); } catch { /* unsupported */ }
+      const evt = new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true, view: window,
+        clientX: x, clientY: y, button: 2,
+      });
+      target.dispatchEvent(evt);
+    }, thresholdMs);
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (!t || !startRef.current) return;
+    const dx = t.clientX - startRef.current.x;
+    const dy = t.clientY - startRef.current.y;
+    if (Math.hypot(dx, dy) > 10) { movedRef.current = true; clear(); }
+  };
+  const onTouchEnd = () => clear();
+  const onTouchCancel = () => clear();
+
+  return { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, didLongPress: () => firedRef.current };
+}
 
 const YT_URL_REGEX = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i;
 const SPOTIFY_URL_REGEX = /^https?:\/\/(open\.)?spotify\.com\//i;
@@ -47,13 +104,26 @@ interface TrackRowProps {
   isPlaying?: boolean;
 }
 
+function trackExternalUrl(track: YtTrack): string | null {
+  if (track.source === 'spotify') {
+    return track.spotifyId ? `https://open.spotify.com/track/${track.spotifyId}` : null;
+  }
+  return track.videoId ? `https://www.youtube.com/watch?v=${track.videoId}` : null;
+}
+
 function TrackRow({ track, onPlay, onSave, onAddToQueue, isPlaying }: TrackRowProps) {
   const [queuedFlash, setQueuedFlash] = useState(false);
+  const [copiedFlash, setCopiedFlash] = useState(false);
+  const longPress = useLongPressContextMenu(500);
+
+  const flashQueued = () => {
+    setQueuedFlash(true);
+    setTimeout(() => setQueuedFlash(false), 900);
+  };
   const handleQueueClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onAddToQueue();
-    setQueuedFlash(true);
-    setTimeout(() => setQueuedFlash(false), 900);
+    flashQueued();
   };
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -63,16 +133,41 @@ function TrackRow({ track, onPlay, onSave, onAddToQueue, isPlaying }: TrackRowPr
     e.stopPropagation();
     onSave();
   };
+  const handleRowClick = () => {
+    // Suppress the click that fires after a long-press on touch
+    if (longPress.didLongPress()) return;
+    onPlay();
+  };
+  const handleCopyLink = () => {
+    const url = trackExternalUrl(track);
+    if (!url) return;
+    navigator.clipboard?.writeText(url).then(
+      () => { setCopiedFlash(true); setTimeout(() => setCopiedFlash(false), 1200); },
+      () => { /* ignore */ },
+    );
+  };
+  const handleOpenExternal = () => {
+    const url = trackExternalUrl(track);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  };
   const [imgError, setImgError] = useState(false);
+  const externalUrl = trackExternalUrl(track);
+  const externalLabel = track.source === 'spotify' ? 'Open on Spotify' : 'Open on YouTube';
 
   return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
     <div
       role="button"
       tabIndex={0}
-      onClick={onPlay}
+      onClick={handleRowClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlay(); } }}
+      onTouchStart={longPress.onTouchStart}
+      onTouchMove={longPress.onTouchMove}
+      onTouchEnd={longPress.onTouchEnd}
+      onTouchCancel={longPress.onTouchCancel}
       className={clsx(
-        'group flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer select-none',
+        'group flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer select-none touch-manipulation',
         isPlaying ? 'bg-primary/10' : 'hover:bg-white/5 active:bg-white/10',
       )}
     >
@@ -153,6 +248,32 @@ function TrackRow({ track, onPlay, onSave, onAddToQueue, isPlaying }: TrackRowPr
         </button>
       </div>
     </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="min-w-[200px]">
+        <ContextMenuItem onSelect={onPlay}>
+          <Play className="w-4 h-4 mr-2" /> Play now
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => { onAddToQueue(); flashQueued(); }}>
+          <ListPlus className="w-4 h-4 mr-2" /> Add to queue
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onSave}>
+          <Bookmark className="w-4 h-4 mr-2" /> Save to playlist…
+        </ContextMenuItem>
+        {externalUrl && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={handleCopyLink}>
+              {copiedFlash
+                ? <><Check className="w-4 h-4 mr-2" /> Copied!</>
+                : <><Copy className="w-4 h-4 mr-2" /> Copy link</>}
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={handleOpenExternal}>
+              <ExternalLink className="w-4 h-4 mr-2" /> {externalLabel}
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
