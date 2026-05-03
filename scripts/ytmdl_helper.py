@@ -23,8 +23,17 @@ ABSOLUTE_MAX_ITEMS = 200
 
 def ytdlp(args: list[str]) -> dict:
     """Run yt-dlp with args, return parsed JSON from stdout."""
+    # Inject extractor-args to bypass YouTube's "Sign in to confirm you're not
+    # a bot" check on server IPs. The android + web_safari + tv_embedded
+    # clients use different player endpoints that don't require cookies.
+    # yt-dlp silently ignores extractor-args for non-matching extractors,
+    # so this is safe for Spotify/etc. calls too.
+    base_args = [
+        "--extractor-args",
+        "youtube:player_client=android,web_safari,tv_embedded",
+    ]
     result = subprocess.run(
-        ["yt-dlp"] + args,
+        ["yt-dlp"] + base_args + args,
         capture_output=True,
         text=True,
         timeout=60,
