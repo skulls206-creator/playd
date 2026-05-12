@@ -43,21 +43,34 @@ export interface PlaylistResult {
 function cookieFromEnv(): string | undefined {
   const raw = process.env.YT_COOKIES_TXT;
   if (!raw) return undefined;
-  if (raw.includes("\n")) return raw;
-  if (!raw.includes("\t")) return raw;
 
-  // Env-variable input with tabs but no newlines means the Netscape
-  // cookies file was flattened into a single line (Replit / some
-  // secret-stores strip literal newlines but preserve tabs).
-  //
-  // Reconstruct line boundaries by detecting cookie-line starts:
-  //   <domain>\t<TRUE|FALSE>\t...
-  // When two cookie lines are concatenated the boundary looks like:
-  //   <end-of-value-char> <space> <domain>\t<TRUE|FALSE>\t
-  return raw.replace(
-    /([^\t#])\s+([\w.-]+)\t(TRUE|FALSE)\t/g,
-    "$1\n$2\t$3\t",
-  );
+  // Reconstruct newlines if the secret-store flattened them into a single line
+  // (Replit's secret-store strips \n but preserves \t).
+  let normalized = raw;
+  if (raw.includes("\t") && !raw.includes("\n")) {
+    normalized = raw.replace(
+      /([^\t#])\s+([\w.-]+)\t(TRUE|FALSE)\t/g,
+      "$1\n$2\t$3\t",
+    );
+  }
+
+  // Innertube's `cookie` option is the value of an HTTP `Cookie:` header,
+  // not a Netscape cookies.txt file. Parse the Netscape format and emit
+  // `name=value; name2=value2`. Each non-comment line has 7 tab fields:
+  //   domain  flag  path  secure  expiry  name  value
+  const pairs: string[] = [];
+  for (const line of normalized.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const parts = trimmed.split("\t");
+    if (parts.length < 7) continue;
+    const name = parts[5];
+    const value = parts[6];
+    if (!name) continue;
+    pairs.push(`${name}=${value ?? ""}`);
+  }
+  if (pairs.length === 0) return undefined;
+  return pairs.join("; ");
 }
 
 // ── Singleton Innertube ────────────────────────────────────────────────────
@@ -153,19 +166,35 @@ export async function searchYouTube(query: string, limit: number = 10): Promise<
 export async function getStreamUrl(videoId: string): Promise<StreamResult> {
   const yt = await getInnertube();
 
-  const info = await yt.getInfo(videoId);
-  const basicInfo = info.basic_info || {};
-  const thumb = basicInfo.thumbnail as { url: string }[] | undefined;
+  // Strategy: try clients in order. IOS first because it returns plain `url`
+  // formats that don't require deciphering or a real PO token, so it works
+  // even when the BotGuard attestation only produced a cold-start token.
+  // Fall back to TV_EMBEDDED then WEB if IOS comes back without a usable
+  // stream (very rare, but happens for some age-/region-restricted videos).
+  const clients: ("IOS" | "TV_EMBEDDED" | "WEB")[] = ["IOS", "TV_EMBEDDED", "WEB"];
+  let lastErr: unknown = null;
 
-  const streamUrl = await extractStreamUrl(info.streaming_data, yt);
+  for (const client of clients) {
+    try {
+      const info = await yt.getInfo(videoId, { client });
+      const basicInfo = info.basic_info || {};
+      const thumb = basicInfo.thumbnail as { url: string }[] | undefined;
+      const streamUrl = await extractStreamUrl(info.streaming_data, yt);
+      return {
+        videoId,
+        streamUrl,
+        title: (basicInfo.title as string) || "",
+        duration: (basicInfo.duration as number) || null,
+        thumbnail: thumb && thumb.length > 0 ? thumb[0]?.url || null : null,
+      };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
 
-  return {
-    videoId,
-    streamUrl,
-    title: (basicInfo.title as string) || "",
-    duration: (basicInfo.duration as number) || null,
-    thumbnail: thumb && thumb.length > 0 ? thumb[0]?.url || null : null,
-  };
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error("Unable to extract stream URL with any client");
 }
 
 export async function resolvePlaylist(url: string, maxItems: number = 200): Promise<PlaylistResult> {

@@ -13,8 +13,9 @@
  * immediately; the module then tries a real BotGuard attestation
  * in the background and promotes the token on success.
  */
-import * as BG from "bgutils-js";
+import { BG } from "bgutils-js";
 import { UniversalCache } from "youtubei.js";
+import { JSDOM } from "jsdom";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -39,101 +40,34 @@ let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
 let lastGenerated: string | null = null;
 
-// ── BotGuard browser-global polyfill ───────────────────────────────────────
+// ── BotGuard JSDOM context ─────────────────────────────────────────────────
 
 /**
- * The BotGuard interpreter script (`new Function(script)()`) expects
- * browser globals: `document`, `window`, `navigator`, `location`.
+ * The BotGuard interpreter script expects a real browser environment with
+ * `document`, `window`, `navigator`, `location`, etc. Stubbing these on the
+ * Node `globalThis` ad-hoc is fragile — the interpreter probes many DOM
+ * surfaces and silently misbehaves when they don't compose like a real DOM
+ * (the cold-start token sticks and YouTube refuses to stream).
  *
- * On Node.js those don't exist, so the interpreter crashes with a
- * ReferenceError.  We stub just enough of the DOM surface for the
- * interpreter to boot and register its global side-channel.
- *
- * The polyfills are idempotent — safe to call on every attestation
- * attempt.
+ * Instead, spin up one persistent JSDOM instance and use its `window` as the
+ * BotGuard `globalObj`. The interpreter script is executed *inside* that
+ * window via `runScripts: "outside-only"` and `window.eval(...)`, so all the
+ * globals it references resolve against the JSDOM DOM, not Node.
  */
-function installBotGuardPolyfills(): void {
-  const g = globalThis as Record<string, unknown>;
+let jsdomInstance: JSDOM | null = null;
 
-  if (!g.document) {
-    g.document = {
-      createElement: () => ({}),
-      documentElement: { style: {} },
-      head: { appendChild: () => {} },
-      body: { appendChild: () => {} },
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      querySelector: () => null,
-      querySelectorAll: () => [],
-      getElementById: () => null,
-      getElementsByTagName: () => [],
-      cookie: "",
-      referrer: "",
-      title: "",
-      hidden: false,
-      visibilityState: "visible",
-    };
-  }
-
-  if (!g.window) {
-    g.window = g;
-  }
-
-  if (!g.navigator) {
-    g.navigator = {
-      userAgent:
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
-      platform: "Linux x86_64",
-      language: "en-US",
-      languages: ["en-US", "en"],
-      cookieEnabled: true,
-      onLine: true,
-      hardwareConcurrency: 8,
-      deviceMemory: 8,
-      vendor: "Google Inc.",
-      webdriver: false,
-      maxTouchPoints: 0,
-    };
-  }
-
-  if (!g.location) {
-    g.location = {
-      href: "https://www.youtube.com/",
-      protocol: "https:",
-      host: "www.youtube.com",
-      hostname: "www.youtube.com",
-      port: "",
-      pathname: "/",
-      search: "",
-      hash: "",
-      origin: "https://www.youtube.com",
-      ancestorOrigins: { length: 0 } as unknown as DOMStringList,
-      assign: () => {},
-      replace: () => {},
-      reload: () => {},
-    };
-  }
-
-  if (!g.performance) {
-    g.performance = {
-      now: () => Date.now(),
-      timing: { navigationStart: Date.now() - 5000 },
-      getEntriesByType: () => [],
-      mark: () => {},
-      measure: () => {},
-    };
-  }
-
-  if (!g.screen) {
-    g.screen = {
-      width: 1920,
-      height: 1080,
-      availWidth: 1920,
-      availHeight: 1050,
-      colorDepth: 24,
-      pixelDepth: 24,
-    };
-  }
+function getJsdomWindow(): JSDOM["window"] {
+  if (jsdomInstance) return jsdomInstance.window;
+  jsdomInstance = new JSDOM("<!doctype html><html><head></head><body></body></html>", {
+    url: "https://www.youtube.com/",
+    referrer: "https://www.youtube.com/",
+    runScripts: "outside-only",
+    pretendToBeVisual: true,
+  });
+  const w = jsdomInstance.window as unknown as Record<string, unknown>;
+  // bgutils touches `fetch` on the global object — JSDOM doesn't ship one.
+  if (!w.fetch) w.fetch = globalThis.fetch.bind(globalThis);
+  return jsdomInstance.window;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -169,10 +103,15 @@ function mintColdStartToken(): PoTokenPair {
 async function mintFullPoToken(): Promise<PoTokenPair> {
   const identifier = generateIdentifier();
 
+  // Use a single JSDOM window for both the challenge and the generation step
+  // — the interpreter script registers state on this window's globals that
+  // BG.PoToken.generate then reads back.
+  const jsdomWindow = getJsdomWindow() as unknown as Record<string, unknown>;
+
   // 1. Fetch the attestation challenge from WAA
   const challenge = await BG.Challenge.create({
     fetch: globalThis.fetch.bind(globalThis),
-    globalObj: globalThis as Record<string, unknown>,
+    globalObj: jsdomWindow,
     identifier,
     requestKey: REQUEST_KEY,
     useYouTubeAPI: false,
@@ -186,21 +125,21 @@ async function mintFullPoToken(): Promise<PoTokenPair> {
     throw new Error("No interpreter script in challenge response");
   }
 
-  // 2. Polyfill browser globals so the BotGuard VM script can boot on Node
-  installBotGuardPolyfills();
-
-  // 3. Execute the BotGuard VM script into global scope
-  new Function(
+  // 2. Execute the BotGuard VM script *inside* the JSDOM window so its
+  //    references to document/window/navigator/etc. resolve against the
+  //    DOM, not Node's globalThis.
+  const w = jsdomWindow as unknown as { eval(src: string): unknown };
+  w.eval(
     challenge.interpreterJavascript
       .privateDoNotAccessOrElseSafeScriptWrappedValue,
-  )();
+  );
 
-  // 4. Generate the real PO token
+  // 3. Generate the real PO token using the same JSDOM context
   const result = await BG.PoToken.generate({
     program: challenge.program,
     bgConfig: {
       fetch: globalThis.fetch.bind(globalThis),
-      globalObj: globalThis as Record<string, unknown>,
+      globalObj: jsdomWindow,
       identifier,
       requestKey: REQUEST_KEY,
     },

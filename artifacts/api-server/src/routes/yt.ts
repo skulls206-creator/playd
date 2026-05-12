@@ -291,8 +291,10 @@ router.post("/yt/resolve-url", requireAuth, ytUserRateLimit, async (req, res): P
           max_items: MAX_PLAYLIST_ITEMS,
         },
         { userId: req.userId!, req, res }
-      ) as { tracks: unknown[] };
-      result = raw;
+      ) as { ok?: boolean; tracks: unknown[] };
+      // Python helper wraps response as {ok: true, tracks: [...]} — unwrap to
+      // the {tracks: [...]} shape the frontend expects (AGENTS.md §4).
+      result = { tracks: raw.tracks };
     } else if (
       hostname === "youtube.com" ||
       hostname === "youtu.be" ||
