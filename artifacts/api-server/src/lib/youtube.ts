@@ -12,7 +12,7 @@
 import { Innertube, FormatUtils, UniversalCache } from "youtubei.js";
 
 type IStreamingData = NonNullable<Parameters<typeof FormatUtils.chooseFormat>[1]>;
-import { getPoTokenAndVisitor } from "./opentracer";
+import { getPoTokenAndVisitor, onTokenUpgrade } from "./opentracer";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -79,6 +79,14 @@ function cookieFromEnv(): string | undefined {
 
 let innertubeInstance: Innertube | null = null;
 let initPromise: Promise<Innertube> | null = null;
+
+// Drop the cached session whenever opentracer mints a fresher token, so the
+// next request rebuilds Innertube with the upgraded po_token + visitor_data
+// instead of staying bound to the cold-start pair forever.
+onTokenUpgrade(() => {
+  innertubeInstance = null;
+  initPromise = null;
+});
 
 async function getInnertube(): Promise<Innertube> {
   if (innertubeInstance) return innertubeInstance;

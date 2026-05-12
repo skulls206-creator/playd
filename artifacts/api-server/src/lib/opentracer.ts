@@ -161,6 +161,30 @@ async function mintFullPoToken(): Promise<PoTokenPair> {
   return { token: result.poToken, visitor_data: identifier };
 }
 
+// ── Upgrade subscribers ────────────────────────────────────────────────────
+
+const upgradeListeners: Array<() => void> = [];
+
+/**
+ * Register a callback that fires whenever the opentracer upgrades from a
+ * cold-start token to a real PO token (or refreshes a real token). Consumers
+ * that cache an Innertube session use this to drop their cached instance so
+ * the next request rebuilds it with the freshly minted token + visitor_data.
+ */
+export function onTokenUpgrade(cb: () => void): void {
+  upgradeListeners.push(cb);
+}
+
+function notifyUpgrade(): void {
+  for (const cb of upgradeListeners) {
+    try {
+      cb();
+    } catch (err) {
+      console.warn("[opentracer] upgrade listener threw:", err);
+    }
+  }
+}
+
 // ── Refresh scheduler ──────────────────────────────────────────────────────
 
 function scheduleRefresh(ttlSecs: number) {
@@ -177,6 +201,7 @@ function scheduleRefresh(ttlSecs: number) {
       visitorData = pair.visitor_data;
       lastGenerated = new Date().toISOString();
       console.log("[opentracer] PO token refreshed");
+      notifyUpgrade();
       scheduleRefresh(7200); // default 2h TTL
     } catch (err) {
       console.warn("[opentracer] Refresh failed, will retry in 15 min:", err);
@@ -285,6 +310,7 @@ async function tryUpgrade() {
       visitorData = pair.visitor_data;
       lastGenerated = new Date().toISOString();
       console.log("[opentracer] Upgraded to real PO token + visitor_data");
+      notifyUpgrade();
       scheduleRefresh(7200);
     }
   } catch (err) {
