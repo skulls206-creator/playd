@@ -44,12 +44,21 @@ export interface PlaylistResult {
 function cookieFromEnv(): string | undefined {
   const raw = process.env.YT_COOKIES_TXT;
   if (!raw) return undefined;
-  if (raw.includes("\t") && !raw.includes("\n")) {
-    return raw
-      .replace(/(?= \S+\t(?:TRUE|FALSE)\t\/?\t)/g, "\n")
-      .replace(/(generated file![^\n\t]*?) (?=\S+\t)/g, "$1\n");
-  }
-  return raw;
+  if (raw.includes("\n")) return raw;
+  if (!raw.includes("\t")) return raw;
+
+  // Env-variable input with tabs but no newlines means the Netscape
+  // cookies file was flattened into a single line (Replit / some
+  // secret-stores strip literal newlines but preserve tabs).
+  //
+  // Reconstruct line boundaries by detecting cookie-line starts:
+  //   <domain>\t<TRUE|FALSE>\t...
+  // When two cookie lines are concatenated the boundary looks like:
+  //   <end-of-value-char> <space> <domain>\t<TRUE|FALSE>\t
+  return raw.replace(
+    /([^\t#])\s+([\w.-]+)\t(TRUE|FALSE)\t/g,
+    "$1\n$2\t$3\t",
+  );
 }
 
 // ── Singleton Innertube ────────────────────────────────────────────────────
@@ -63,7 +72,7 @@ async function getInnertube(): Promise<Innertube> {
 
   initPromise = (async () => {
     const cookie = cookieFromEnv();
-    const cache = new UniversalCache(false);
+    const cache = new UniversalCache(true);
 
     const yt = await Innertube.create({
       cookie,

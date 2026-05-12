@@ -31,12 +31,16 @@ def _cookies_file() -> str | None:
     if not raw:
         _COOKIES_FILE_PATH = ""
         return None
-    # Replit's secret input strips literal newlines but preserves tabs.
-    # If we got tabs but no newlines, the Netscape cookies file got flattened
-    # into a single line.
+    # Env-variable input with tabs but no newlines means the Netscape
+    # cookies file was flattened into a single line (Replit / some
+    # secret-stores strip literal newlines but preserve tabs).
+    #
+    # Reconstruct line boundaries by detecting cookie-line starts:
+    #   <domain>\t<TRUE|FALSE>\t...
+    # When two cookie lines are concatenated the boundary looks like:
+    #   <end-of-value-char> <space> <domain>\t<TRUE|FALSE>\t
     if "\t" in raw and "\n" not in raw:
-        raw = re.sub(r" (?=\S+\t(?:TRUE|FALSE)\t/?\t)", "\n", raw)
-        raw = re.sub(r"(generated file![^\n\t]*?) (?=\S+\t)", r"\1\n", raw)
+        raw = re.sub(r"([^\t#])\s+([\w.-]+)\t(TRUE|FALSE)\t", r"\1\n\2\t\3\t", raw)
     if not raw.endswith("\n"):
         raw += "\n"
     fd, path = tempfile.mkstemp(prefix="yt_cookies_", suffix=".txt")

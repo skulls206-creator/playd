@@ -1,6 +1,0 @@
-{
-  "framework": "other",
-  "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "cd artifacts/api-server && pnpm install --no-frozen-lockfile && node build.mjs",
-  "outputDirectory": "artifacts/api-server/dist"
-}
