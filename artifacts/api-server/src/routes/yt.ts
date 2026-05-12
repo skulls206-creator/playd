@@ -34,16 +34,11 @@ const MAX_PLAYLIST_ITEMS = 200;
 
 /**
  * Per-user sliding-window rate limit for all yt-backed endpoints.
- *
- * Sized for the audio-player's real behaviour: autoplay across a long
- * playlist, the next-track preload, manual skipping, and the one-shot
- * stream-URL refresh after CDN expiry. 20 rpm was tripping during normal
- * playback of a 100-track playlist; 120 rpm (2 req/sec) is comfortably
- * above worst-case interactive usage while still bot-protective.
+ * Caps individual users at 20 requests per minute.
  */
 const ytUserRateLimit = rateLimit({
   windowMs: 60_000,
-  max: 120,
+  max: 20,
   keyGenerator: (req) => String((req as Request & { userId?: number }).userId ?? "anon"),
   validate: { keyGeneratorIpFallback: false },
   standardHeaders: true,

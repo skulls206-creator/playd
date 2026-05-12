@@ -691,28 +691,24 @@ export function AudioEngine() {
       if (ytRetrySet.has(track.id)) return; // already retried once — give up
 
       // Probe the current CDN URL to confirm it is expired (HTTP 403/410).
-      // googlevideo.com does not send permissive CORS headers, so a direct
-      // fetch from the browser is opaque: response.status is reported as 0
-      // and any thrown error is indistinguishable from an actual expiry.
-      // To avoid auto-refresh storms (which cascade into our own 429s),
-      // we treat a probe whose body we cannot read as inconclusive — only
-      // a real, observable 403/410 advances to the refresh path.
+      // We use a byte-range GET so the probe is lightweight.
+      // - If the server responds with 403 or 410 → URL expired → proceed.
+      // - If the server responds with any other success/redirect → not expired → bail.
+      // - If the fetch itself throws (CORS / network failure on the probe) → treat
+      //   as potential expiry and proceed; worst case we do one unnecessary re-fetch.
       const currentSrc = deck.audio.src;
       if (currentSrc) {
         try {
           const probe = await fetch(currentSrc, {
             method: 'GET',
             headers: { Range: 'bytes=0-0' },
-            mode: 'cors',
           });
-          if (probe.type === 'opaque' || probe.status === 0) {
-            return; // CORS-opaque — cannot distinguish expiry; don't burn a retry.
-          }
           if (probe.status !== 403 && probe.status !== 410) {
-            return; // Definitely not expiry.
+            // Not an expiry error — don't consume the one-shot retry slot.
+            return;
           }
         } catch {
-          return; // Network/CORS failure on the probe itself — also inconclusive.
+          // CORS or network failure on the probe — treat as potential expiry.
         }
       }
 
