@@ -10,6 +10,8 @@
  */
 
 import { Innertube, FormatUtils, UniversalCache } from "youtubei.js";
+
+type IStreamingData = NonNullable<Parameters<typeof FormatUtils.chooseFormat>[1]>;
 import { getPoTokenAndVisitor } from "./opentracer";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -118,7 +120,7 @@ function pickThumbnail(
 // ── Stream URL extraction ─────────────────────────────────────────────────
 
 async function extractStreamUrl(
-  streamingData: Record<string, unknown> | null | undefined,
+  streamingData: IStreamingData | undefined,
   yt: Innertube
 ): Promise<string> {
   if (!streamingData) throw new Error("No streaming data available");

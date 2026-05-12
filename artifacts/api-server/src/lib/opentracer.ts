@@ -148,10 +148,14 @@ async function mintFullPoToken(): Promise<PoTokenPair> {
 
   if (result.integrityTokenData.integrityToken) {
     // Store integrity token data for faster refresh next time
-    await cache.set(
-      "opentracer_integrity",
+    const encoded = new TextEncoder().encode(
       JSON.stringify(result.integrityTokenData),
     );
+    const buf = encoded.buffer.slice(
+      encoded.byteOffset,
+      encoded.byteOffset + encoded.byteLength,
+    ) as ArrayBuffer;
+    await cache.set("opentracer_integrity", buf);
   }
 
   return { token: result.poToken, visitor_data: identifier };
