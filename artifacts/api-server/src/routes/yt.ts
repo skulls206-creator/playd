@@ -7,13 +7,15 @@ import { and, eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import type { Request, Response } from "express";
 import rateLimit from "express-rate-limit";
+import { searchYouTube, getStreamUrl, resolvePlaylist } from "../lib/youtube";
 
 const router: IRouter = Router();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HELPER_SCRIPT = path.join(__dirname, "ytmdl_helper.py");
 
-// ── Concurrency and resource limits ────────────────────────────────────────
+// ── Resource limits (Spotify subprocess only) ──────────────────────────────
+
 /** Maximum simultaneous Python helper processes across all users. */
 const MAX_GLOBAL_HELPERS = 5;
 
@@ -30,16 +32,12 @@ const MAX_OUTPUT_BYTES = 1 * 1024 * 1024;
 const MAX_PLAYLIST_ITEMS = 200;
 
 /**
- * Per-user sliding-window rate limit for helper-backed endpoints.
- * Caps individual users at 20 helper invocations per minute to bound
- * sequential abuse even when each request respects the concurrency limit.
+ * Per-user sliding-window rate limit for all yt-backed endpoints.
+ * Caps individual users at 20 requests per minute.
  */
 const ytUserRateLimit = rateLimit({
   windowMs: 60_000,
   max: 20,
-  // All three routes that use this limiter are behind requireAuth, so userId is
-  // always populated. Use it directly as the rate-limit key so limits are
-  // per-user, not per-IP, and to avoid the IPv6-fallback validation warning.
   keyGenerator: (req) => String((req as Request & { userId?: number }).userId ?? "anon"),
   validate: { keyGeneratorIpFallback: false },
   standardHeaders: true,
@@ -47,7 +45,8 @@ const ytUserRateLimit = rateLimit({
   message: { error: "Too many requests. Please wait before trying again." },
 });
 
-// Global concurrency state.
+// ── Subprocess concurrency state (Spotify path only) ───────────────────────
+
 let activeGlobalHelpers = 0;
 const activePerUser = new Map<number, number>();
 
@@ -73,21 +72,12 @@ function releaseHelper(userId: number): void {
   }
 }
 
-/**
- * Kill the entire process group rooted at `proc`.
- *
- * The helper is spawned with `detached: true` so it becomes the leader of a
- * new process group. Its yt-dlp children inherit the same PGID. Sending
- * SIGKILL to the *negated* PID (-pid) kills every process in that group,
- * preventing orphaned yt-dlp subprocesses from continuing after the timeout
- * or client disconnect.
- */
 function killProcessGroup(pid: number | undefined): void {
   if (pid == null) return;
   try {
     process.kill(-pid, "SIGKILL");
   } catch {
-    // Process group may already be gone; ignore.
+    // Already gone.
   }
 }
 
@@ -110,10 +100,6 @@ function runHelper(command: object, opts: RunHelperOptions): Promise<unknown> {
   }
 
   return new Promise((resolve, reject) => {
-    // detached: true puts the Python process into a new process group so we
-    // can kill it *and* all its yt-dlp children via killProcessGroup().
-    // unref() prevents the detached process from keeping the Node event loop
-    // alive if we forget to clean up.
     const proc = spawn("python3", [HELPER_SCRIPT], {
       stdio: ["pipe", "pipe", "pipe"],
       detached: true,
@@ -133,7 +119,6 @@ function runHelper(command: object, opts: RunHelperOptions): Promise<unknown> {
       if (reason) reject(reason);
     }
 
-    // Hard timeout — kill the entire process group if it runs too long.
     const timer = setTimeout(() => {
       cleanup(
         Object.assign(
@@ -143,7 +128,6 @@ function runHelper(command: object, opts: RunHelperOptions): Promise<unknown> {
       );
     }, HELPER_TIMEOUT_MS);
 
-    // Cancel helper when the HTTP client disconnects.
     const onClose = () => {
       if (!settled) cleanup(new Error("Client disconnected"));
     };
@@ -212,6 +196,12 @@ function helperErrorStatus(err: unknown): number {
   return 500;
 }
 
+// ── Routes ─────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/yt/search?q=...
+ * YouTube search — uses youtubei.js in-process.
+ */
 router.get("/yt/search", requireAuth, ytUserRateLimit, async (req, res): Promise<void> => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const limit = Math.min(Number(req.query.limit) || 10, 25);
@@ -222,21 +212,22 @@ router.get("/yt/search", requireAuth, ytUserRateLimit, async (req, res): Promise
   }
 
   try {
-    const result = await runHelper(
-      { cmd: "search", q, limit },
-      { userId: req.userId!, req, res }
-    ) as { tracks: unknown[] };
+    const result = await searchYouTube(q, limit);
 
     const userId = req.userId!;
     await db.insert(ytSearchHistoryTable).values({ userId, query: q }).catch(() => {});
 
-    res.json({ tracks: result.tracks });
+    res.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Search failed";
-    res.status(helperErrorStatus(err)).json({ error: message });
+    res.status(500).json({ error: message });
   }
 });
 
+/**
+ * GET /api/yt/stream/:videoId
+ * Stream resolution — uses youtubei.js in-process.
+ */
 router.get("/yt/stream/:videoId", requireAuth, ytUserRateLimit, async (req, res): Promise<void> => {
   const videoId = req.params.videoId as string;
 
@@ -246,29 +237,20 @@ router.get("/yt/stream/:videoId", requireAuth, ytUserRateLimit, async (req, res)
   }
 
   try {
-    const result = await runHelper(
-      { cmd: "stream", videoId },
-      { userId: req.userId!, req, res }
-    ) as {
-      streamUrl: string;
-      title: string;
-      duration: number;
-      thumbnail: string;
-    };
-
-    res.json({
-      videoId,
-      streamUrl: result.streamUrl,
-      title: result.title,
-      duration: result.duration,
-      thumbnail: result.thumbnail,
-    });
+    const result = await getStreamUrl(videoId);
+    res.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Stream resolution failed";
-    res.status(helperErrorStatus(err)).json({ error: message });
+    res.status(500).json({ error: message });
   }
 });
 
+/**
+ * POST /api/yt/resolve-url
+ * Resolve a playlist/track URL.
+ * YouTube paths use youtubei.js in-process.
+ * Spotify paths keep the Python subprocess helper.
+ */
 router.post("/yt/resolve-url", requireAuth, ytUserRateLimit, async (req, res): Promise<void> => {
   const { url } = req.body as { url?: string };
 
@@ -286,7 +268,7 @@ router.post("/yt/resolve-url", requireAuth, ytUserRateLimit, async (req, res): P
       return;
     }
 
-    let result: unknown;
+    let result: { tracks: unknown[] };
 
     if (hostname === "spotify.com" || hostname.endsWith(".spotify.com")) {
       const clientId = process.env.SPOTIFY_CLIENT_ID;
@@ -299,7 +281,7 @@ router.post("/yt/resolve-url", requireAuth, ytUserRateLimit, async (req, res): P
         return;
       }
 
-      result = await runHelper(
+      const raw = await runHelper(
         {
           cmd: "resolve-spotify",
           url,
@@ -308,16 +290,15 @@ router.post("/yt/resolve-url", requireAuth, ytUserRateLimit, async (req, res): P
           max_items: MAX_PLAYLIST_ITEMS,
         },
         { userId: req.userId!, req, res }
-      );
+      ) as { tracks: unknown[] };
+      result = raw;
     } else if (
       hostname === "youtube.com" ||
       hostname === "youtu.be" ||
       hostname.endsWith(".youtube.com")
     ) {
-      result = await runHelper(
-        { cmd: "resolve-youtube-playlist", url, max_items: MAX_PLAYLIST_ITEMS },
-        { userId: req.userId!, req, res }
-      );
+      const tracks = await resolvePlaylist(url, MAX_PLAYLIST_ITEMS);
+      result = { tracks: tracks.tracks };
     } else {
       res.status(400).json({
         error: `Unsupported URL host: ${hostname}. Supported: youtube.com, spotify.com`,
@@ -325,14 +306,17 @@ router.post("/yt/resolve-url", requireAuth, ytUserRateLimit, async (req, res): P
       return;
     }
 
-    const { tracks } = result as { tracks: unknown[] };
-    res.json({ tracks });
+    res.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "URL resolution failed";
-    res.status(helperErrorStatus(err)).json({ error: message });
+    const status = message.includes("playlist ID") ? 400 : helperErrorStatus(err);
+    res.status(status).json({ error: message });
   }
 });
 
+/**
+ * GET /api/yt/history
+ */
 router.get("/yt/history", requireAuth, async (req, res): Promise<void> => {
   const userId = req.userId!;
   const limit = Math.min(Number(req.query.limit) || 50, 200);
@@ -352,6 +336,9 @@ router.get("/yt/history", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
+/**
+ * DELETE /api/yt/history
+ */
 router.delete("/yt/history", requireAuth, async (req, res): Promise<void> => {
   const userId = req.userId!;
   try {
@@ -363,6 +350,9 @@ router.delete("/yt/history", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
+/**
+ * DELETE /api/yt/history/:id
+ */
 router.delete("/yt/history/:id", requireAuth, async (req, res): Promise<void> => {
   const userId = req.userId!;
   const id = Number(req.params.id);
