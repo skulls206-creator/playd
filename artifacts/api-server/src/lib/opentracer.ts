@@ -16,6 +16,7 @@
 import { BG } from "bgutils-js";
 import { UniversalCache } from "youtubei.js";
 import { JSDOM } from "jsdom";
+import { mintPoTokenWithChromium } from "./chromium-potoken";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -101,6 +102,23 @@ function mintColdStartToken(): PoTokenPair {
 // ── Full BotGuard attestation ──────────────────────────────────────────────
 
 async function mintFullPoToken(): Promise<PoTokenPair> {
+  // Prefer a real headless Chromium when available — JSDOM's BotGuard
+  // attestation fails APF:Failed on Replit/cloud IPs because BotGuard's
+  // environment checks reject the JSDOM runtime.
+  try {
+    const pair = await mintPoTokenWithChromium();
+    if (pair?.token) return pair;
+  } catch (err) {
+    console.warn(
+      "[opentracer] Chromium PO token mint failed, falling back to JSDOM:",
+      (err as Error).message,
+    );
+  }
+
+  return mintFullPoTokenViaJsdom();
+}
+
+async function mintFullPoTokenViaJsdom(): Promise<PoTokenPair> {
   const identifier = generateIdentifier();
 
   // Use a single JSDOM window for both the challenge and the generation step
@@ -187,11 +205,14 @@ function notifyUpgrade(): void {
 
 // ── Refresh scheduler ──────────────────────────────────────────────────────
 
+/** Default token lifetime (12h) — refreshed at REFRESH_RATIO (50%) → ~6h. */
+const DEFAULT_TTL_SECS = 12 * 60 * 60;
+
 function scheduleRefresh(ttlSecs: number) {
   if (refreshTimer) clearTimeout(refreshTimer);
   const delayMs = Math.max(
     300_000, // minimum 5 minutes
-    (ttlSecs || 7200) * 1000 * REFRESH_RATIO,
+    (ttlSecs || DEFAULT_TTL_SECS) * 1000 * REFRESH_RATIO,
   );
   refreshTimer = setTimeout(async () => {
     try {
@@ -202,7 +223,7 @@ function scheduleRefresh(ttlSecs: number) {
       lastGenerated = new Date().toISOString();
       console.log("[opentracer] PO token refreshed");
       notifyUpgrade();
-      scheduleRefresh(7200); // default 2h TTL
+      scheduleRefresh(DEFAULT_TTL_SECS);
     } catch (err) {
       console.warn("[opentracer] Refresh failed, will retry in 15 min:", err);
       scheduleRefresh(900);
@@ -311,7 +332,7 @@ async function tryUpgrade() {
       lastGenerated = new Date().toISOString();
       console.log("[opentracer] Upgraded to real PO token + visitor_data");
       notifyUpgrade();
-      scheduleRefresh(7200);
+      scheduleRefresh(DEFAULT_TTL_SECS);
     }
   } catch (err) {
     console.warn(

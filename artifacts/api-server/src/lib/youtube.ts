@@ -13,6 +13,13 @@ import { Innertube, FormatUtils, UniversalCache } from "youtubei.js";
 
 type IStreamingData = NonNullable<Parameters<typeof FormatUtils.chooseFormat>[1]>;
 import { getPoTokenAndVisitor, onTokenUpgrade } from "./opentracer";
+import { installJsEvaluator } from "./js-evaluator";
+
+// Install the Node `vm`-based JavaScript evaluator that youtubei.js uses to
+// run YouTube's player.js sig/n decipher script. Without this, every WEB-class
+// client comes back with `signature_cipher` formats but no way to turn them
+// into a googlevideo URL.
+installJsEvaluator();
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -176,12 +183,20 @@ export async function searchYouTube(query: string, limit: number = 10): Promise<
 export async function getStreamUrl(videoId: string): Promise<StreamResult> {
   const yt = await getInnertube();
 
-  // Strategy: try clients in order. IOS first because it returns plain `url`
-  // formats that don't require deciphering or a real PO token, so it works
-  // even when the BotGuard attestation only produced a cold-start token.
-  // Fall back to TV_EMBEDDED then WEB if IOS comes back without a usable
-  // stream (very rare, but happens for some age-/region-restricted videos).
-  const clients: ("IOS" | "TV_EMBEDDED" | "WEB")[] = ["IOS", "TV_EMBEDDED", "WEB"];
+  // Strategy: try clients in order. With a real (chromium-minted) PO token
+  // and logged-in cookies, MWEB / WEB_CREATOR / TV / YTMUSIC return formats
+  // with `signature_cipher` that the installed Node vm evaluator can decode
+  // into a usable googlevideo URL. WEB itself now ships only SABR/UMP
+  // formats (no per-format URL or cipher), so it lives at the back of the
+  // line as a last resort. IOS/ANDROID currently 400 without an attested
+  // mobile request, so they're skipped entirely.
+  const clients: ("MWEB" | "WEB_CREATOR" | "TV" | "YTMUSIC" | "WEB")[] = [
+    "MWEB",
+    "WEB_CREATOR",
+    "TV",
+    "YTMUSIC",
+    "WEB",
+  ];
   let lastErr: unknown = null;
 
   for (const client of clients) {
