@@ -8,7 +8,6 @@ import { requireAuth } from "../middlewares/auth";
 import type { Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { searchYouTube, getStreamUrl, resolvePlaylist } from "../lib/youtube";
-import { getStatus as getOpentracerStatus } from "../lib/opentracer";
 
 const router: IRouter = Router();
 
@@ -379,19 +378,6 @@ router.delete("/yt/history/:id", requireAuth, async (req, res): Promise<void> =>
     res.json({ ok: true, deleted: deleted[0] });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to delete history entry";
-    res.status(500).json({ error: message });
-  }
-});
-
-// ── GET /api/yt/opentracer-status ─────────────────────────────────────────
-// Mounted at /api/yt/opentracer-status (router base is /api)
-
-router.get("/yt/opentracer-status", (req, res) => {
-  try {
-    res.json(getOpentracerStatus());
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Unknown error fetching opentracer status";
     res.status(500).json({ error: message });
   }
 });
