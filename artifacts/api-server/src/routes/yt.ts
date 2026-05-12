@@ -8,6 +8,7 @@ import { requireAuth } from "../middlewares/auth";
 import type { Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { searchYouTube, getStreamUrl, resolvePlaylist } from "../lib/youtube";
+import { getCookieHealth, refreshCookieHealth } from "../lib/yt-cookies";
 
 const router: IRouter = Router();
 
@@ -314,6 +315,20 @@ router.post("/yt/resolve-url", requireAuth, ytUserRateLimit, async (req, res): P
     const status = message.includes("playlist ID") ? 400 : helperErrorStatus(err);
     res.status(status).json({ error: message });
   }
+});
+
+/**
+ * GET /api/yt/cookie-status
+ * Surface the YT_COOKIES_TXT health snapshot — used for alerting on
+ * imminent SIDTS rotation. Pass `?refresh=1` to force a re-evaluation
+ * instead of returning the cached snapshot from the background monitor.
+ */
+router.get("/yt/cookie-status", requireAuth, (req, res): void => {
+  const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+  const snapshot = refresh ? refreshCookieHealth() : getCookieHealth();
+  const httpStatus =
+    snapshot.severity === "ok" || snapshot.severity === "warn" ? 200 : 503;
+  res.status(httpStatus).json(snapshot);
 });
 
 /**

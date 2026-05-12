@@ -5,7 +5,9 @@ import { startVaultCleanup } from "./routes/vault";
 // Start the PO token engine before the server begins accepting
 // connections — cold-start token is available immediately.
 import { start as startOpentracer } from "./lib/opentracer";
+import { startCookieMonitor } from "./lib/yt-cookies";
 startOpentracer("playd", "yt");
+startCookieMonitor();
 
 const rawPort = process.env["PORT"];
 

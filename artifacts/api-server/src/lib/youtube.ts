@@ -14,6 +14,7 @@ import { Innertube, FormatUtils, UniversalCache } from "youtubei.js";
 type IStreamingData = NonNullable<Parameters<typeof FormatUtils.chooseFormat>[1]>;
 import { getPoTokenAndVisitor, onTokenUpgrade } from "./opentracer";
 import { installJsEvaluator } from "./js-evaluator";
+import { recordLiveLoggedIn } from "./yt-cookies";
 
 // Install the Node `vm`-based JavaScript evaluator that youtubei.js uses to
 // run YouTube's player.js sig/n decipher script. Without this, every WEB-class
@@ -112,6 +113,11 @@ async function getInnertube(): Promise<Innertube> {
     });
 
     innertubeInstance = yt;
+    try {
+      recordLiveLoggedIn(Boolean(yt.session.logged_in));
+    } catch {
+      // Don't let cookie-monitor bookkeeping break Innertube creation.
+    }
     return yt;
   })();
 
