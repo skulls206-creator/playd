@@ -241,8 +241,11 @@ export function AudioEngine() {
     }
 
     if (track.source === 'youtube') {
-      // YouTube stream: call /api/yt/stream/:videoId to get CDN URL.
-      // Use Authorization header to avoid placing the JWT in the URL.
+      // YouTube stream: googlevideo CDN sends no CORS headers, so a direct
+      // <audio src=googlevideo...> tainted via createMediaElementSource
+      // outputs silence. Instead we mint a short-lived stream-scoped token
+      // and load the audio from our same-origin proxy at
+      // /api/yt/stream-proxy/:videoId?token=...
       const videoId = track.fileName;
       const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
       if (!jwt) {
@@ -253,42 +256,46 @@ export function AudioEngine() {
         });
         return null;
       }
-      const headers: HeadersInit = { Authorization: `Bearer ${jwt}` };
       console.log('[AudioEngine] YT resolve →', { videoId, title: track.title });
       try {
-        const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}`, { headers });
-        if (!resp.ok) {
-          const body = await resp.text().catch(() => '');
-          console.error('[AudioEngine] YT stream fetch failed', resp.status, body);
+        const tokenResp = await fetch('/api/auth/stream-token', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${jwt}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ resource: `yt:${videoId}` }),
+        });
+        if (!tokenResp.ok) {
+          const body = await tokenResp.text().catch(() => '');
+          console.error('[AudioEngine] YT stream-token failed', tokenResp.status, body);
           toast({
-            title: `YouTube stream failed (${resp.status})`,
+            title: `YouTube stream auth failed (${tokenResp.status})`,
             description:
-              resp.status === 401 ? 'Session expired — sign out and back in.' :
-              resp.status === 404 ? `Video not found: ${videoId}` :
-              resp.status === 429 ? 'Too many requests. Wait a minute and try again.' :
-              resp.status === 503 ? 'Server busy — too many concurrent streams. Try again in a moment.' :
-              (body.slice(0, 180) || `Could not resolve a stream URL for "${track.title}".`),
+              tokenResp.status === 401 ? 'Session expired — sign out and back in.' :
+              (body.slice(0, 180) || `Could not authorise stream playback for "${track.title}".`),
             duration: 10000,
           });
           return null;
         }
-        const data = await resp.json();
-        if (!data.streamUrl) {
-          console.error('[AudioEngine] YT response missing streamUrl', data);
+        const { token } = await tokenResp.json() as { token?: string };
+        if (!token) {
+          console.error('[AudioEngine] stream-token response missing token');
           toast({
-            title: 'No stream URL returned',
-            description: `Server response had no streamUrl for "${track.title}".`,
+            title: 'No stream token returned',
+            description: `Server did not return a stream token for "${track.title}".`,
             duration: 9000,
           });
           return null;
         }
-        console.log('[AudioEngine] YT resolved OK', { len: data.streamUrl.length });
-        return data.streamUrl;
+        const proxyUrl = `/api/yt/stream-proxy/${encodeURIComponent(videoId)}?token=${encodeURIComponent(token)}`;
+        console.log('[AudioEngine] YT resolved OK (proxy)');
+        return proxyUrl;
       } catch (e) {
-        console.error('[AudioEngine] YT stream network error', e);
+        console.error('[AudioEngine] YT stream-token network error', e);
         toast({
           title: 'Network error',
-          description: `Could not reach YT stream endpoint: ${(e as Error).message ?? e}`,
+          description: `Could not reach stream-token endpoint: ${(e as Error).message ?? e}`,
           duration: 9000,
         });
         return null;
@@ -717,10 +724,25 @@ export function AudioEngine() {
 
       const videoId = track.fileName;
       const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-      const headers: HeadersInit = jwt ? { Authorization: `Bearer ${jwt}` } : {};
+      if (!jwt) {
+        toast({
+          title: 'Stream unavailable',
+          description: 'Sign in again to refresh the YouTube stream.',
+          duration: 7000,
+        });
+        return;
+      }
       try {
-        const resp = await fetch(`/api/yt/stream/${encodeURIComponent(videoId)}`, { headers });
-        if (!resp.ok) {
+        // Mint a fresh stream-scoped token and reload via the same-origin proxy.
+        const tokenResp = await fetch('/api/auth/stream-token', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${jwt}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ resource: `yt:${videoId}` }),
+        });
+        if (!tokenResp.ok) {
           toast({
             title: 'Stream unavailable',
             description: 'Could not refresh the YouTube stream. Try playing the track again.',
@@ -728,8 +750,8 @@ export function AudioEngine() {
           });
           return;
         }
-        const data: { streamUrl?: string } = await resp.json();
-        if (!data.streamUrl) {
+        const { token } = await tokenResp.json() as { token?: string };
+        if (!token) {
           toast({
             title: 'Stream unavailable',
             description: 'Could not refresh the YouTube stream. Try playing the track again.',
@@ -737,9 +759,10 @@ export function AudioEngine() {
           });
           return;
         }
+        const proxyUrl = `/api/yt/stream-proxy/${encodeURIComponent(videoId)}?token=${encodeURIComponent(token)}`;
         const saved = deck.audio.currentTime;
         const wasPlaying = state.isPlaying;
-        deck.audio.src = data.streamUrl;
+        deck.audio.src = proxyUrl;
         deck.audio.load();
         // Wait for canplay so currentTime assignment takes effect reliably.
         // Setting currentTime before media metadata is ready silently no-ops.

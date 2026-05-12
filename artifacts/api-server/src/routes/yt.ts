@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { db, ytSearchHistoryTable } from "@workspace/db";
 import { and, eq, desc } from "drizzle-orm";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireStreamAuth } from "../middlewares/auth";
 import type { Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { searchYouTube, getStreamUrl, resolvePlaylist } from "../lib/youtube";
@@ -245,6 +245,147 @@ router.get("/yt/stream/:videoId", requireAuth, ytUserRateLimit, async (req, res)
     res.status(500).json({ error: message });
   }
 });
+
+// ── Same-origin stream proxy (added route, contract-additive) ─────────────
+//
+// Why this exists: googlevideo CDN URLs do not send Access-Control-Allow-
+// Origin headers. When the audio-player pipes the cross-origin <audio>
+// element through Web Audio API (createMediaElementSource for EQ /
+// analyser / crossfade), the browser silently outputs zero samples to
+// prevent an origin from reading the audio data. Proxying the stream
+// through our own origin makes the bytes same-origin so Web Audio is no
+// longer tainted and the user actually hears audio.
+//
+// Auth: uses `requireStreamAuth` with a `yt:<videoId>` resource because
+// <audio src> cannot send custom headers — the short-lived stream token
+// rides in the URL via `?token=...` and is bound to this single video.
+//
+// Rate limit: byte-range requests on a single track easily produce dozens
+// of HTTP hits (initial fetch, chunked buffering, scrubbing, multi-deck
+// preload). The shared 20-rpm `ytUserRateLimit` is sized for control-plane
+// calls (search, history, resolve) and would trip during normal playback.
+// We use a separate, generous proxy-only limit (per user) here.
+
+/** In-memory cache of resolved googlevideo URLs by videoId. CDN URLs are
+ *  valid for ~6 hours; we cache for a much shorter window so a single
+ *  resolve serves the burst of byte-range requests one track produces, but
+ *  any genuine expiry is recovered from quickly. */
+const streamUrlCache = new Map<string, { url: string; expiresAt: number }>();
+const STREAM_URL_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getOrResolveStreamUrl(videoId: string, forceRefresh = false): Promise<string> {
+  if (!forceRefresh) {
+    const entry = streamUrlCache.get(videoId);
+    if (entry && entry.expiresAt > Date.now()) return entry.url;
+  }
+  const result = await getStreamUrl(videoId);
+  streamUrlCache.set(videoId, {
+    url: result.streamUrl,
+    expiresAt: Date.now() + STREAM_URL_CACHE_TTL_MS,
+  });
+  return result.streamUrl;
+}
+
+/** Per-user proxy rate limit. ~10 req/sec headroom covers chunked range
+ *  requests, scrubbing, and the next-track preload deck without tripping. */
+const ytStreamProxyRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 600,
+  keyGenerator: (req) => String((req as Request & { userId?: number }).userId ?? "anon"),
+  validate: { keyGeneratorIpFallback: false },
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many stream proxy requests. Please wait." },
+});
+
+const PROXY_PASSTHROUGH_RES_HEADERS = [
+  "content-type",
+  "content-length",
+  "content-range",
+  "accept-ranges",
+  "last-modified",
+  "etag",
+] as const;
+
+router.get(
+  "/yt/stream-proxy/:videoId",
+  requireStreamAuth((req) => `yt:${req.params.videoId}`),
+  ytStreamProxyRateLimit,
+  async (req, res): Promise<void> => {
+    const videoId = req.params.videoId as string;
+    if (!videoId || !/^[\w-]{5,20}$/.test(videoId)) {
+      res.status(400).json({ error: "Invalid videoId" });
+      return;
+    }
+
+    let upstreamUrl: string;
+    try {
+      upstreamUrl = await getOrResolveStreamUrl(videoId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to resolve stream";
+      res.status(500).json({ error: message });
+      return;
+    }
+
+    const upstreamHeaders: Record<string, string> = {};
+    if (typeof req.headers.range === "string") upstreamHeaders["range"] = req.headers.range;
+    if (typeof req.headers["if-range"] === "string") upstreamHeaders["if-range"] = req.headers["if-range"] as string;
+
+    let upstream: globalThis.Response;
+    try {
+      upstream = await fetch(upstreamUrl, { headers: upstreamHeaders });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upstream fetch failed";
+      res.status(502).json({ error: message });
+      return;
+    }
+
+    // Handle a stale (expired) cached URL by re-resolving once and retrying.
+    if (upstream.status === 403 || upstream.status === 410) {
+      streamUrlCache.delete(videoId);
+      try {
+        upstreamUrl = await getOrResolveStreamUrl(videoId, true);
+        upstream = await fetch(upstreamUrl, { headers: upstreamHeaders });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to refresh expired stream";
+        res.status(502).json({ error: message });
+        return;
+      }
+    }
+
+    res.status(upstream.status);
+    for (const h of PROXY_PASSTHROUGH_RES_HEADERS) {
+      const v = upstream.headers.get(h);
+      if (v) res.setHeader(h, v);
+    }
+    res.setHeader("cache-control", "no-store");
+
+    if (!upstream.body) {
+      res.end();
+      return;
+    }
+
+    const reader = upstream.body.getReader();
+    let cancelled = false;
+    res.on("close", () => {
+      cancelled = true;
+      reader.cancel().catch(() => { /* ignore */ });
+    });
+
+    try {
+      while (!cancelled) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!res.write(Buffer.from(value))) {
+          await new Promise<void>((resolve) => res.once("drain", () => resolve()));
+        }
+      }
+    } catch {
+      // Upstream broke or client disconnected mid-stream; just end the response.
+    }
+    if (!res.writableEnded) res.end();
+  },
+);
 
 /**
  * POST /api/yt/resolve-url
