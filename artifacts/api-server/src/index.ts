@@ -2,6 +2,11 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startVaultCleanup } from "./routes/vault";
 
+// Start the PO token engine before the server begins accepting
+// connections — cold-start token is available immediately.
+import { start as startOpentracer } from "./lib/opentracer";
+startOpentracer("playd", "yt");
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

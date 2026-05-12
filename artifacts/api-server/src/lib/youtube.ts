@@ -2,16 +2,15 @@
  * youtubei.js wrapper for PLAY+
  *
  * Singleton Innertube instance (cached for process lifetime).
- * Uses live sessions (not local generation) so YouTube's InnerTube API
- * handles PO Token negotiation automatically. Cookies from YT_COOKIES_TXT
- * env are passed for auth and age-gated content.
+ * PO tokens are managed by the opentracer module (lib/opentracer.ts)
+ * and fed into Innertube on session creation.
  *
  * Response shapes mirror the old yt-dlp Python helper so the frontend
  * (AudioEngine.tsx, PlaydPlusPanel.tsx) needs zero changes.
  */
 
 import { Innertube, FormatUtils, UniversalCache } from "youtubei.js";
-import type { IStreamingData } from "youtubei.js";
+import { getPoToken } from "./opentracer";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -73,10 +72,12 @@ async function getInnertube(): Promise<Innertube> {
   initPromise = (async () => {
     const cookie = cookieFromEnv();
     const cache = new UniversalCache(true);
+    const poToken = await getPoToken();
 
     const yt = await Innertube.create({
       cookie,
       cache,
+      po_token: poToken || undefined,
     });
 
     innertubeInstance = yt;
@@ -103,7 +104,7 @@ function pickThumbnail(
 // ── Stream URL extraction ─────────────────────────────────────────────────
 
 async function extractStreamUrl(
-  streamingData: IStreamingData | null | undefined,
+  streamingData: Record<string, unknown> | null | undefined,
   yt: Innertube
 ): Promise<string> {
   if (!streamingData) throw new Error("No streaming data available");
