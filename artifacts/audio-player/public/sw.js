@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'playd-v5';
+const CACHE_VERSION = 'playd-v6';
 const SHELL_CACHE   = `${CACHE_VERSION}-shell`;
 const ASSET_CACHE   = `${CACHE_VERSION}-assets`;
 
@@ -6,6 +6,12 @@ const PRECACHE_ASSETS = [
   './',
   './index.html',
 ];
+
+// Vite dev-server paths and any TS/JSX source modules must always go to the
+// network — they aren't fingerprinted bundles and the cache-first fallback
+// would otherwise pin stale code (we just hit this with stale AudioEngine.tsx).
+const DEV_BYPASS_PREFIXES = ['/src/', '/@vite/', '/@react-refresh', '/@id/', '/@fs/', '/node_modules/'];
+const DEV_BYPASS_EXT_RE = /\.(tsx?|jsx?|mjs|json|map)(\?.*)?$/;
 
 // ── Install: pre-cache the app shell ─────────────────────────────────────────
 self.addEventListener('install', (event) => {
@@ -39,6 +45,12 @@ self.addEventListener('fetch', (event) => {
 
   // API calls → network only, never cache
   if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // Vite dev-server paths and source modules → network only, never cache
+  if (DEV_BYPASS_PREFIXES.some((p) => url.pathname.includes(p)) || DEV_BYPASS_EXT_RE.test(url.pathname)) {
     event.respondWith(fetch(request));
     return;
   }
