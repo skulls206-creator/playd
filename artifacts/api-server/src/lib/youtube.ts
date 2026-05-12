@@ -10,7 +10,7 @@
  */
 
 import { Innertube, FormatUtils, UniversalCache } from "youtubei.js";
-import { getPoToken } from "./opentracer";
+import { getPoTokenAndVisitor } from "./opentracer";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -72,12 +72,13 @@ async function getInnertube(): Promise<Innertube> {
   initPromise = (async () => {
     const cookie = cookieFromEnv();
     const cache = new UniversalCache(true);
-    const poToken = await getPoToken();
+    const { token: poToken, visitor_data: visitorData } = await getPoTokenAndVisitor();
 
     const yt = await Innertube.create({
       cookie,
       cache,
       po_token: poToken || undefined,
+      visitor_data: visitorData || undefined,
     });
 
     innertubeInstance = yt;
