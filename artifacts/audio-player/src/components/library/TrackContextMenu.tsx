@@ -162,7 +162,7 @@ export function TrackContextMenu({
             <>
               <p className="text-xs font-semibold text-zinc-100">{count} tracks selected</p>
               <p className="text-[10px] text-zinc-400 truncate">
-                {selectedTracks.slice(0, 3).map(t => t.title).join(', ')}
+                {selectedTracks?.slice(0, 3).map(t => t.title).join(', ')}
                 {count > 3 && `… +${count - 3} more`}
               </p>
             </>
@@ -290,7 +290,7 @@ export function TrackContextMenu({
                 {playlists.length === 0 && (
                   <div className="px-3 py-2 text-[10px] text-zinc-500 italic">No playlists yet</div>
                 )}
-                {playlists.map(pl => (
+                {playlists?.map(pl => (
                   <ContextMenuItem
                     key={pl.id}
                     onClick={() => handleAddToPlaylist(pl.id)}

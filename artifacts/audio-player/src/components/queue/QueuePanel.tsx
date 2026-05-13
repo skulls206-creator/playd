@@ -60,7 +60,7 @@ export function QueuePanel() {
       ) : (
         <ScrollArea className="flex-1">
           <div className="pb-4">
-            {queue.map((item, idx) => {
+            {queue?.map((item, idx) => {
               const isActive = idx === queueIndex;
               return (
                 <ContextMenu key={`${item.trackId}-${idx}`}>

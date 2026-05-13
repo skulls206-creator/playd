@@ -681,7 +681,7 @@ export function TrackListPanel({
             </div>
           ) : (
             <div>
-              {sorted.map((track, idx) => {
+              {sorted?.map((track, idx) => {
                 const isCurrent  = currentTrack?.id === track.id;
                 const isSelected = selectedIds.has(track.id);
                 const isRowPlaying = isCurrent && isPlaying;

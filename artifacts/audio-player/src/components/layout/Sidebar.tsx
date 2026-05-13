@@ -221,7 +221,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
             <SectionHeader label="Artists" section="artists" icon={User} />
             {openSections.artists && (
               <div className="mt-0.5 space-y-0.5">
-                {filteredArtists.map(artist => (
+                {filteredArtists?.map(artist => (
                   <NavItem
                     key={artist}
                     label={artist}
@@ -242,7 +242,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
             <SectionHeader label="Albums" section="albums" icon={Disc3} />
             {openSections.albums && (
               <div className="mt-0.5 space-y-0.5">
-                {filteredAlbums.map(album => (
+                {filteredAlbums?.map(album => (
                   <NavItem
                     key={album}
                     label={album}
@@ -301,7 +301,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
                   </div>
                 )}
 
-                {filteredPlaylists.map(pl => (
+                {filteredPlaylists?.map(pl => (
                   <ContextMenu key={pl.id}>
                     <ContextMenuTrigger asChild>
                       <div>

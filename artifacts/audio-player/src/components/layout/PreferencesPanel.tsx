@@ -542,7 +542,7 @@ export function PreferencesPanel() {
               </div>
 
               <div className="space-y-1.5">
-                {eqPresets.map(preset => {
+                {eqPresets?.map(preset => {
                   const bands: number[] = JSON.parse(preset.bands);
                   const isBuiltin = preset.isBuiltin;
                   return (
