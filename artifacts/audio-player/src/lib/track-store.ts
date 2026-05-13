@@ -249,8 +249,6 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
 
   // ── EQ Presets ────────────────────────────────────────────────────────
 
-  eqPresets: [],
-
   loadEqPresets: async () => {
     try {
       const stored = await get<LocalEqPreset[]>(EQ_PRESETS_KEY);
