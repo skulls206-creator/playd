@@ -9,7 +9,6 @@ import { EqPanel } from '@/components/player/EqPanel';
 import { SpectrumBar } from '@/components/player/SpectrumBar';
 import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
 import { ClipStudioModal } from '@/components/editor/ClipStudioModal';
-import { PlaydPlusPanel } from '@/components/playd-plus/PlaydPlusPanel';
 import { useEffect, useState, useCallback } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
@@ -19,7 +18,7 @@ import type { LocalTrack } from '@/lib/track-store';
 
 export default function MainPlayer() {
   const { rescanAll } = useFileSystem();
-  const { isQueueOpen, isLyricsOpen, pause, playdPlusMode } = useAudioPlayer();
+  const { isQueueOpen, isLyricsOpen, pause } = useAudioPlayer();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [clipStudioTrack, setClipStudioTrack] = useState<LocalTrack | null>(null);
   useKeyboardShortcuts();
@@ -59,21 +58,15 @@ export default function MainPlayer() {
           <Sidebar />
         </div>
 
-        {playdPlusMode ? (
-          <PlaydPlusPanel onMenuOpen={() => setMobileSidebarOpen(true)} />
-        ) : (
-          <>
-            <TrackListPanel
-              onMenuOpen={() => setMobileSidebarOpen(true)}
-              onEditInClipStudio={handleOpenClipStudio}
-              needsRestore={needsRestore}
-              onRestore={restore}
-              onDismissRestore={dismiss}
-            />
-            {isQueueOpen && <QueuePanel />}
-            {isLyricsOpen && <LyricsPanel />}
-          </>
-        )}
+        <TrackListPanel
+          onMenuOpen={() => setMobileSidebarOpen(true)}
+          onEditInClipStudio={handleOpenClipStudio}
+          needsRestore={needsRestore}
+          onRestore={restore}
+          onDismissRestore={dismiss}
+        />
+        {isQueueOpen && <QueuePanel />}
+        {isLyricsOpen && <LyricsPanel />}
 
         {/* Floating Overlays */}
         <EqPanel />
