@@ -1,17 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
-import {
-  useListEqPresets,
-  useListTracks,
-  useCreateEqPreset,
-  useDeleteEqPreset,
-  getListEqPresetsQueryKey,
-  getListTracksQueryKey,
-  customFetch,
-} from '@workspace/api-client-react';
+import { useTrackStore } from '@/lib/track-store';
+import type { LocalTrack } from '@/lib/track-store';
 import { scanReplaygain } from '@/lib/replaygain-scanner';
-import { useQueryClient } from '@tanstack/react-query';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -23,9 +15,8 @@ import {
   FolderOpen, RefreshCw, Trash2, Plus, CheckCircle2,
   XCircle, Loader2, Info, HardDrive,
   Database, Monitor, Save, FileMusic, Bell, BellOff, Smartphone,
-  Activity, Blend, Volume2, Palette, Check, Lock, LockOpen,
+  Activity, Blend, Volume2, Palette, Check,
 } from 'lucide-react';
-import { getVaultKey, clearVaultKey, useVaultUnlock, requestVaultKey } from '@/hooks/use-vault-crypto';
 import { THEMES, THEME_KEYS } from '@/lib/themes';
 import { useTheme } from '@/hooks/use-theme';
 import { clsx } from 'clsx';
@@ -46,13 +37,15 @@ export function PreferencesPanel() {
 
   const folderInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef  = useRef<HTMLInputElement>(null);
-  const queryClient = useQueryClient();
 
-  // EQ Presets
-  const { data: presets = [] } = useListEqPresets();
+  // ── Track store ─────────────────────────────────────────────────────────
+  const allTracks = useTrackStore(s => s.tracks);
+  const eqPresets = useTrackStore(s => s.eqPresets);
+  const updateTrack = useTrackStore(s => s.updateTrack);
+  const createEqPreset = useTrackStore(s => s.createEqPreset);
+  const deleteEqPreset = useTrackStore(s => s.deleteEqPreset);
 
-  // ReplayGain scan
-  const { data: allTracks = [] } = useListTracks();
+  // ── ReplayGain scan ─────────────────────────────────────────────────────
   const { theme: activeTheme, setTheme } = useTheme();
 
   const [rgScanning, setRgScanning] = useState(false);
@@ -85,11 +78,7 @@ export function PreferencesPanel() {
         const file = await getFileFromPath(track.fileName, track.folderPath);
         if (!file) { failed++; } else {
           const gain = await scanReplaygain(file);
-          await customFetch(`/api/tracks/${track.id}/replaygain`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ gain }),
-          });
+          await updateTrack(track.id, { replaygainGain: gain } as Partial<LocalTrack>);
           scanned++;
         }
       } catch {
@@ -98,94 +87,18 @@ export function PreferencesPanel() {
       setRgProgress({ done: scanned + failed, total: toScan.length });
     }
 
-    await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
     setRgScanning(false);
     const msg = failed > 0
-      ? `✓ Scanned ${scanned} track${scanned !== 1 ? 's' : ''} — ${failed} skipped (file not accessible)`
-      : `✓ Scanned ${scanned} track${scanned !== 1 ? 's' : ''} successfully`;
+      ? `Scanned ${scanned} track${scanned !== 1 ? 's' : ''} — ${failed} skipped (file not accessible)`
+      : `Scanned ${scanned} track${scanned !== 1 ? 's' : ''} successfully`;
     setRgStatus(msg);
     setRgProgress(null);
-  }, [allTracks, getFileFromPath, queryClient]);
+  }, [allTracks, getFileFromPath, updateTrack]);
 
-  const createPreset = useCreateEqPreset();
-  const deletePreset = useDeleteEqPreset();
-
-  // Local folders
+  // ── Local folders ───────────────────────────────────────────────────────
   const [localFolders, setLocalFolders] = useState<string[]>([]);
   const [scanningFolderName, setScanningFolderName] = useState<string | null>(null);
   const [clearingLibrary, setClearingLibrary] = useState(false);
-
-  // Vault
-  const { isUnlocking } = useVaultUnlock();
-  const [vaultKeyLoaded, setVaultKeyLoaded] = useState(false);
-  const [removingVault, setRemovingVault] = useState(false);
-  const [vaultRemoveConfirm, setVaultRemoveConfirm] = useState(false);
-
-  useEffect(() => {
-    getVaultKey().then(k => setVaultKeyLoaded(!!k));
-  }, [isUnlocking]);
-
-  const vaultTracks = useMemo(() => allTracks.filter(t => t.source === 'vault'), [allTracks]);
-
-  const vaultStorageBytes = useMemo(
-    () => vaultTracks.reduce((sum, t) => sum + (t.vaultBlobSize ?? 0), 0),
-    [vaultTracks],
-  );
-
-  function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-  }
-
-  const handleLockVault = () => {
-    clearVaultKey();
-    setVaultKeyLoaded(false);
-  };
-
-  const handleUnlockVault = () => {
-    requestVaultKey().then(() => setVaultKeyLoaded(true)).catch(() => {});
-  };
-
-  const handleRemoveAllVault = async () => {
-    if (!vaultRemoveConfirm) { setVaultRemoveConfirm(true); setTimeout(() => setVaultRemoveConfirm(false), 4000); return; }
-    setRemovingVault(true);
-    setVaultRemoveConfirm(false);
-    try {
-      await Promise.allSettled(
-        vaultTracks.map(t => customFetch(`/api/vault/${t.id}`, { method: 'DELETE' })),
-      );
-      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-    } finally {
-      setRemovingVault(false);
-    }
-  };
-
-  // EQ save form
-  const [newPresetName, setNewPresetName] = useState('');
-  const [savingPreset, setSavingPreset] = useState(false);
-
-  // Notifications
-  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
-    'Notification' in window ? Notification.permission : 'denied'
-  );
-  const [notifOn, setNotifOn] = useState(notificationsEnabled);
-
-  const handleRequestNotifPermission = useCallback(async () => {
-    const perm = await requestNotificationPermission();
-    setNotifPermission(perm);
-    if (perm === 'granted') {
-      setNotificationsEnabled(true);
-      setNotifOn(true);
-    }
-  }, []);
-
-  const handleToggleNotif = useCallback((val: boolean) => {
-    setNotificationsEnabled(val);
-    setNotifOn(val);
-  }, []);
 
   useEffect(() => {
     if (isPrefsOpen) loadLocalFolders();
@@ -206,8 +119,13 @@ export function PreferencesPanel() {
       `Remove "${folderName}" from saved folders?\n\nThis will also delete all its tracks from your library — you'll need to re-import to get them back.`
     );
     if (!ok) return;
-    await customFetch(`/api/tracks/folder?name=${encodeURIComponent(folderName)}`, { method: 'DELETE' });
-    await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+    // Delete tracks matching this folder
+    const idsToDelete = allTracks
+      .filter(t => t.folderPath === folderName)
+      .map(t => t.id);
+    if (idsToDelete.length > 0) {
+      await useTrackStore.getState().deleteTracks(idsToDelete);
+    }
     const updated = localFolders.filter(n => n !== folderName);
     await set('local-folder-names', updated);
     setLocalFolders(updated);
@@ -217,8 +135,7 @@ export function PreferencesPanel() {
     if (!confirm('Remove all local tracks from the library? You can re-import anytime.')) return;
     setClearingLibrary(true);
     try {
-      await customFetch('/api/tracks/local', { method: 'DELETE' });
-      await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+      await useTrackStore.getState().clearTracks();
     } finally {
       setClearingLibrary(false);
     }
@@ -249,8 +166,11 @@ export function PreferencesPanel() {
     e.target.value = '';
   };
 
-  // EQ preset helpers
-  const handleApplyPreset = (preset: typeof presets[0]) => {
+  // ── EQ preset helpers ───────────────────────────────────────────────────
+  const [newPresetName, setNewPresetName] = useState('');
+  const [savingPreset, setSavingPreset] = useState(false);
+
+  const handleApplyPreset = (preset: typeof eqPresets[0]) => {
     setActiveEqPreset(preset);
   };
 
@@ -258,10 +178,7 @@ export function PreferencesPanel() {
     if (!newPresetName.trim()) return;
     setSavingPreset(true);
     try {
-      await createPreset.mutateAsync({
-        data: { name: newPresetName.trim(), bands: JSON.stringify(eqBands) },
-      });
-      await queryClient.invalidateQueries({ queryKey: getListEqPresetsQueryKey() });
+      await createEqPreset(newPresetName.trim(), JSON.stringify(eqBands));
       setNewPresetName('');
     } finally {
       setSavingPreset(false);
@@ -269,9 +186,28 @@ export function PreferencesPanel() {
   };
 
   const handleDeletePreset = async (id: number) => {
-    await deletePreset.mutateAsync({ id });
-    await queryClient.invalidateQueries({ queryKey: getListEqPresetsQueryKey() });
+    await deleteEqPreset(id);
   };
+
+  // ── Notifications ───────────────────────────────────────────────────────
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'denied'
+  );
+  const [notifOn, setNotifOn] = useState(notificationsEnabled);
+
+  const handleRequestNotifPermission = useCallback(async () => {
+    const perm = await requestNotificationPermission();
+    setNotifPermission(perm);
+    if (perm === 'granted') {
+      setNotificationsEnabled(true);
+      setNotifOn(true);
+    }
+  }, []);
+
+  const handleToggleNotif = useCallback((val: boolean) => {
+    setNotificationsEnabled(val);
+    setNotifOn(val);
+  }, []);
 
   return (
     <Sheet open={isPrefsOpen} onOpenChange={togglePrefs}>
@@ -401,115 +337,18 @@ export function PreferencesPanel() {
               )}
             </section>
 
-            {/* ── Encrypted Vault ── */}
+            {/* Library stats */}
             <section>
-              <div className="mb-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-primary" />
-                  Encrypted Cloud Vault
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Tracks encrypted on-device with AES-GCM before upload. The server never sees your audio.
-                </p>
-              </div>
-
-              {/* Metrics row */}
-              <div className="flex items-center gap-4 px-3 py-2 rounded-md bg-black/20 border border-border/30 mb-2 text-[11px] text-muted-foreground">
+              <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <Database className="w-3.5 h-3.5 text-primary" />
+                Library
+              </h3>
+              <div className="p-3 rounded-md bg-black/20 border border-border/30 text-[11px] text-muted-foreground">
                 <span>
-                  <span className="text-foreground font-medium">{vaultTracks.length}</span>{' '}
-                  {vaultTracks.length === 1 ? 'track' : 'tracks'} in vault
-                </span>
-                {vaultStorageBytes > 0 && (
-                  <>
-                    <span className="h-3 w-px bg-border/40" />
-                    <span>
-                      <span className="text-foreground font-medium">{formatBytes(vaultStorageBytes)}</span>{' '}
-                      encrypted
-                    </span>
-                  </>
-                )}
-                <span className="h-3 w-px bg-border/40" />
-                <span className={clsx('font-medium', vaultKeyLoaded ? 'text-emerald-400' : 'text-zinc-500')}>
-                  {vaultKeyLoaded ? 'Key loaded' : 'Key not loaded'}
+                  <span className="text-foreground font-medium">{allTracks.length}</span>{' '}
+                  {allTracks.length === 1 ? 'track' : 'tracks'} in library
                 </span>
               </div>
-
-              {/* Lock / Unlock row */}
-              <div className="flex items-center justify-between p-3 rounded-md bg-black/20 border border-border/30">
-                <div className="flex items-center gap-2">
-                  {vaultKeyLoaded
-                    ? <LockOpen className="w-4 h-4 text-emerald-400" />
-                    : <Lock    className="w-4 h-4 text-zinc-500" />
-                  }
-                  <div>
-                    <p className="text-xs font-medium">
-                      {vaultKeyLoaded ? 'Vault unlocked' : 'Vault locked'}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {vaultKeyLoaded
-                        ? 'Key is in session — vault tracks can be played and uploaded.'
-                        : 'Enter your account password to decrypt vault tracks.'}
-                    </p>
-                  </div>
-                </div>
-                {vaultKeyLoaded ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleLockVault}
-                    className="text-xs text-zinc-400 hover:text-red-400 shrink-0"
-                  >
-                    <Lock className="w-3 h-3 mr-1.5" />
-                    Lock
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleUnlockVault}
-                    className="text-xs text-primary hover:text-primary/80 shrink-0"
-                  >
-                    <LockOpen className="w-3 h-3 mr-1.5" />
-                    Unlock
-                  </Button>
-                )}
-              </div>
-
-              {/* Remove all vault tracks */}
-              {vaultTracks.length > 0 && (
-                <div className="flex items-center justify-between mt-2 px-3 py-2 rounded-md bg-red-950/20 border border-red-900/30">
-                  <div>
-                    <p className="text-xs font-medium text-red-300">Remove all vault tracks</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      Permanently deletes all {vaultTracks.length} encrypted{' '}
-                      {vaultTracks.length === 1 ? 'track' : 'tracks'} from the cloud. This cannot be undone.
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRemoveAllVault}
-                    disabled={removingVault}
-                    className={clsx(
-                      'text-xs shrink-0',
-                      vaultRemoveConfirm
-                        ? 'text-red-400 bg-red-950/40 hover:bg-red-950/60'
-                        : 'text-zinc-500 hover:text-red-400',
-                    )}
-                  >
-                    {removingVault
-                      ? <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
-                      : <Trash2 className="w-3 h-3 mr-1.5" />
-                    }
-                    {removingVault ? 'Removing…' : vaultRemoveConfirm ? 'Confirm?' : 'Remove All'}
-                  </Button>
-                </div>
-              )}
-
-              <p className="text-[10px] text-muted-foreground/60 mt-2">
-                To back up a local track, right-click it in the library and choose "Upload to Vault".
-                Vault tracks show a lock icon and survive "Clear Library".
-              </p>
             </section>
           </TabsContent>
 
@@ -661,11 +500,11 @@ export function PreferencesPanel() {
               {rgStatus && (
                 <div className={clsx(
                   'flex items-center gap-2 text-xs px-3 py-2 rounded-md mb-2',
-                  rgStatus.startsWith('✓')
+                  rgStatus.startsWith('Scanned')
                     ? 'text-green-400 bg-green-400/10'
                     : 'text-muted-foreground bg-black/20',
                 )}>
-                  {rgStatus.startsWith('✓')
+                  {rgStatus.startsWith('Scanned')
                     ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                     : <Info className="w-3.5 h-3.5 shrink-0" />
                   }
@@ -703,7 +542,7 @@ export function PreferencesPanel() {
               </div>
 
               <div className="space-y-1.5">
-                {presets.map(preset => {
+                {eqPresets.map(preset => {
                   const bands: number[] = JSON.parse(preset.bands);
                   const isBuiltin = preset.isBuiltin;
                   return (
@@ -758,7 +597,7 @@ export function PreferencesPanel() {
               <p className="text-[11px] text-muted-foreground mb-3">
                 Show an OS notification when a new track starts playing.
                 On Windows this appears as a toast in the bottom-right corner.
-                The Windows media controls widget (play · pause · skip) is always
+                The Windows media controls widget (play / pause / skip) is always
                 available when audio is playing — no extra setup needed.
               </p>
 
@@ -874,34 +713,21 @@ export function PreferencesPanel() {
                 What's stored where
               </h3>
               <p className="text-xs text-muted-foreground leading-relaxed mb-4">
-                Your library is tied to your account — sign in on any device and your metadata, playlists, and settings are already there. Local files stay on each device since the browser can't reach your hard drive remotely.
+                Everything is stored locally in your browser using IndexedDB.
+                Nothing is sent to a server — your library lives on this device.
               </p>
 
               <div className="space-y-3">
                 <div className="p-3 rounded-md bg-green-500/5 border border-green-500/20">
                   <div className="flex items-center gap-2 mb-2">
                     <Database className="w-3.5 h-3.5 text-green-400" />
-                    <span className="text-xs font-semibold text-green-400">Shared across all devices</span>
-                    <Badge variant="outline" className="text-[9px] h-4 border-green-500/30 text-green-400">Server DB</Badge>
+                    <span className="text-xs font-semibold text-green-400">Stored on this device</span>
+                    <Badge variant="outline" className="text-[9px] h-4 border-green-500/30 text-green-400">IndexedDB</Badge>
                   </div>
                   <ul className="text-[11px] text-muted-foreground space-y-1 pl-5 list-disc">
-                    <li>Track metadata — title, artist, album, year, genre, rating, play count</li>
+                    <li>Track metadata — title, artist, album, year, genre, play count</li>
                     <li>Playlists and their track order</li>
                     <li>EQ presets (custom and built-in)</li>
-                    <li>Playback queue</li>
-                  </ul>
-                </div>
-
-                <div className="p-3 rounded-md bg-yellow-500/5 border border-yellow-500/20">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Monitor className="w-3.5 h-3.5 text-yellow-400" />
-                    <span className="text-xs font-semibold text-yellow-400">This device only</span>
-                    <Badge variant="outline" className="text-[9px] h-4 border-yellow-500/30 text-yellow-400">IndexedDB</Badge>
-                  </div>
-                  <ul className="text-[11px] text-muted-foreground space-y-1 pl-5 list-disc">
-                    <li>Local folder handles (file system access permissions)</li>
-                    <li>Embedded album art extracted from your files</li>
-                    <li>File paths — a track scanned on one machine won't play on another</li>
                   </ul>
                 </div>
 

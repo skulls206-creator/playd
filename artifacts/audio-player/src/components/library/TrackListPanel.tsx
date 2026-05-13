@@ -1,14 +1,13 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useListTracks, useGetPlaylistTracks, getListTracksQueryKey, customFetch } from '@workspace/api-client-react';
+import { useTrackStore } from '@/lib/track-store';
+import type { LocalTrack } from '@/lib/track-store';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
-import { useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput, RefreshCw, Lock, Pencil } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
 import { TrackEditModal } from './TrackEditModal';
-import type { Track } from '@workspace/api-client-react';
 
 type SortCol = 'trackNumber' | 'title' | 'artist' | 'album' | 'duration' | 'year';
 type SortDir = 'asc' | 'desc';
@@ -143,7 +142,7 @@ function ResizeHandle({ col, colWidths, setColWidths }: ResizeHandleProps) {
 // ─── Component ───────────────────────────────────────────────────────────────
 interface TrackListPanelProps {
   onMenuOpen?: () => void;
-  onEditInClipStudio?: (track: Track) => void;
+  onEditInClipStudio?: (track: LocalTrack) => void;
   needsRestore?: boolean;
   onRestore?: () => void;
   onDismissRestore?: () => void;
@@ -156,17 +155,24 @@ export function TrackListPanel({
   onRestore,
   onDismissRestore,
 }: TrackListPanelProps = {}) {
-  const { data: allTracks = [] } = useListTracks();
+  const allTracks = useTrackStore(s => s.tracks);
+  const playlistTracksState = useTrackStore(s => s.playlistTracks);
   const { currentTrack, isPlaying, play, togglePlay, setQueue, addToQueueEnd, libraryFilter, setLibraryFilter, searchQuery, setSearchQuery } = useAudioPlayer();
 
   // Fetch tracks for the active playlist (disabled when not in a playlist view)
   const activePlaylistId = libraryFilter.type === 'playlist' ? Number(libraryFilter.value) : undefined;
-  const { data: playlistTracks = [] } = useGetPlaylistTracks(
-    activePlaylistId as number,
-    { query: { enabled: activePlaylistId !== undefined } },
-  );
+  const playlistTracks = useMemo(() => {
+    if (activePlaylistId === undefined) return [];
+    const ptIds = new Set(
+      playlistTracksState
+        .filter(pt => pt.playlistId === activePlaylistId)
+        .sort((a, b) => a.position - b.position)
+        .map(pt => pt.trackId)
+    );
+    return allTracks.filter(t => ptIds.has(t.id));
+  }, [allTracks, playlistTracksState, activePlaylistId]);
+
   const { isScanning, scanProgress, scanStatus, addFolder, scanFileList, importDroppedItems, rescanAll, getStoredHandles } = useFileSystem();
-  const queryClient = useQueryClient();
 
   // iOS Safari doesn't support showDirectoryPicker — detect once on mount.
   const hasDirectoryPicker = typeof (window as any).showDirectoryPicker === 'function';
@@ -181,7 +187,6 @@ export function TrackListPanel({
     const files = e.target.files;
     if (files && files.length > 0) {
       await scanFileList(files);
-      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
     }
     e.target.value = '';
   };
@@ -226,7 +231,7 @@ export function TrackListPanel({
   const [isClearing, setIsClearing] = useState(false);
 
   // ── Tag editor ───────────────────────────────────────────────────────────
-  const [editingTrack, setEditingTrack] = useState<Track | null>(null);
+  const [editingTrack, setEditingTrack] = useState<LocalTrack | null>(null);
 
   // ── Multi-select ────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -241,8 +246,7 @@ export function TrackListPanel({
     setClearConfirm(false);
     setIsClearing(true);
     try {
-      await customFetch('/api/tracks/local', { method: 'DELETE' });
-      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
+      await useTrackStore.getState().clearTracks();
       setSelectedIds(new Set());
     } finally {
       setIsClearing(false);
@@ -320,7 +324,7 @@ export function TrackListPanel({
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...deduplicated].sort((a, b) => {
-      const secondary = (x: Track, y: Track) => {
+      const secondary = (x: LocalTrack, y: LocalTrack) => {
         const ar = (x.artist || '').localeCompare(y.artist || '');
         if (ar !== 0) return ar;
         const al = (x.album || '').localeCompare(y.album || '');
@@ -339,16 +343,16 @@ export function TrackListPanel({
       if (cmp === 0) return secondary(a, b);
       return cmp * dir;
     });
-  }, [filtered, sortCol, sortDir]);
+  }, [deduplicated, sortCol, sortDir]);
 
-  const playRow = useCallback((track: Track, idx: number) => {
+  const playRow = useCallback((track: LocalTrack, idx: number) => {
     const queue = sorted.map((t, i) => ({ id: i, trackId: t.id, position: i, track: t }));
     setQueue(queue);
     play(track, queue, idx);
   }, [sorted, setQueue, play]);
 
   // ── Click handler with multi-select ─────────────────────────────────────
-  const handleRowClick = useCallback((e: React.MouseEvent, track: Track, idx: number) => {
+  const handleRowClick = useCallback((e: React.MouseEvent, track: LocalTrack, idx: number) => {
     if (e.metaKey || e.ctrlKey) {
       setSelectedIds(prev => {
         const next = new Set(prev);
@@ -390,7 +394,6 @@ export function TrackListPanel({
     setIsDragOver(false);
     if (e.dataTransfer.items.length > 0) {
       await importDroppedItems(e.dataTransfer.items);
-      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
     }
   };
 
@@ -477,7 +480,6 @@ export function TrackListPanel({
                 // If not (e.g. browser cleared storage) → open the picker so the
                 // user can re-select their folder rather than seeing an error.
                 getStoredHandles().then(handles => {
-                  queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
                   if (handles.length > 0) {
                     rescanAll();
                   } else {
@@ -510,7 +512,6 @@ export function TrackListPanel({
                 // Desktop/Android: async picker via .then — no await in onClick itself
                 addFolder().then(added => {
                   if (added) {
-                    queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
                     refreshHasFolders();
                   }
                 });

@@ -3,8 +3,7 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useNowPlayingNotification } from '@/hooks/use-now-playing-notification';
 import { useToast } from '@/hooks/use-toast';
-import type { Track } from '@workspace/api-client-react';
-import { requestVaultKey, decryptVaultBlob } from '@/hooks/use-vault-crypto';
+import type { LocalTrack } from '@/lib/track-store';
 import { sharedAnalyserRef, sharedAudioContextRef } from '@/lib/audio-context-ref';
 
 const EQ_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
@@ -219,7 +218,7 @@ export function AudioEngine() {
   };
 
   // Resolve a playable URL for any track source
-  const resolveTrackSrc = useRef(async (track: Track): Promise<string | null> => {
+  const resolveTrackSrc = useRef(async (track: LocalTrack): Promise<string | null> => {
     if (track.source === 'local') {
       const file = await getFileFromPathRef.current(track.fileName, track.folderPath);
       if (!file) { console.error('Cannot access local file'); return null; }
@@ -240,112 +239,12 @@ export function AudioEngine() {
       return `/api/subsonic-servers/${track.subsonicServerId}/stream/${encodeURIComponent(track.subsonicId)}${qs}`;
     }
 
-    if (track.source === 'youtube') {
-      // YouTube stream: googlevideo CDN sends no CORS headers, so a direct
-      // <audio src=googlevideo...> tainted via createMediaElementSource
-      // outputs silence. Instead we mint a short-lived stream-scoped token
-      // and load the audio from our same-origin proxy at
-      // /api/yt/stream-proxy/:videoId?token=...
-      const videoId = track.fileName;
-      const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-      if (!jwt) {
-        toast({
-          title: 'Not signed in',
-          description: 'Sign in again to stream from YouTube.',
-          duration: 8000,
-        });
-        return null;
-      }
-      console.log('[AudioEngine] YT resolve →', { videoId, title: track.title });
-      try {
-        const tokenResp = await fetch('/api/auth/stream-token', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${jwt}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ resource: `yt:${videoId}` }),
-        });
-        if (!tokenResp.ok) {
-          const body = await tokenResp.text().catch(() => '');
-          console.error('[AudioEngine] YT stream-token failed', tokenResp.status, body);
-          toast({
-            title: `YouTube stream auth failed (${tokenResp.status})`,
-            description:
-              tokenResp.status === 401 ? 'Session expired — sign out and back in.' :
-              (body.slice(0, 180) || `Could not authorise stream playback for "${track.title}".`),
-            duration: 10000,
-          });
-          return null;
-        }
-        const { token } = await tokenResp.json() as { token?: string };
-        if (!token) {
-          console.error('[AudioEngine] stream-token response missing token');
-          toast({
-            title: 'No stream token returned',
-            description: `Server did not return a stream token for "${track.title}".`,
-            duration: 9000,
-          });
-          return null;
-        }
-        const proxyUrl = `/api/yt/stream-proxy/${encodeURIComponent(videoId)}?token=${encodeURIComponent(token)}`;
-        console.log('[AudioEngine] YT resolved OK (proxy)');
-        return proxyUrl;
-      } catch (e) {
-        console.error('[AudioEngine] YT stream-token network error', e);
-        toast({
-          title: 'Network error',
-          description: `Could not reach stream-token endpoint: ${(e as Error).message ?? e}`,
-          duration: 9000,
-        });
-        return null;
-      }
-    }
-
-    if (track.source === 'vault') {
-      // Vault track: fetch encrypted blob from the API, decrypt in-browser, return blob URL.
-      // If the vault key is not in session, requestVaultKey() opens the unlock modal and waits.
-      let masterKey: CryptoKey;
-      try {
-        masterKey = await requestVaultKey();
-      } catch {
-        // User cancelled the unlock modal
-        toast({
-          title: 'Vault locked',
-          description: 'Enter your vault password to play encrypted tracks.',
-          duration: 5000,
-        });
-        return null;
-      }
-      if (!track.vaultEncryptedKey || !track.vaultKeyIv || !track.vaultDataIv) {
-        console.error('AudioEngine: vault track missing crypto metadata', track.id);
-        return null;
-      }
-      const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-      const resp = await fetch(`/api/vault/download/${track.id}`, {
-        headers: jwt ? { 'Authorization': `Bearer ${jwt}` } : {},
-      });
-      if (!resp.ok) {
-        console.error('AudioEngine: vault download failed', resp.status);
-        return null;
-      }
-      const ciphertext = await resp.arrayBuffer();
-      const plaintext  = await decryptVaultBlob(
-        ciphertext,
-        track.vaultEncryptedKey,
-        track.vaultKeyIv,
-        track.vaultDataIv,
-        masterKey,
-      );
-      return URL.createObjectURL(new Blob([plaintext]));
-    }
-
     console.warn('AudioEngine: unsupported track source', track.source);
     return null;
   });
 
   // Load a track onto a deck and return success
-  const loadDeckFile = useRef(async (deck: Deck, track: Track): Promise<boolean> => {
+  const loadDeckFile = useRef(async (deck: Deck, track: LocalTrack): Promise<boolean> => {
     if (deck.objectUrl) { URL.revokeObjectURL(deck.objectUrl); deck.objectUrl = null; }
     deck.loadedTrackId = null;
 
@@ -654,139 +553,6 @@ export function AudioEngine() {
     const onDcA = () => { if (active.current === 'A' && isFinite(a.audio.duration)) { const { _setDuration: sd } = useAudioPlayer.getState(); sd(a.audio.duration); } };
     const onDcB = () => { if (active.current === 'B' && isFinite(b.audio.duration)) { const { _setDuration: sd } = useAudioPlayer.getState(); sd(b.audio.duration); } };
 
-    // ── YouTube stream URL expiry recovery ────────────────────────────────────
-    // YouTube CDN stream URLs expire after ~6 hours. When a deck fires an
-    // 'error' event for a YouTube track, we:
-    //  1. Confirm the error is network-level (not a decode error).
-    //  2. Probe the current CDN URL to confirm it returned 403/410 (expired).
-    //  3. Re-fetch a fresh stream URL from /api/yt/stream/:videoId and resume
-    //     from the saved position. Each track is retried at most once.
-    const ytRetrySet = new Set<number>(); // track IDs that have already been retried
-
-    const handleYtError = async (deck: Deck) => {
-      const state = useAudioPlayer.getState();
-      const track = state.currentTrack;
-      if (!track || track.source !== 'youtube') return;
-
-      // Only attempt recovery for network-level errors — decode errors
-      // (MEDIA_ERR_DECODE = 3) are unrelated to URL expiry.
-      const errCode = deck.audio.error?.code;
-      const errMsg = deck.audio.error?.message ?? '';
-      const codeName =
-        errCode === MediaError.MEDIA_ERR_ABORTED ? 'ABORTED' :
-        errCode === MediaError.MEDIA_ERR_NETWORK ? 'NETWORK' :
-        errCode === MediaError.MEDIA_ERR_DECODE ? 'DECODE' :
-        errCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ? 'SRC_NOT_SUPPORTED' :
-        `code=${errCode}`;
-      console.error('[AudioEngine] YT <audio> error', { codeName, errCode, errMsg, src: deck.audio.src.slice(0, 120) });
-
-      const isNetworkError =
-        errCode === MediaError.MEDIA_ERR_NETWORK ||           // 2
-        errCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;   // 4
-      if (!isNetworkError) {
-        // DECODE / ABORTED — surface to the user so they're not staring at a silent player
-        toast({
-          title: `Playback error (${codeName})`,
-          description: errMsg
-            ? errMsg.slice(0, 180)
-            : 'The browser could not decode this audio stream. Try another track.',
-          duration: 9000,
-        });
-        return;
-      }
-
-      if (ytRetrySet.has(track.id)) return; // already retried once — give up
-
-      // Probe the current CDN URL to confirm it is expired (HTTP 403/410).
-      // We use a byte-range GET so the probe is lightweight.
-      // - If the server responds with 403 or 410 → URL expired → proceed.
-      // - If the server responds with any other success/redirect → not expired → bail.
-      // - If the fetch itself throws (CORS / network failure on the probe) → treat
-      //   as potential expiry and proceed; worst case we do one unnecessary re-fetch.
-      const currentSrc = deck.audio.src;
-      if (currentSrc) {
-        try {
-          const probe = await fetch(currentSrc, {
-            method: 'GET',
-            headers: { Range: 'bytes=0-0' },
-          });
-          if (probe.status !== 403 && probe.status !== 410) {
-            // Not an expiry error — don't consume the one-shot retry slot.
-            return;
-          }
-        } catch {
-          // CORS or network failure on the probe — treat as potential expiry.
-        }
-      }
-
-      // Mark as retried before the async work to prevent concurrent retries.
-      ytRetrySet.add(track.id);
-
-      const videoId = track.fileName;
-      const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-      if (!jwt) {
-        toast({
-          title: 'Stream unavailable',
-          description: 'Sign in again to refresh the YouTube stream.',
-          duration: 7000,
-        });
-        return;
-      }
-      try {
-        // Mint a fresh stream-scoped token and reload via the same-origin proxy.
-        const tokenResp = await fetch('/api/auth/stream-token', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${jwt}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ resource: `yt:${videoId}` }),
-        });
-        if (!tokenResp.ok) {
-          toast({
-            title: 'Stream unavailable',
-            description: 'Could not refresh the YouTube stream. Try playing the track again.',
-            duration: 7000,
-          });
-          return;
-        }
-        const { token } = await tokenResp.json() as { token?: string };
-        if (!token) {
-          toast({
-            title: 'Stream unavailable',
-            description: 'Could not refresh the YouTube stream. Try playing the track again.',
-            duration: 7000,
-          });
-          return;
-        }
-        const proxyUrl = `/api/yt/stream-proxy/${encodeURIComponent(videoId)}?token=${encodeURIComponent(token)}`;
-        const saved = deck.audio.currentTime;
-        const wasPlaying = state.isPlaying;
-        deck.audio.src = proxyUrl;
-        deck.audio.load();
-        // Wait for canplay so currentTime assignment takes effect reliably.
-        // Setting currentTime before media metadata is ready silently no-ops.
-        const onReady = () => {
-          deck.audio.removeEventListener('canplay', onReady);
-          deck.audio.currentTime = saved;
-          if (wasPlaying) deck.audio.play().catch(() => {});
-        };
-        // Clear the retry slot after a successful refresh so that if this same
-        // track's refreshed URL also expires in a later session, it can retry again.
-        ytRetrySet.delete(track.id);
-        deck.audio.addEventListener('canplay', onReady);
-      } catch {
-        toast({
-          title: 'Stream unavailable',
-          description: 'Could not refresh the YouTube stream. Try playing the track again.',
-          duration: 7000,
-        });
-      }
-    };
-
-    const onErrA = () => { if (active.current === 'A') handleYtError(a); };
-    const onErrB = () => { if (active.current === 'B') handleYtError(b); };
-
     const onEndA = () => handleEnded('A');
     const onEndB = () => handleEnded('B');
 
@@ -796,8 +562,6 @@ export function AudioEngine() {
     b.audio.addEventListener('durationchange', onDcB);
     a.audio.addEventListener('ended',          onEndA);
     b.audio.addEventListener('ended',          onEndB);
-    a.audio.addEventListener('error',          onErrA);
-    b.audio.addEventListener('error',          onErrB);
 
     return () => {
       a.audio.removeEventListener('timeupdate',     onTuA);
@@ -806,8 +570,6 @@ export function AudioEngine() {
       b.audio.removeEventListener('durationchange', onDcB);
       a.audio.removeEventListener('ended',          onEndA);
       b.audio.removeEventListener('ended',          onEndB);
-      a.audio.removeEventListener('error',          onErrA);
-      b.audio.removeEventListener('error',          onErrB);
     };
   }, []);
 
@@ -900,16 +662,7 @@ export function AudioEngine() {
         ctx.resume().catch(() => {}); // fire-and-forget
         activeDeck.audio.play().catch((e: Error) => {
           console.warn('Autoplay prevented', e);
-          // For vault tracks the decrypt chain is long enough that browsers may
-          // expire the user-gesture window. Show a clear prompt so they know
-          // exactly what to do — pressing ▶ Play is a fresh gesture that works.
-          if (currentTrack.source === 'vault' && e.name === 'NotAllowedError') {
-            toast({
-              title: 'Tap ▶ Play to start',
-              description: 'Vault track decrypted — press the Play button to begin playback.',
-              duration: 8000,
-            });
-          }
+
         });
       }
     };

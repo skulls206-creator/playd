@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { get } from 'idb-keyval';
-import type { Track } from '@workspace/api-client-react';
+import type { LocalTrack } from '@/lib/track-store';
 
 const ART_STORE_KEY = 'track-art';
 
@@ -9,7 +9,7 @@ const ART_STORE_KEY = 'track-art';
  * - Local tracks have art stored in IndexedDB (extracted during import).
  * Returns null while loading, then the data URL or null if no art found.
  */
-export function useTrackArt(track: Track | null): string | null {
+export function useTrackArt(track: LocalTrack | null): string | null {
   const [artUrl, setArtUrl] = useState<string | null>(
     track?.albumArtDataUrl ?? null,
   );

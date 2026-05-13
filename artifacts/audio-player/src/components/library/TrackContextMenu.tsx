@@ -1,19 +1,8 @@
 import { type ReactNode, useState } from 'react';
-import type { Track } from '@workspace/api-client-react';
+import { useTrackStore, type LocalTrack } from '@/lib/track-store';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { openMiniPlayer } from '@/hooks/use-mini-player';
-import { useQueryClient } from '@tanstack/react-query';
-import {
-  getListTracksQueryKey,
-  getGetPlaylistTracksQueryKey,
-  getListPlaylistsQueryKey,
-  customFetch,
-  useListPlaylists,
-  useCreatePlaylist,
-  useAddTrackToPlaylist,
-  useRemoveTrackFromPlaylist,
-} from '@workspace/api-client-react';
 import { clsx } from 'clsx';
 import {
   ContextMenu,
@@ -37,28 +26,23 @@ import {
   Scissors,
   PictureInPicture2,
   RefreshCw,
-  Lock,
   Loader2,
-  CheckCircle2,
   Pencil,
   Plus,
   Trash2,
 } from 'lucide-react';
-import { requestVaultKey, encryptFile } from '@/hooks/use-vault-crypto';
-
-type VaultUploadState = 'idle' | 'encrypting' | 'uploading' | 'done' | 'error';
 
 interface TrackContextMenuProps {
-  track: Track;
-  selectedTracks?: Track[];
+  track: LocalTrack;
+  selectedTracks?: LocalTrack[];
   queueIndex: number;
   children: ReactNode;
   onPlayNow: () => void;
   onPlaySelected?: () => void;
   onQueueSelected?: () => void;
-  onEditTags?: (track: Track) => void;
-  onEditInClipStudio?: (track: Track) => void;
-  onRemoveFromPlaylist?: (track: Track) => void;
+  onEditTags?: (track: LocalTrack) => void;
+  onEditInClipStudio?: (track: LocalTrack) => void;
+  onRemoveFromPlaylist?: (track: LocalTrack) => void;
 }
 
 export function TrackContextMenu({
@@ -83,142 +67,37 @@ export function TrackContextMenu({
     isMiniPlayer,
     libraryFilter,
   } = useAudioPlayer();
-  const { rescanAll, isScanning, getFileFromPath } = useFileSystem();
-  const queryClient = useQueryClient();
+  const { rescanAll, isScanning } = useFileSystem();
 
-  // ── Playlist hooks ────────────────────────────────────────────────────────
-  const { data: playlists = [] } = useListPlaylists();
-  const addTrackToPlaylist = useAddTrackToPlaylist();
-  const removeTrackFromPlaylist = useRemoveTrackFromPlaylist();
-  const createPlaylist = useCreatePlaylist();
+  // ── Playlist state from local store ─────────────────────────────────────
+  const playlists = useTrackStore(s => s.playlists);
   const [addingToPlaylist, setAddingToPlaylist] = useState<number | null>(null);
 
-  const handleAddToPlaylist = (playlistId: number) => {
+  const handleAddToPlaylist = async (playlistId: number) => {
     setAddingToPlaylist(playlistId);
-    addTrackToPlaylist.mutate(
-      { id: playlistId, data: { trackId: track.id } },
-      {
-        onSettled: () => {
-          queryClient.invalidateQueries({ queryKey: getGetPlaylistTracksQueryKey(playlistId) });
-          setAddingToPlaylist(null);
-        },
-      },
-    );
-  };
-
-  const handleCreateAndAddToPlaylist = () => {
-    const name = `New Playlist`;
-    createPlaylist.mutate(
-      { data: { name } },
-      {
-        onSuccess: (pl) => {
-          queryClient.invalidateQueries({ queryKey: getListPlaylistsQueryKey() });
-          addTrackToPlaylist.mutate(
-            { id: pl.id, data: { trackId: track.id } },
-            { onSettled: () => queryClient.invalidateQueries({ queryKey: getGetPlaylistTracksQueryKey(pl.id) }) },
-          );
-          // Navigate to the new playlist
-          setLibraryFilter({ type: 'playlist', value: String(pl.id), label: pl.name });
-        },
-      },
-    );
-  };
-
-  const handleRemoveFromPlaylist = () => {
-    if (libraryFilter.type !== 'playlist') return;
-    const playlistId = Number(libraryFilter.value);
-    removeTrackFromPlaylist.mutate(
-      { id: playlistId, trackId: track.id },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetPlaylistTracksQueryKey(playlistId) });
-        },
-      },
-    );
-    onRemoveFromPlaylist?.(track);
-  };
-
-  // ── Vault upload state ───────────────────────────────────────────────────
-  const [vaultState, setVaultState] = useState<VaultUploadState>('idle');
-  const [vaultError, setVaultError] = useState<string | null>(null);
-  const [vaultProgress, setVaultProgress] = useState<{ current: number; total: number } | null>(null);
-
-  const handleBulkUploadToVault = async (tracksToUpload: Track[]) => {
-    const uploadable = tracksToUpload.filter(t => t.source === 'local');
-    if (uploadable.length === 0) return;
-
-    setVaultState('encrypting');
-    setVaultError(null);
-    const total = uploadable.length;
-    setVaultProgress(total > 1 ? { current: 1, total } : null);
-
     try {
-      // Ensure vault key is available — shows unlock modal if not in session.
-      const masterKey = await requestVaultKey();
-
-      for (let i = 0; i < uploadable.length; i++) {
-        const t = uploadable[i];
-        if (total > 1) setVaultProgress({ current: i + 1, total });
-
-        setVaultState('encrypting');
-        const file = await getFileFromPath(t.fileName, t.folderPath);
-        if (!file) throw new Error(`Could not access file: ${t.fileName}`);
-
-        const { ciphertext, encryptedKey, keyIv, dataIv } = await encryptFile(file, masterKey);
-
-        setVaultState('uploading');
-
-        const { trackId } = await customFetch<{ trackId: number }>(
-          '/api/vault/upload-url',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title:             t.title,
-              artist:            t.artist,
-              album:             t.album,
-              year:              t.year,
-              genre:             t.genre,
-              duration:          t.duration,
-              trackNumber:       t.trackNumber,
-              fileName:          t.fileName,
-              vaultEncryptedKey: encryptedKey,
-              vaultKeyIv:        keyIv,
-              vaultDataIv:       dataIv,
-              blobSize:          ciphertext.byteLength,
-              contentType:       'application/octet-stream',
-            }),
-          },
-        );
-
-        // Upload the encrypted binary through the API server, which enforces
-        // size limits server-side before writing to R2.
-        // Note: Content-Length is set automatically by the browser for binary bodies.
-        await customFetch(`/api/vault/upload/${trackId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: ciphertext,
-        });
-      }
-
-      setVaultProgress(null);
-      setVaultState('done');
-      queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-      setTimeout(() => setVaultState('idle'), 2000);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Upload failed';
-      setVaultProgress(null);
-      if (msg.includes('cancelled')) { setVaultState('idle'); return; }
-      setVaultError(msg);
-      setVaultState('error');
-      setTimeout(() => { setVaultState('idle'); setVaultError(null); }, 4000);
+      await useTrackStore.getState().addTrackToPlaylist(playlistId, track.id);
+    } finally {
+      setAddingToPlaylist(null);
     }
   };
 
-  const handleUploadToVault = () => handleBulkUploadToVault([track]);
+  const handleCreateAndAddToPlaylist = async () => {
+    const name = `New Playlist`;
+    const pl = await useTrackStore.getState().createPlaylist(name);
+    await useTrackStore.getState().addTrackToPlaylist(pl.id, track.id);
+    // Navigate to the new playlist
+    setLibraryFilter({ type: 'playlist', value: String(pl.id), label: pl.name });
+  };
+
+  const handleRemoveFromPlaylist = async () => {
+    if (libraryFilter.type !== 'playlist') return;
+    const playlistId = Number(libraryFilter.value);
+    await useTrackStore.getState().removeTrackFromPlaylist(playlistId, track.id);
+    onRemoveFromPlaylist?.(track);
+  };
 
   const handleRefreshLibrary = async () => {
-    queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
     await rescanAll();
   };
 
@@ -248,8 +127,6 @@ export function TrackContextMenu({
 
   const handlePopOutPlayer = () => {
     onPlayNow();
-    // openMiniPlayer() is called directly here so the user-gesture activation
-    // propagates into documentPictureInPicture.requestWindow() without breaking.
     openMiniPlayer();
   };
 
@@ -315,36 +192,6 @@ export function TrackContextMenu({
               <ListEnd className="w-3.5 h-3.5 text-zinc-400" />
               Add {count} to end of queue
             </ContextMenuItem>
-
-            {/* Bulk vault upload — only if at least one selected track is local */}
-            {selectedTracks.some(t => t.source === 'local') && (
-              <>
-                <ContextMenuSeparator className="bg-zinc-700/50" />
-                <ContextMenuItem
-                  onClick={() => handleBulkUploadToVault(selectedTracks)}
-                  disabled={vaultState === 'encrypting' || vaultState === 'uploading'}
-                  className={clsx(
-                    'gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100',
-                    vaultState === 'done'  && 'text-emerald-400',
-                    vaultState === 'error' && 'text-red-400',
-                  )}
-                >
-                  {(vaultState === 'encrypting' || vaultState === 'uploading') && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
-                  {vaultState === 'done'  && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                  {vaultState === 'error' && <Lock className="w-3.5 h-3.5 text-red-400" />}
-                  {vaultState === 'idle'  && <Lock className="w-3.5 h-3.5 text-zinc-400" />}
-                  {vaultState === 'encrypting' && vaultProgress
-                    ? `Encrypting ${vaultProgress.current}/${vaultProgress.total}…`
-                    : vaultState === 'encrypting' ? 'Encrypting…' : null}
-                  {vaultState === 'uploading' && vaultProgress
-                    ? `Uploading ${vaultProgress.current}/${vaultProgress.total}…`
-                    : vaultState === 'uploading' ? 'Uploading…' : null}
-                  {vaultState === 'done'  && `Uploaded ${selectedTracks.filter(t => t.source === 'local').length} tracks!`}
-                  {vaultState === 'error' && (vaultError ? `Error: ${vaultError.slice(0, 28)}` : 'Upload failed')}
-                  {vaultState === 'idle'  && `Upload ${selectedTracks.filter(t => t.source === 'local').length} tracks to Vault`}
-                </ContextMenuItem>
-              </>
-            )}
 
             <ContextMenuSeparator className="bg-zinc-700/50" />
 
@@ -418,7 +265,7 @@ export function TrackContextMenu({
               </ContextMenuItem>
             )}
 
-            {/* Edit Tags — below navigation, above playlist/vault */}
+            {/* Edit Tags — below navigation, above playlist */}
             {onEditTags && (
               <>
                 <ContextMenuSeparator className="bg-zinc-700/50" />
@@ -476,33 +323,6 @@ export function TrackContextMenu({
                 <Trash2 className="w-3.5 h-3.5" />
                 Remove from Playlist
               </ContextMenuItem>
-            )}
-
-            {/* Upload to Vault — local tracks only, not already in vault */}
-            {track.source === 'local' && (
-              <>
-                <ContextMenuSeparator className="bg-zinc-700/50" />
-                <ContextMenuItem
-                  onClick={handleUploadToVault}
-                  disabled={vaultState === 'encrypting' || vaultState === 'uploading'}
-                  className={clsx(
-                    'gap-2.5 cursor-pointer focus:bg-white/8 focus:text-zinc-100',
-                    vaultState === 'done' && 'text-emerald-400',
-                    vaultState === 'error' && 'text-red-400',
-                  )}
-                >
-                  {vaultState === 'encrypting' && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
-                  {vaultState === 'uploading'  && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
-                  {vaultState === 'done'       && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                  {vaultState === 'error'      && <Lock className="w-3.5 h-3.5 text-red-400" />}
-                  {vaultState === 'idle'       && <Lock className="w-3.5 h-3.5 text-zinc-400" />}
-                  {vaultState === 'encrypting' && 'Encrypting…'}
-                  {vaultState === 'uploading'  && 'Uploading to vault…'}
-                  {vaultState === 'done'       && 'Uploaded to vault!'}
-                  {vaultState === 'error'      && (vaultError ? `Error: ${vaultError.slice(0, 30)}` : 'Upload failed')}
-                  {vaultState === 'idle'       && 'Upload to Vault'}
-                </ContextMenuItem>
-              </>
             )}
 
             {/* Edit in Clip Studio — local tracks only */}

@@ -1,17 +1,8 @@
 import { useState, useMemo, useRef } from 'react';
-import {
-  useListTracks,
-  useListPlaylists,
-  useCreatePlaylist,
-  useUpdatePlaylist,
-  useDeletePlaylist,
-  getListPlaylistsQueryKey,
-} from '@workspace/api-client-react';
+import { useTrackStore } from '@/lib/track-store';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
-import { useAuth } from '@/hooks/use-auth';
 import { usePwaInstall } from '@/hooks/use-pwa-install';
-import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -24,12 +15,11 @@ import {
 } from '@/components/ui/context-menu';
 import {
   ListMusic, Settings, Search,
-  Library, Disc3, User, ChevronDown, ChevronRight, X, LogOut, Download, FileText,
+  Library, Disc3, User, ChevronDown, ChevronRight, X, Download, FileText,
   Plus, Pencil, Trash2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlaydLogo } from '@/components/ui/PlaydLogo';
-import { PlaydPlusToggle } from '@/components/ui/PlaydPlusToggle';
 
 type NavSection = 'artists' | 'albums' | 'playlists';
 
@@ -38,17 +28,11 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onClose }: SidebarProps = {}) {
-  const { data: tracks = [] } = useListTracks();
-  const { data: playlists = [] } = useListPlaylists();
+  const tracks = useTrackStore(s => s.tracks);
+  const playlists = useTrackStore(s => s.playlists);
   const { isScanning } = useFileSystem();
   const { libraryFilter, setLibraryFilter, togglePrefs, isLyricsOpen, toggleLyrics, searchQuery, setSearchQuery, playdPlusMode } = useAudioPlayer();
-  const { user, logout } = useAuth();
   const { canInstall, install } = usePwaInstall();
-  const queryClient = useQueryClient();
-
-  const createPlaylist = useCreatePlaylist();
-  const updatePlaylist = useUpdatePlaylist();
-  const deletePlaylist = useDeletePlaylist();
 
   const [openSections, setOpenSections] = useState<Record<NavSection, boolean>>({
     artists: true, albums: false, playlists: true,
@@ -74,10 +58,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   const handleConfirmCreate = () => {
     const name = newName.trim();
     if (!name) { setIsCreating(false); return; }
-    createPlaylist.mutate(
-      { data: { name } },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: getListPlaylistsQueryKey() }) },
-    );
+    useTrackStore.getState().createPlaylist(name);
     setIsCreating(false);
     setNewName('');
   };
@@ -91,27 +72,17 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   const handleConfirmRename = (id: number) => {
     const name = renameValue.trim();
     if (name) {
-      updatePlaylist.mutate(
-        { id, data: { name } },
-        { onSettled: () => queryClient.invalidateQueries({ queryKey: getListPlaylistsQueryKey() }) },
-      );
+      useTrackStore.getState().updatePlaylist(id, name);
     }
     setRenamingId(null);
   };
 
   const handleDeletePlaylist = (id: number) => {
-    deletePlaylist.mutate(
-      { id },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListPlaylistsQueryKey() });
-          // If currently viewing this playlist, reset to All Songs
-          if (libraryFilter.type === 'playlist' && libraryFilter.value === String(id)) {
-            setLibraryFilter({ type: 'all', label: 'All Songs' });
-          }
-        },
-      },
-    );
+    useTrackStore.getState().deletePlaylist(id);
+    // If currently viewing this playlist, reset to All Songs
+    if (libraryFilter.type === 'playlist' && libraryFilter.value === String(id)) {
+      setLibraryFilter({ type: 'all', label: 'All Songs' });
+    }
   };
 
   const toggleSection = (s: NavSection) =>
@@ -180,7 +151,6 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
           <h1 className="text-base font-bold tracking-tight text-primary flex items-center gap-1.5 shrink-0">
             <PlaydLogo size={22} />
           </h1>
-          <PlaydPlusToggle />
           {onClose && (
             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground ml-auto shrink-0" onClick={onClose}>
               <X className="w-4 h-4" />
@@ -424,21 +394,6 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
           <Settings className="w-3.5 h-3.5" />
           Preferences
         </Button>
-        <div className="flex items-center gap-1">
-          <div className="flex-1 flex items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground/60 truncate min-w-0">
-            <User className="w-3 h-3 shrink-0" />
-            <span className="truncate">{user?.displayName || user?.email}</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 shrink-0 text-muted-foreground/60 hover:text-red-400"
-            title="Sign out"
-            onClick={logout}
-          >
-            <LogOut className="w-3 h-3" />
-          </Button>
-        </div>
       </div>
     </div>
   );

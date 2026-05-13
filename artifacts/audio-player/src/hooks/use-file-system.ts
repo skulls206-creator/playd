@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { get, set } from 'idb-keyval';
-import { useBulkUpsertTracks, getListTracksQueryKey } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useTrackStore } from '@/lib/track-store';
+import type { LocalTrack } from '@/lib/track-store';
 
 const ART_STORE_KEY = 'track-art';
 const AUDIO_EXTS = /\.(mp3|flac|m4a|m4p|aac|wav|ogg|opus|webm|wma|aiff|aif|alac|mp4|3gp)$/i;
@@ -775,8 +775,7 @@ export function useFileSystem() {
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatus, setScanStatus] = useState('');
   const statusClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const bulkUpsert = useBulkUpsertTracks();
-  const queryClient = useQueryClient();
+  const { upsertTracks } = useTrackStore();
 
   // Always cancel any pending clear before setting a new status message.
   // Pass clearAfterMs to auto-clear; omit to leave it up indefinitely.
@@ -1016,9 +1015,8 @@ export function useFileSystem() {
       }
 
       setStatus(`Saving ${tracks.length} tracks to library…`);
-      await bulkUpsert.mutateAsync({ data: { tracks } });
+      await upsertTracks(tracks as Omit<LocalTrack, 'id' | 'createdAt' | 'updatedAt'>[]);
 
-      await queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
       setStatus(`✓ ${tracks.length} tracks imported successfully`, 8000);
     } catch (error) {
       console.error('Scan failed', error);
