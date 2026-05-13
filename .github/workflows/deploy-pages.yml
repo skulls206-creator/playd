@@ -31,6 +31,7 @@ jobs:
           BASE_PATH=/playd/ pnpm run build
         env:
           NODE_ENV: production
+          PORT: "3000"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
