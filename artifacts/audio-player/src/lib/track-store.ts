@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand';
-import { get, set } from 'idb-keyval';
+import { get as idbGet, set as idbSet } from 'idb-keyval';
 
 // ── Track type (matches what use-file-system produces) ───────────────────
 
@@ -61,6 +61,24 @@ const TRACKS_KEY = 'local-tracks';
 const PLAYLISTS_KEY = 'local-playlists';
 const PLAYLIST_TRACKS_KEY = 'local-playlist-tracks';
 const EQ_PRESETS_KEY = 'local-eq-presets';
+
+// ── Built-in EQ presets (10-band) ──────────────────────────────────────
+
+const BUILTIN_EQ_PRESETS: Omit<LocalEqPreset, 'id'>[] = [
+  { name: 'Flat', bands: '[0,0,0,0,0,0,0,0,0,0]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { name: 'Rock', bands: '[5,4,3,2,1,0,-1,-2,-3,-4]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { name: 'Pop', bands: '[-2,-1,0,2,4,4,2,0,-1,-2]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { name: 'Jazz', bands: '[4,3,1,2,-1,-2,0,1,3,4]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { name: 'Classical', bands: '[5,4,3,2,1,0,0,0,0,0]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { name: 'Hip-Hop', bands: '[5,4,0,2,4,4,0,2,2,3]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { name: 'Electronic', bands: '[4,3,0,0,-2,1,0,2,4,5]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { name: 'Vocal Boost', bands: '[-1,-2,-3,-2,1,4,4,3,2,1]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { name: 'Bass Boost', bands: '[6,5,4,3,2,0,0,0,0,0]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { name: 'Treble Boost', bands: '[0,0,0,0,0,2,4,5,6,7]', isBuiltin: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+];
+
+let _nextPresetId = 1000;
+const nextPresetId = () => ++_nextPresetId;
 
 // ── ID helpers ───────────────────────────────────────────────────────────
 
@@ -121,7 +139,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
   loadTracks: async () => {
     set({ loading: true });
     try {
-      const stored = await get<LocalTrack[]>(TRACKS_KEY);
+      const stored = await idbGet<LocalTrack[]>(TRACKS_KEY);
       set({ tracks: stored ?? [], loaded: true, loading: false });
     } catch {
       set({ loading: false });
@@ -144,7 +162,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
       } else {
         const nt: LocalTrack = {
           ...inc,
-          id: inc.id ?? nextTrackId(),
+          id: nextTrackId(),
           createdAt: now,
           updatedAt: now,
         } as LocalTrack;
@@ -153,7 +171,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
       }
     }
 
-    await set(TRACKS_KEY, current);
+    await idbSet(TRACKS_KEY, current);
     set({ tracks: [...current] });
     return newTracks;
   },
@@ -163,7 +181,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const idx = current.findIndex(t => t.id === id);
     if (idx < 0) return;
     current[idx] = { ...current[idx], ...patch, updatedAt: new Date().toISOString() };
-    await set(TRACKS_KEY, current);
+    await idbSet(TRACKS_KEY, current);
     set({ tracks: [...current] });
   },
 
@@ -172,13 +190,13 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const current = get().tracks.filter(t => !idSet.has(t.id));
     // Also remove from playlistTracks
     const pt = get().playlistTracks.filter(t => !idSet.has(t.trackId));
-    await set(TRACKS_KEY, current);
-    await set(PLAYLIST_TRACKS_KEY, pt);
+    await idbSet(TRACKS_KEY, current);
+    await idbSet(PLAYLIST_TRACKS_KEY, pt);
     set({ tracks: current, playlistTracks: pt });
   },
 
   clearTracks: async () => {
-    await set(TRACKS_KEY, []);
+    await idbSet(TRACKS_KEY, []);
     set({ tracks: [] });
   },
 
@@ -197,8 +215,8 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
 
   loadPlaylists: async () => {
     try {
-      const pl = await get<LocalPlaylist[]>(PLAYLISTS_KEY);
-      const pt = await get<LocalPlaylistTrack[]>(PLAYLIST_TRACKS_KEY);
+      const pl = await idbGet<LocalPlaylist[]>(PLAYLISTS_KEY);
+      const pt = await idbGet<LocalPlaylistTrack[]>(PLAYLIST_TRACKS_KEY);
       set({ playlists: pl ?? [], playlistTracks: pt ?? [] });
     } catch {}
   },
@@ -207,7 +225,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const now = new Date().toISOString();
     const pl: LocalPlaylist = { id: nextPlaylistId(), name, createdAt: now, updatedAt: now };
     const playlists = [...get().playlists, pl];
-    await set(PLAYLISTS_KEY, playlists);
+    await idbSet(PLAYLISTS_KEY, playlists);
     set({ playlists });
     return pl;
   },
@@ -216,15 +234,15 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const playlists = get().playlists.map(p =>
       p.id === id ? { ...p, name, updatedAt: new Date().toISOString() } : p
     );
-    await set(PLAYLISTS_KEY, playlists);
+    await idbSet(PLAYLISTS_KEY, playlists);
     set({ playlists });
   },
 
   deletePlaylist: async (id) => {
     const playlists = get().playlists.filter(p => p.id !== id);
     const pt = get().playlistTracks.filter(p => p.playlistId !== id);
-    await set(PLAYLISTS_KEY, playlists);
-    await set(PLAYLIST_TRACKS_KEY, pt);
+    await idbSet(PLAYLISTS_KEY, playlists);
+    await idbSet(PLAYLIST_TRACKS_KEY, pt);
     set({ playlists, playlistTracks: pt });
   },
 
@@ -235,7 +253,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     if (existing) return; // already in playlist
     const maxPos = playlistItems.reduce((max, p) => Math.max(max, p.position), -1);
     const newPt = [...pt, { playlistId, trackId, position: maxPos + 1 }];
-    await set(PLAYLIST_TRACKS_KEY, newPt);
+    await idbSet(PLAYLIST_TRACKS_KEY, newPt);
     set({ playlistTracks: newPt });
   },
 
@@ -243,7 +261,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const pt = get().playlistTracks.filter(
       p => !(p.playlistId === playlistId && p.trackId === trackId)
     );
-    await set(PLAYLIST_TRACKS_KEY, pt);
+    await idbSet(PLAYLIST_TRACKS_KEY, pt);
     set({ playlistTracks: pt });
   },
 
@@ -251,7 +269,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
 
   loadEqPresets: async () => {
     try {
-      const stored = await get<LocalEqPreset[]>(EQ_PRESETS_KEY);
+      const stored = await idbGet<LocalEqPreset[]>(EQ_PRESETS_KEY);
       if (stored && stored.length > 0) {
         set({ eqPresets: stored });
       } else {
@@ -260,7 +278,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
           ...p,
           id: nextPresetId(),
         }));
-        await set(EQ_PRESETS_KEY, builtins);
+        await idbSet(EQ_PRESETS_KEY, builtins);
         set({ eqPresets: builtins });
       }
     } catch {
@@ -270,16 +288,16 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
   },
 
   createEqPreset: async (name, bands) => {
-    const preset: LocalEqPreset = { id: nextPresetId(), name, bands, isBuiltin: false };
+    const preset: LocalEqPreset = { id: nextPresetId(), name, bands, isBuiltin: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     const eqPresets = [...get().eqPresets, preset];
-    await set(EQ_PRESETS_KEY, eqPresets);
+    await idbSet(EQ_PRESETS_KEY, eqPresets);
     set({ eqPresets });
     return preset;
   },
 
   deleteEqPreset: async (id) => {
     const eqPresets = get().eqPresets.filter(p => p.id !== id);
-    await set(EQ_PRESETS_KEY, eqPresets);
+    await idbSet(EQ_PRESETS_KEY, eqPresets);
     set({ eqPresets });
   },
 }));

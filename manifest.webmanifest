@@ -2,7 +2,7 @@
   "id": "./",
   "name": "PLAYD",
   "short_name": "PLAYD",
-  "description": "A foobar2000-inspired audio player PWA with 10-band EQ, encrypted cloud vault, offline playback, and OS media controls.",
+  "description": "A foobar2000-inspired audio player PWA with 10-band EQ, offline playback, and OS media controls.",
   "lang": "en-US",
   "dir": "ltr",
   "start_url": "./",
@@ -57,7 +57,7 @@
       "sizes": "390x844",
       "type": "image/jpeg",
       "form_factor": "narrow",
-      "label": "PLAYD — mobile sign-in"
+      "label": "PLAYD — mobile library"
     }
   ],
   "shortcuts": [
@@ -65,13 +65,6 @@
       "name": "Open Library",
       "short_name": "Library",
       "description": "Browse your music library",
-      "url": "./",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Open Vault",
-      "short_name": "Vault",
-      "description": "Access your encrypted cloud vault",
       "url": "./",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     }

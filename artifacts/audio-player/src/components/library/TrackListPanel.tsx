@@ -306,11 +306,7 @@ export function TrackListPanel({
   // We use allTracks (not filtered) so a vault track outside the current
   // search/filter still shadows its local duplicate in the visible list.
   const vaultFileNames = useMemo(
-    () => new Set(
-      allTracks
-        .filter(t => t.source === 'vault' && t.fileName)
-        .map(t => t.fileName as string),
-    ),
+    () => new Set<string>(),
     [allTracks],
   );
 
@@ -786,12 +782,6 @@ export function TrackListPanel({
 
                       {/* Right: Vault badge + RG badge + Edit + Duration — pinned at right edge */}
                       <div className="shrink-0 flex items-center gap-1.5 pl-1">
-                        {track.source === 'vault' && (
-                          <Lock
-                            className="w-3 h-3 text-primary/60 shrink-0"
-                            title="Vault track — stored encrypted in cloud"
-                          />
-                        )}
                         {track.replaygainGain != null && (
                           <span
                             className="hidden group-hover:inline-flex items-center text-[9px] font-mono font-bold px-1 py-0.5 rounded bg-primary/15 text-primary/70 leading-none select-none"

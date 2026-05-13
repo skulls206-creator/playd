@@ -249,7 +249,6 @@ export function TransportBar() {
               <p className="text-sm text-primary truncate">
                 {currentTrack?.artist || '—'}
               </p>
-              {currentTrack?.source === 'youtube' && <YtSourceBadge size="md" />}
             </div>
           </div>
         </div>
@@ -278,7 +277,6 @@ export function TransportBar() {
               <div className="text-sm font-semibold truncate text-foreground leading-tight">
                 {currentTrack?.title || 'No track playing'}
               </div>
-              {currentTrack?.source === 'youtube' && <YtSourceBadge />}
             </div>
             <div className="text-xs text-muted-foreground truncate leading-tight mt-0.5">
               {currentTrack?.artist || '—'}
@@ -447,7 +445,6 @@ export function TransportBar() {
               <div className="text-sm font-medium truncate text-foreground group-hover:text-primary transition-colors">
                 {currentTrack?.title || 'No track playing'}
               </div>
-              {currentTrack?.source === 'youtube' && <YtSourceBadge />}
             </div>
             <div className="text-xs text-muted-foreground truncate">
               {currentTrack?.artist || '—'}

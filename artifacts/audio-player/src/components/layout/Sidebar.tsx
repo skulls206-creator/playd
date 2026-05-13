@@ -31,7 +31,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   const tracks = useTrackStore(s => s.tracks);
   const playlists = useTrackStore(s => s.playlists);
   const { isScanning } = useFileSystem();
-  const { libraryFilter, setLibraryFilter, togglePrefs, isLyricsOpen, toggleLyrics, searchQuery, setSearchQuery, playdPlusMode } = useAudioPlayer();
+  const { libraryFilter, setLibraryFilter, togglePrefs, isLyricsOpen, toggleLyrics, searchQuery, setSearchQuery } = useAudioPlayer();
   const { canInstall, install } = usePwaInstall();
 
   const [openSections, setOpenSections] = useState<Record<NavSection, boolean>>({
@@ -180,15 +180,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
       <ScrollArea className="flex-1">
         <div className="py-2 space-y-1">
 
-        {playdPlusMode ? (
-          /* ── PLAYD+ Discovery Nav ──────────────────────────────────────── */
-          <div className="px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Discovery</p>
-            <p className="text-[10px] text-muted-foreground/50 leading-relaxed px-1">
-              Search for any song or paste a YouTube / Spotify URL to import tracks.
-            </p>
-          </div>
-        ) : (
+        
           /* ── Local Library Nav ─────────────────────────────────────────── */
           <>
           {/* All Songs */}
@@ -364,7 +356,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
             )}
           </div>
           </>
-        )}
+        
 
         </div>
       </ScrollArea>
