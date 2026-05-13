@@ -23,19 +23,19 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - run: pnpm install --no-frozen-lockfile
-
       - name: Build
         run: |
           cd artifacts/audio-player
+          pnpm install
           BASE_PATH=/playd/ pnpm run build
         env:
           NODE_ENV: production
           PORT: "3000"
 
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: artifacts/audio-player/dist
+          publish_dir: artifacts/audio-player/dist/public
           force_orphan: true
