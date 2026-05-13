@@ -203,7 +203,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
   getTracksForPlaylist: (playlistId) => {
     const { tracks, playlistTracks } = get();
     const ptIds = new Set(
-      playlistTracks
+      (playlistTracks ?? [])
         .filter(pt => pt.playlistId === playlistId)
         .sort((a, b) => a.position - b.position)
         .map(pt => pt.trackId)
