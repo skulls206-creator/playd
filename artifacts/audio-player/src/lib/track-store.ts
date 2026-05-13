@@ -231,7 +231,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
   },
 
   updatePlaylist: async (id, name) => {
-    const playlists = get().playlists.map(p =>
+    const playlists = (get().playlists ?? []).map(p =>
       p.id === id ? { ...p, name, updatedAt: new Date().toISOString() } : p
     );
     await idbSet(PLAYLISTS_KEY, playlists);

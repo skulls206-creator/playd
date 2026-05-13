@@ -553,7 +553,7 @@ export function PreferencesPanel() {
                           {isBuiltin && <Badge variant="secondary" className="text-[9px] h-4 px-1.5">built-in</Badge>}
                         </div>
                         <div className="flex items-end gap-px mt-1 h-4">
-                          {bands.map((v, i) => {
+                          {bands?.map((v, i) => {
                             const pct = Math.abs(v) / 12;
                             const isPos = v >= 0;
                             return (
