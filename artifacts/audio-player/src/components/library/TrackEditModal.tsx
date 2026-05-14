@@ -4,13 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Pencil, Loader2, CheckCircle2 } from 'lucide-react';
-import { useUpdateTrack, getListTracksQueryKey, getGetPlaylistTracksQueryKey } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useAudioPlayer } from '@/hooks/use-audio-player';
-import type { Track } from '@workspace/api-client-react';
+import { useTrackStore, type LocalTrack } from '@/lib/track-store';
 
 interface TrackEditModalProps {
-  track: Track | null;
+  track: LocalTrack | null;
   open: boolean;
   onClose: () => void;
 }
@@ -24,7 +21,7 @@ interface FormState {
   genre:       string;
 }
 
-function toForm(track: Track): FormState {
+function toForm(track: LocalTrack): FormState {
   return {
     title:       track.title       ?? '',
     artist:      track.artist      ?? '',
@@ -36,62 +33,54 @@ function toForm(track: Track): FormState {
 }
 
 export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
-  const queryClient   = useQueryClient();
-  const updateTrack   = useUpdateTrack();
-  const { libraryFilter } = useAudioPlayer();
-  const [form, setForm] = useState<FormState>(track ? toForm(track) : toForm({} as Track));
+  const [form, setForm] = useState<FormState>(track ? toForm(track) : toForm({} as LocalTrack));
   const [saved, setSaved] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState(false);
 
   // Re-populate form whenever the target track changes
   useEffect(() => {
     if (track) {
       setForm(toForm(track));
       setSaved(false);
+      setError(false);
     }
   }, [track?.id]);
 
-  const set = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const set_ = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [key]: e.target.value }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!track) return;
     const trackNumber = form.trackNumber.trim() ? parseInt(form.trackNumber, 10) : null;
     const year        = form.year.trim()        ? parseInt(form.year, 10)        : null;
 
-    updateTrack.mutate(
-      {
-        id:   track.id,
-        data: {
-          title:       form.title.trim()  || track.title,
-          artist:      form.artist.trim() || 'Unknown Artist',
-          album:       form.album.trim()  || 'Unknown Album',
-          trackNumber: isNaN(trackNumber!) ? null : trackNumber,
-          year:        isNaN(year!)        ? null : year,
-          genre:       form.genre.trim()  || null,
-        },
-      },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListTracksQueryKey() });
-          // Also refresh the active playlist view so tag edits appear immediately
-          if (libraryFilter.type === 'playlist') {
-            queryClient.invalidateQueries({
-              queryKey: getGetPlaylistTracksQueryKey(Number(libraryFilter.value)),
-            });
-          }
-          setSaved(true);
-          setTimeout(() => { setSaved(false); onClose(); }, 900);
-        },
-      },
-    );
+    setIsPending(true);
+    setError(false);
+    try {
+      await useTrackStore.getState().updateTrack(track.id, {
+        title:       form.title.trim()  || track.title,
+        artist:      form.artist.trim() || 'Unknown Artist',
+        album:       form.album.trim()  || 'Unknown Album',
+        trackNumber: isNaN(trackNumber!) ? null : trackNumber,
+        year:        isNaN(year!)        ? null : year,
+        genre:       form.genre.trim()  || null,
+      });
+      setSaved(true);
+      setTimeout(() => { setSaved(false); onClose(); }, 900);
+    } catch {
+      setError(true);
+    } finally {
+      setIsPending(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !updateTrack.isPending && !saved) handleSave();
+    if (e.key === 'Enter' && !isPending && !saved) handleSave();
     if (e.key === 'Escape') onClose();
   };
 
-  const isBusy = updateTrack.isPending || saved;
+  const isBusy = isPending || saved;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !isBusy) onClose(); }}>
@@ -115,7 +104,7 @@ export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
             <Label className="text-[11px] text-zinc-400 uppercase tracking-wide">Title</Label>
             <Input
               value={form.title}
-              onChange={set('title')}
+              onChange={set_('title')}
               disabled={isBusy}
               autoFocus
               placeholder="Track title"
@@ -128,7 +117,7 @@ export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
             <Label className="text-[11px] text-zinc-400 uppercase tracking-wide">Artist</Label>
             <Input
               value={form.artist}
-              onChange={set('artist')}
+              onChange={set_('artist')}
               disabled={isBusy}
               placeholder="Artist name"
               className="bg-zinc-800 border-zinc-600 text-zinc-100 placeholder:text-zinc-500 focus:border-primary h-8 text-sm"
@@ -140,7 +129,7 @@ export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
             <Label className="text-[11px] text-zinc-400 uppercase tracking-wide">Album</Label>
             <Input
               value={form.album}
-              onChange={set('album')}
+              onChange={set_('album')}
               disabled={isBusy}
               placeholder="Album name"
               className="bg-zinc-800 border-zinc-600 text-zinc-100 placeholder:text-zinc-500 focus:border-primary h-8 text-sm"
@@ -152,7 +141,7 @@ export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
             <Label className="text-[11px] text-zinc-400 uppercase tracking-wide">Track #</Label>
             <Input
               value={form.trackNumber}
-              onChange={set('trackNumber')}
+              onChange={set_('trackNumber')}
               disabled={isBusy}
               placeholder="1"
               type="number"
@@ -166,7 +155,7 @@ export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
             <Label className="text-[11px] text-zinc-400 uppercase tracking-wide">Year</Label>
             <Input
               value={form.year}
-              onChange={set('year')}
+              onChange={set_('year')}
               disabled={isBusy}
               placeholder="2024"
               type="number"
@@ -181,7 +170,7 @@ export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
             <Label className="text-[11px] text-zinc-400 uppercase tracking-wide">Genre</Label>
             <Input
               value={form.genre}
-              onChange={set('genre')}
+              onChange={set_('genre')}
               disabled={isBusy}
               placeholder="Hip-Hop, Jazz, Electronic…"
               className="bg-zinc-800 border-zinc-600 text-zinc-100 placeholder:text-zinc-500 focus:border-primary h-8 text-sm"
@@ -189,7 +178,7 @@ export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
           </div>
         </div>
 
-        {updateTrack.isError && (
+        {error && (
           <p className="text-xs text-red-400 mt-1">
             Failed to save — please try again.
           </p>
@@ -213,7 +202,7 @@ export function TrackEditModal({ track, open, onClose }: TrackEditModalProps) {
           >
             {saved
               ? <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Saved!</>
-              : updateTrack.isPending
+              : isPending
                 ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Saving…</>
                 : <><Pencil className="w-3.5 h-3.5 mr-1.5" />Save Tags</>
             }

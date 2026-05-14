@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { get } from 'idb-keyval';
-import type { Track } from '@workspace/api-client-react';
+import type { LocalTrack } from '@/lib/track-store';
 
 const ART_STORE_KEY = 'track-art';
 const NOTIF_PREF_KEY = 'playd_notifications';
@@ -13,7 +13,7 @@ export function setNotificationsEnabled(val: boolean) {
   localStorage.setItem(NOTIF_PREF_KEY, val ? '1' : '0');
 }
 
-async function resolveArtUrl(track: Track): Promise<string | undefined> {
+async function resolveArtUrl(track: LocalTrack): Promise<string | undefined> {
   if (track.albumArtDataUrl) return track.albumArtDataUrl;
   if (track.source === 'local' && track.fileName && track.folderPath) {
     const store: Record<string, string> | undefined = await get(ART_STORE_KEY);
@@ -47,7 +47,7 @@ async function showNotification(title: string, options: NotificationOptions): Pr
   }
 }
 
-export function useNowPlayingNotification(currentTrack: Track | null) {
+export function useNowPlayingNotification(currentTrack: LocalTrack | null) {
   const prevTrackId = useRef<number | string | null>(null);
   const notifRef = useRef<Notification | null>(null);
 

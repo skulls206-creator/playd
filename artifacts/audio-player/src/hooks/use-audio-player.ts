@@ -1,15 +1,23 @@
 import { create } from 'zustand';
 import { get } from 'idb-keyval';
-import type { Track, QueueItem, EqPreset } from '@workspace/api-client-react';
+import type { LocalTrack } from '@/lib/track-store';
 import type { LyricLine } from '@/lib/lrc-parser';
-import type { YtTrack } from '@/types/yt-track';
-import { ytTrackToFakeTrack } from '@/types/yt-track';
 
-/** Resolve currentYtTrack for a track being switched to. Returns YT match or null (clears badge for local tracks). */
-function syncYtForTrack(track: Track | null, ytQueue: YtTrack[]): YtTrack | null {
-  if (!track || track.source !== 'youtube') return null;
-  return ytQueue.find((yt) => yt.videoId === track.fileName) ?? null;
+// ── Locally-defined types (formerly from @workspace/api-client-react) ──────
+
+export interface QueueItem {
+  id: number;
+  trackId: number;
+  position: number;
+  track: LocalTrack;
 }
+
+export interface EqPreset {
+  name: string;
+  bands: string; // JSON-encoded number[]
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
 
 /** Monotonic ID generator — avoids Date.now() collisions on rapid clicks. */
 let _queueItemIdCounter = Date.now();
@@ -32,9 +40,9 @@ function loadLyricsFromStorage(trackId: number): { lyrics: LyricLine[] | null; l
 
 const ART_STORE_KEY = 'track-art';
 
-async function resolveArtUrl(track: Track): Promise<string | null> {
+async function resolveArtUrl(track: LocalTrack): Promise<string | null> {
   if (track.albumArtDataUrl) return track.albumArtDataUrl;
-  if (track.source === 'local' && track.fileName && track.folderPath) {
+  if (track.fileName && track.folderPath) {
     const store: Record<string, string> | undefined = await get(ART_STORE_KEY);
     return store?.[`${track.folderPath}/${track.fileName}`] ?? null;
   }
@@ -53,7 +61,7 @@ interface PlayerState {
   setLibraryFilter: (filter: LibraryFilter) => void;
 
   // Core Playback
-  currentTrack: Track | null;
+  currentTrack: LocalTrack | null;
   isPlaying: boolean;
   volume: number;
   isMuted: boolean;
@@ -61,7 +69,7 @@ interface PlayerState {
   duration: number;
   queue: QueueItem[];
   queueIndex: number;
-  
+
   // Modes & Settings
   isMiniPlayer: boolean;
   isCompactMiniPlayer: boolean;
@@ -89,18 +97,6 @@ interface PlayerState {
   replaygainEnabled: boolean;
   setReplaygainEnabled: (enabled: boolean) => void;
 
-  // PLAYD+ mode
-  playdPlusMode: boolean;
-  togglePlaydPlusMode: () => void;
-
-  // PLAYD+ YouTube playback
-  playdPlusQueue: YtTrack[];
-  currentYtTrack: YtTrack | null;
-  setPlaydPlusQueue: (tracks: YtTrack[]) => void;
-  playYtTrack: (track: YtTrack, queue?: YtTrack[], index?: number) => void;
-  addToYtQueue: (track: YtTrack) => void;
-  clearYtPlayback: () => void;
-
   // Global search
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -112,9 +108,9 @@ interface PlayerState {
   toggleLyrics: () => void;
   setLyrics: (trackId: number, lines: LyricLine[]) => void;
   clearLyrics: (trackId: number) => void;
-  
+
   // Actions
-  play: (track?: Track, queue?: QueueItem[], startIndex?: number) => void;
+  play: (track?: LocalTrack, queue?: QueueItem[], startIndex?: number) => void;
   pause: () => void;
   togglePlay: () => void;
   next: () => void;
@@ -123,8 +119,8 @@ interface PlayerState {
   setVolume: (vol: number) => void;
   toggleMute: () => void;
   setQueue: (items: QueueItem[]) => void;
-  addToQueueNext: (track: Track) => void;
-  addToQueueEnd: (track: Track) => void;
+  addToQueueNext: (track: LocalTrack) => void;
+  addToQueueEnd: (track: LocalTrack) => void;
   toggleMiniPlayer: () => void;
   toggleCompactMiniPlayer: () => void;
   toggleEq: () => void;
@@ -135,7 +131,7 @@ interface PlayerState {
   toggleShuffle: () => void;
   setEqBand: (index: number, value: number) => void;
   setActiveEqPreset: (preset: EqPreset | null) => void;
-  
+
   // Internal updates
   _setProgress: (time: number) => void;
   _setDuration: (time: number) => void;
@@ -154,72 +150,19 @@ function savePref(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
-const YT_TRACK_KEY = 'playd_plus_current';
-const PLAYD_PLUS_QUEUE_KEY = 'playd_plus_queue';
-
-function buildYtFakeQueue(tracks: YtTrack[]): QueueItem[] {
-  return tracks.map((t, i) => {
-    const fake = ytTrackToFakeTrack(t);
-    return {
-      id: i,
-      trackId: fake.id,
-      position: i,
-      track: fake as unknown as Track,
-    };
-  });
-}
-
-interface InitialPlayback {
-  currentTrack: Track | null;
-  queue: QueueItem[];
-  queueIndex: number;
-  currentYtTrack: YtTrack | null;
-  playdPlusQueue: YtTrack[];
-}
-
-function buildInitialPlayback(): InitialPlayback {
-  const restoredYt = loadPref<YtTrack | null>(YT_TRACK_KEY, null);
-  const restoredQueue = loadPref<YtTrack[]>(PLAYD_PLUS_QUEUE_KEY, []);
-  const lastTrack = loadPref<Track | null>('playd_last_track', null);
-
-  if (restoredYt && restoredQueue.length > 0) {
-    const idx = restoredQueue.findIndex((t) => t.videoId === restoredYt.videoId);
-    if (idx >= 0) {
-      const fakeQueue = buildYtFakeQueue(restoredQueue);
-      return {
-        currentTrack: fakeQueue[idx].track,
-        queue: fakeQueue,
-        queueIndex: idx,
-        currentYtTrack: restoredYt,
-        playdPlusQueue: restoredQueue,
-      };
-    }
-  }
-
-  return {
-    currentTrack: lastTrack,
-    queue: [],
-    queueIndex: -1,
-    currentYtTrack: restoredYt,
-    playdPlusQueue: restoredQueue,
-  };
-}
-
-const __initialPlayback = buildInitialPlayback();
-
 export const useAudioPlayer = create<PlayerState>((set, get) => ({
   libraryFilter: { type: 'all' },
   setLibraryFilter: (filter) => set({ libraryFilter: filter }),
 
-  currentTrack: __initialPlayback.currentTrack,
+  currentTrack: loadPref<LocalTrack | null>('playd_last_track', null),
   isPlaying: false, // never auto-play on restore — requires explicit user action
   volume: loadPref('playd_volume', 1),
   isMuted: loadPref('playd_muted', false),
   progress: 0,
   duration: 0,
-  queue: __initialPlayback.queue,
-  queueIndex: __initialPlayback.queueIndex,
-  
+  queue: [],
+  queueIndex: -1,
+
   isMiniPlayer: false,
   isCompactMiniPlayer: false,
   isEqOpen: false,
@@ -237,47 +180,6 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
 
   replaygainEnabled: loadPref('playd_replaygain', false),
   setReplaygainEnabled: (enabled) => { savePref('playd_replaygain', enabled); set({ replaygainEnabled: enabled }); },
-
-  playdPlusMode: loadPref('playd_plus_mode', false),
-  togglePlaydPlusMode: () => set((state) => {
-    const next = !state.playdPlusMode;
-    savePref('playd_plus_mode', next);
-    return { playdPlusMode: next };
-  }),
-
-  playdPlusQueue: __initialPlayback.playdPlusQueue,
-  currentYtTrack: __initialPlayback.currentYtTrack,
-  setPlaydPlusQueue: (tracks) => {
-    savePref(PLAYD_PLUS_QUEUE_KEY, tracks);
-    set({ playdPlusQueue: tracks });
-  },
-  playYtTrack: (track, queue, index) => {
-    const queueArr = queue ?? [track];
-    const fakeQueue = buildYtFakeQueue(queueArr);
-    const startIdx = index ?? 0;
-    const fakeTrack = fakeQueue[startIdx]?.track ?? (ytTrackToFakeTrack(track) as unknown as Track);
-    savePref(PLAYD_PLUS_QUEUE_KEY, queueArr);
-    savePref(YT_TRACK_KEY, track);
-    set({ playdPlusQueue: queueArr, currentYtTrack: track });
-    get().play(fakeTrack, fakeQueue, startIdx);
-  },
-  addToYtQueue: (track) => set((state) => {
-    const fakeTrack = ytTrackToFakeTrack(track);
-    const newPlaydPlus = [...state.playdPlusQueue, track];
-    savePref(PLAYD_PLUS_QUEUE_KEY, newPlaydPlus);
-    const newItem: QueueItem = {
-      id: nextQueueItemId(),
-      trackId: fakeTrack.id,
-      position: state.queue.length,
-      track: fakeTrack as Track,
-    };
-    return { playdPlusQueue: newPlaydPlus, queue: [...state.queue, newItem] };
-  }),
-  clearYtPlayback: () => {
-    savePref(PLAYD_PLUS_QUEUE_KEY, []);
-    savePref(YT_TRACK_KEY, null);
-    set({ playdPlusQueue: [], currentYtTrack: null });
-  },
 
   // Sleep Timer — restore from localStorage, discarding expired timestamps
   sleepTimerExpiry: (() => {
@@ -354,21 +256,18 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
 
     const lyricsState = nextTrack ? loadLyricsFromStorage(nextTrack.id) : { lyrics: null, lyricsTrackId: null };
     savePref('playd_last_track', nextTrack);
-    const nextYt = syncYtForTrack(nextTrack, state.playdPlusQueue);
-    savePref(YT_TRACK_KEY, nextYt);
 
     return {
       currentTrack: nextTrack,
       queue: nextQueue,
       queueIndex: nextIndex,
-      currentYtTrack: nextYt,
       isPlaying: !!nextTrack,
       ...lyricsState,
     };
   }),
 
   pause: () => set({ isPlaying: false }),
-  
+
   togglePlay: () => set((state) => {
     if (!state.currentTrack && state.queue.length > 0) {
       const firstTrack = state.queue[0].track;
@@ -379,13 +278,13 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
 
   next: () => set((state) => {
     if (state.queue.length === 0) return state;
-    
+
     let nextIndex = state.queueIndex + 1;
     if (nextIndex >= state.queue.length) {
       if (state.repeatMode === 'all') nextIndex = 0;
       else return { isPlaying: false, progress: 0 }; // End of queue
     }
-    
+
     if (state.isShuffle) {
       const cur = state.queueIndex;
       if (state.queue.length > 1) {
@@ -394,15 +293,12 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
         nextIndex = 0;
       }
     }
-    
+
     const nextTrackN = state.queue[nextIndex].track;
     savePref('playd_last_track', nextTrackN);
-    const nextYt = syncYtForTrack(nextTrackN, state.playdPlusQueue);
-    savePref(YT_TRACK_KEY, nextYt);
     return {
       queueIndex: nextIndex,
       currentTrack: nextTrackN,
-      currentYtTrack: nextYt,
       isPlaying: true,
       progress: 0,
       ...loadLyricsFromStorage(nextTrackN.id),
@@ -414,23 +310,20 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       // Seek to start if we're past 3 seconds
       return { progress: 0 };
     }
-    
+
     if (state.queue.length === 0) return state;
-    
+
     let prevIndex = state.queueIndex - 1;
     if (prevIndex < 0) {
       if (state.repeatMode === 'all') prevIndex = state.queue.length - 1;
       else prevIndex = 0;
     }
-    
+
     const prevTrack = state.queue[prevIndex].track;
     savePref('playd_last_track', prevTrack);
-    const prevYt = syncYtForTrack(prevTrack, state.playdPlusQueue);
-    savePref(YT_TRACK_KEY, prevYt);
     return {
       queueIndex: prevIndex,
       currentTrack: prevTrack,
-      currentYtTrack: prevYt,
       isPlaying: true,
       progress: 0,
       ...loadLyricsFromStorage(prevTrack.id),
@@ -462,7 +355,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     const newItem: QueueItem = { id: Date.now(), trackId: track.id, position: state.queue.length, track };
     return { queue: [...state.queue, newItem] };
   }),
-  
+
   toggleMiniPlayer: () => set((state) => ({ isMiniPlayer: !state.isMiniPlayer })),
   toggleCompactMiniPlayer: () => set((state) => ({ isCompactMiniPlayer: !state.isCompactMiniPlayer })),
   toggleEq: () => set((state) => ({ isEqOpen: !state.isEqOpen })),
@@ -472,22 +365,22 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
 
   searchQuery: '',
   setSearchQuery: (q) => set({ searchQuery: q }),
-  
+
   setRepeatMode: (mode) => { savePref('playd_repeat', mode); set({ repeatMode: mode }); },
   toggleShuffle: () => set((state) => {
     savePref('playd_shuffle', !state.isShuffle);
     return { isShuffle: !state.isShuffle };
   }),
-  
+
   setEqBand: (index, value) => set((state) => {
     const newBands = [...state.eqBands];
     newBands[index] = value;
     return { eqBands: newBands, activeEqPreset: null };
   }),
-  
-  setActiveEqPreset: (preset) => set({ 
-    activeEqPreset: preset, 
-    eqBands: preset ? JSON.parse(preset.bands) : DEFAULT_EQ 
+
+  setActiveEqPreset: (preset) => set({
+    activeEqPreset: preset,
+    eqBands: preset ? JSON.parse(preset.bands) : DEFAULT_EQ
   }),
 
   _setProgress: (time) => set({ progress: time }),
@@ -514,12 +407,9 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     if (idx < 0 || idx >= state.queue.length) return { isPlaying: false, progress: 0 };
     const advTrack = state.queue[idx].track;
     savePref('playd_last_track', advTrack);
-    const advYt = syncYtForTrack(advTrack, state.playdPlusQueue);
-    savePref(YT_TRACK_KEY, advYt);
     return {
       queueIndex: idx,
       currentTrack: advTrack,
-      currentYtTrack: advYt,
       isPlaying: true,
       progress: 0,
       ...loadLyricsFromStorage(advTrack.id),

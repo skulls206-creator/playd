@@ -6,27 +6,26 @@ import { TransportBar } from '@/components/layout/TransportBar';
 import { AudioEngine } from '@/components/player/AudioEngine';
 import { MiniPlayerRoot } from '@/components/player/MiniPlayerRoot';
 import { EqPanel } from '@/components/player/EqPanel';
-import { SpectrumBar } from '@/components/player/SpectrumBar';
+import { LockOverlay } from '@/components/layout/LockOverlay';
 import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
 import { ClipStudioModal } from '@/components/editor/ClipStudioModal';
-import { PlaydPlusPanel } from '@/components/playd-plus/PlaydPlusPanel';
 import { useEffect, useState, useCallback } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLibraryAutoRestore } from '@/hooks/use-library-auto-restore';
-import type { Track } from '@workspace/api-client-react';
+import type { LocalTrack } from '@/lib/track-store';
 
 export default function MainPlayer() {
   const { rescanAll } = useFileSystem();
-  const { isQueueOpen, isLyricsOpen, pause, playdPlusMode } = useAudioPlayer();
+  const { isQueueOpen, isLyricsOpen, pause } = useAudioPlayer();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [clipStudioTrack, setClipStudioTrack] = useState<Track | null>(null);
+  const [clipStudioTrack, setClipStudioTrack] = useState<LocalTrack | null>(null);
   useKeyboardShortcuts();
 
   const { needsRestore, restore, dismiss } = useLibraryAutoRestore(rescanAll);
 
-  const handleOpenClipStudio = useCallback((track: Track) => {
+  const handleOpenClipStudio = useCallback((track: LocalTrack) => {
     pause();
     setClipStudioTrack(track);
   }, [pause]);
@@ -38,6 +37,7 @@ export default function MainPlayer() {
   return (
     <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden selection:bg-primary/30">
       <AudioEngine />
+      <LockOverlay />
 
       {/* Mobile sidebar overlay */}
       {mobileSidebarOpen && (
@@ -59,21 +59,15 @@ export default function MainPlayer() {
           <Sidebar />
         </div>
 
-        {playdPlusMode ? (
-          <PlaydPlusPanel onMenuOpen={() => setMobileSidebarOpen(true)} />
-        ) : (
-          <>
-            <TrackListPanel
-              onMenuOpen={() => setMobileSidebarOpen(true)}
-              onEditInClipStudio={handleOpenClipStudio}
-              needsRestore={needsRestore}
-              onRestore={restore}
-              onDismissRestore={dismiss}
-            />
-            {isQueueOpen && <QueuePanel />}
-            {isLyricsOpen && <LyricsPanel />}
-          </>
-        )}
+        <TrackListPanel
+          onMenuOpen={() => setMobileSidebarOpen(true)}
+          onEditInClipStudio={handleOpenClipStudio}
+          needsRestore={needsRestore}
+          onRestore={restore}
+          onDismissRestore={dismiss}
+        />
+        {isQueueOpen && <QueuePanel />}
+        {isLyricsOpen && <LyricsPanel />}
 
         {/* Floating Overlays */}
         <EqPanel />

@@ -8,7 +8,7 @@
  *  - Speed × pitch preview controls + "Bake" to OfflineAudioContext
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Track } from '@workspace/api-client-react';
+import type { LocalTrack } from '@/lib/track-store';
 import { WaveformCanvas } from './WaveformCanvas';
 import { encodeWav } from '@/lib/wav-encoder';
 import {
@@ -59,7 +59,7 @@ interface HistoryEntry {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface ClipStudioModalProps {
-  track:   Track;
+  track:   LocalTrack;
   onClose: () => void;
 }
 

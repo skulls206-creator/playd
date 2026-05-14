@@ -17,7 +17,7 @@ if ('serviceWorker' in navigator) {
     const swUrl = `${base}sw.js`;
     try {
       const reg = await navigator.serviceWorker.register(swUrl, { scope: base });
-      console.log('[SW] Registered, scope:', reg.scope);
+      if (import.meta.env.DEV) console.log('[SW] Registered, scope:', reg.scope);
 
       // Register periodic background sync if supported (Chrome / Edge)
       if ('periodicSync' in reg) {

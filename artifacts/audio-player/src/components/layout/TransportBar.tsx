@@ -9,8 +9,9 @@ import {
   Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Volume2, VolumeX,
   SlidersHorizontal, ListMusic, Settings, ChevronDown, Moon,
-  PictureInPicture2, Youtube,
+  Lock, LockOpen, PictureInPicture2, Youtube,
 } from 'lucide-react';
+import { useLock } from '@/hooks/use-lock';
 import { clsx } from 'clsx';
 
 function YtSourceBadge({ size = 'sm' }: { size?: 'sm' | 'md' }) {
@@ -158,6 +159,22 @@ function SleepTimerButton() {
   );
 }
 
+// ── Lock toggle for mobile ──────────────────────────────────────────────────────
+function LockToggleButton() {
+  const { isLocked, lock, unlock } = useLock();
+  return (
+    <button
+      className="h-8 w-8 inline-flex items-center justify-center rounded-md transition-colors text-foreground/70 hover:text-foreground hover:bg-white/5"
+      onClick={isLocked ? unlock : lock}
+      title={isLocked ? 'Unlock' : 'Lock screen'}
+    >
+      {isLocked
+        ? <LockOpen className="w-4 h-4 text-primary" />
+        : <Lock className="w-4 h-4" />}
+    </button>
+  );
+}
+
 export function TransportBar() {
   const {
     currentTrack, isPlaying, progress, duration, volume, isMuted,
@@ -249,7 +266,6 @@ export function TransportBar() {
               <p className="text-sm text-primary truncate">
                 {currentTrack?.artist || '—'}
               </p>
-              {currentTrack?.source === 'youtube' && <YtSourceBadge size="md" />}
             </div>
           </div>
         </div>
@@ -278,7 +294,6 @@ export function TransportBar() {
               <div className="text-sm font-semibold truncate text-foreground leading-tight">
                 {currentTrack?.title || 'No track playing'}
               </div>
-              {currentTrack?.source === 'youtube' && <YtSourceBadge />}
             </div>
             <div className="text-xs text-muted-foreground truncate leading-tight mt-0.5">
               {currentTrack?.artist || '—'}
@@ -403,7 +418,8 @@ export function TransportBar() {
               </button>
             </div>
 
-            <SleepTimerButton />
+            {/* Lock toggle — replaces Sleep Timer on mobile */}
+            <LockToggleButton />
 
             <Button
               variant="ghost" size="icon"
@@ -447,7 +463,6 @@ export function TransportBar() {
               <div className="text-sm font-medium truncate text-foreground group-hover:text-primary transition-colors">
                 {currentTrack?.title || 'No track playing'}
               </div>
-              {currentTrack?.source === 'youtube' && <YtSourceBadge />}
             </div>
             <div className="text-xs text-muted-foreground truncate">
               {currentTrack?.artist || '—'}
