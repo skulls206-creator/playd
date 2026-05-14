@@ -1,0 +1,32 @@
+#30 - Sync Workspace To GitHub master
+What & Why
+The user reworked the project on GitHub (live on the gh-pages site) — accounts and PLAYD+ were removed, plus other changes — and is happy with that version. They want this Replit workspace to mirror GitHub origin/master as the new source of truth so they can keep iterating here in tandem with another AI builder working on GitHub.
+
+The local master branch is currently 2 commits ahead of origin/master with workspace-only changes (a service worker bump + a publish checkpoint). Those local-only commits are obsolete now that GitHub has diverged in a different direction, and they will block a clean pull.
+
+Done looks like
+git log master exactly matches git log origin/master (same tip SHA, no extra local commits).
+The audio-player app builds and runs locally, reflecting the new GitHub state (no login screen, no PLAYD+, etc.).
+The api-server and audio-player workflows start cleanly with no port collisions.
+AGENTS.md (if still present on the new tree) is re-read and any frozen-contract surprises are surfaced in the task summary.
+Out of scope
+Do not push anything back to GitHub. Push is the user's job from the Replit Git pane, and another AI builder is also working on origin/master.
+Do not invent new features, restore removed code (accounts, PLAYD+), or "fix" things that look missing — the removals are intentional.
+Do not touch gh-pages branch. It's a build output managed by GitHub Actions / the other builder.
+Do not create new database tables or run migrations unless the new tree's scripts/post-merge.sh requires it.
+Steps
+Fetch and inspect — Fetch origin with prune. Log the new tip of origin/master and any new branches. Note divergence vs local master.
+Hard-sync master — Reset local master to origin/master (git reset --hard origin/master) and run git clean -fd to drop any stray files. Confirm git status is clean and the log matches.
+Reinstall and reconcile — Run pnpm install at the repo root to match the new lockfile. Run scripts/post-merge.sh if it exists on the new tree. Resolve any module/runtime version mismatches surfaced by package-management.
+Restart workflows — Restart artifacts/api-server: API Server, artifacts/audio-player: web, and artifacts/mockup-sandbox: Component Preview Server. Verify each comes up clean (no EADDRINUSE, no missing-dep errors).
+Smoke test the player — Open the audio-player preview, confirm the UI loads without the old login screen, and confirm at least one core flow (e.g. playing a track, opening settings) works end-to-end with the testing skill. Report any runtime errors.
+Surface the new contract — If AGENTS.md or any equivalent contract file changed, summarize the diff so the user (and the other builder) know what's frozen now.
+Relevant files
+artifacts/audio-player/
+artifacts/api-server/
+artifacts/mockup-sandbox/
+scripts/post-merge.sh
+AGENTS.md
+package.json
+pnpm-lock.yaml
+.replit
