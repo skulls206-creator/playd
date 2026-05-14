@@ -29,7 +29,6 @@ jobs:
           pnpm install
           BASE_PATH=/playd/ pnpm run build
         env:
-          NODE_ENV: production
           PORT: "3000"
 
 
