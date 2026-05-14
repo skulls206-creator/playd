@@ -18,8 +18,10 @@ PLAYD is a foobar2000-style audio player PWA. The main application lives at
 
 - **Package manager:** pnpm 9 (not latest/11 — `pnpm 11` fails on resolution).
 - **Build output:** `artifacts/audio-player/dist/public/`
-- **Deployment:** GitHub Pages (via `ai-fixes` branch root, built-in
-  `pages-build-deployment` workflow). No Vercel, Netlify, or Docker config.
+- **Deployment:** GitHub Pages (custom domain `playd.khurk.xyz`, served from
+  `gh-pages` branch root). Build & publish handled by
+  `.github/workflows/deploy-pages.yml` (peaceiris/actions-gh-pages), triggered
+  on push to `master` or `ai-fixes`. No Vercel, Netlify, or Docker config.
 
 No API server, no mockup sandbox — the app is fully client-side.
 
