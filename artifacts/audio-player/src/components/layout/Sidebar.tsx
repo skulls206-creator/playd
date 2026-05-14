@@ -181,7 +181,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
         <div className="py-2 space-y-1">
 
         
-          /* ── Local Library Nav ─────────────────────────────────────────── */
+          {/* ── Local Library Nav ─────────────────────────────────────────── */}
           <>
           {/* All Songs */}
           <div className="px-2 mb-1">
