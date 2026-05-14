@@ -52,6 +52,40 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-14 — Replit agent — Fix CI lockfile (pnpm 9 vs 10 mismatch)
+
+**Branch:** master
+**Commits since last entry:** b5ed405, a167ca3 (SYNC.md introduction)
+
+### What changed
+- Regenerated `pnpm-lock.yaml` with pnpm 9 (CI version).
+- Hardened `scripts/post-merge.sh` to auto-install `pnpm@9` if a newer
+  pnpm is detected, so future merges don't silently rewrite the lockfile
+  in a CI-incompatible way.
+
+### Why
+- GitHub Actions deploy (`.github/workflows/deploy-pages.yml`) pins
+  `pnpm/action-setup@v4` to version 9 and runs frozen install. The local
+  environment had pnpm 10.26.1, and the previous post-merge `pnpm install`
+  rewrote the lockfile with pnpm 10's overrides format. pnpm 9 in CI
+  rejected it with `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`.
+
+### Verified
+- `pnpm --version` → 9.15.9 locally.
+- `cd artifacts/audio-player && pnpm install --frozen-lockfile` passes
+  (this is what CI runs).
+- Dev server (`Start application`) still running.
+
+### Pending / Open questions
+- [ ] Other AI builder: please use pnpm 9 for any local installs. If you
+      see pnpm 10/11 install prompts, decline and `npm i -g pnpm@9` first.
+
+### Off-limits reminder
+AGENTS.md §2.1 respected — `AudioEngine.tsx`, `PlaydPlusPanel.tsx`,
+`artifact.toml` untouched.
+
+---
+
 ## 2026-05-14 — Replit agent — Introduced SYNC.md handoff log
 
 **Branch:** master
