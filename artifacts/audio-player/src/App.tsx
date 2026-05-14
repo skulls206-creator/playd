@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import MainPlayer from "@/pages/MainPlayer";
 import NotFound from "@/pages/not-found";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { InstallPrompt } from "@/components/layout/InstallPrompt";
 import { KhurkOsBanner } from "@/components/layout/KhurkOsBanner";
 import { DiscordBanner } from "@/components/layout/DiscordBanner";
 import { requestNotificationPermission, setNotificationsEnabled } from "@/hooks/use-now-playing-notification";
@@ -58,7 +57,6 @@ function App() {
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />
           </WouterRouter>
-          <InstallPrompt />
           <KhurkOsBanner />
           <DiscordBanner />
           <Toaster />

@@ -9,8 +9,9 @@ import {
   Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Volume2, VolumeX,
   SlidersHorizontal, ListMusic, Settings, ChevronDown, Moon,
-  PictureInPicture2, Youtube,
+  Lock, LockOpen, PictureInPicture2, Youtube,
 } from 'lucide-react';
+import { useLock } from '@/hooks/use-lock';
 import { clsx } from 'clsx';
 
 function YtSourceBadge({ size = 'sm' }: { size?: 'sm' | 'md' }) {
@@ -155,6 +156,22 @@ function SleepTimerButton() {
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+// ── Lock toggle for mobile ──────────────────────────────────────────────────────
+function LockToggleButton() {
+  const { isLocked, lock, unlock } = useLock();
+  return (
+    <button
+      className="h-8 w-8 inline-flex items-center justify-center rounded-md transition-colors text-foreground/70 hover:text-foreground hover:bg-white/5"
+      onClick={isLocked ? unlock : lock}
+      title={isLocked ? 'Unlock' : 'Lock screen'}
+    >
+      {isLocked
+        ? <LockOpen className="w-4 h-4 text-primary" />
+        : <Lock className="w-4 h-4" />}
+    </button>
   );
 }
 
@@ -401,7 +418,8 @@ export function TransportBar() {
               </button>
             </div>
 
-            <SleepTimerButton />
+            {/* Lock toggle — replaces Sleep Timer on mobile */}
+            <LockToggleButton />
 
             <Button
               variant="ghost" size="icon"

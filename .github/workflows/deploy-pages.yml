@@ -27,7 +27,7 @@ jobs:
         run: |
           cd artifacts/audio-player
           pnpm install
-          BASE_PATH=/playd/ pnpm run build
+          BASE_PATH=/ pnpm run build
         env:
           PORT: "3000"
 

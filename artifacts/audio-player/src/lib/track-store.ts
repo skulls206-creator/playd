@@ -25,12 +25,7 @@ export interface LocalTrack {
   albumArtDataUrl: string | null;
   rating: number;
   source: 'local'; // always local now
-  subsonicId: string | null;
-  subsonicServerId: number | null;
   replaygainGain: number | null;
-  vaultEncryptedKey?: string | null;
-  vaultKeyIv?: string | null;
-  vaultDataIv?: string | null;
   createdAt: string;
   updatedAt: string;
 }

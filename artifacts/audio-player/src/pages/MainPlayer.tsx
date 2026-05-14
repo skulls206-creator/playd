@@ -6,7 +6,7 @@ import { TransportBar } from '@/components/layout/TransportBar';
 import { AudioEngine } from '@/components/player/AudioEngine';
 import { MiniPlayerRoot } from '@/components/player/MiniPlayerRoot';
 import { EqPanel } from '@/components/player/EqPanel';
-import { SpectrumBar } from '@/components/player/SpectrumBar';
+import { LockOverlay } from '@/components/layout/LockOverlay';
 import { PreferencesPanel } from '@/components/layout/PreferencesPanel';
 import { ClipStudioModal } from '@/components/editor/ClipStudioModal';
 import { useEffect, useState, useCallback } from 'react';
@@ -37,6 +37,7 @@ export default function MainPlayer() {
   return (
     <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden selection:bg-primary/30">
       <AudioEngine />
+      <LockOverlay />
 
       {/* Mobile sidebar overlay */}
       {mobileSidebarOpen && (

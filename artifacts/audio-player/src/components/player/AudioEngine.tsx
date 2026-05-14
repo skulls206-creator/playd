@@ -173,70 +173,12 @@ export function AudioEngine() {
   const getIdle   = () => (active.current === 'A' ? deckB : deckA).current!;
   const swap      = () => { active.current = active.current === 'A' ? 'B' : 'A'; };
 
-  // Helper: exchange the long-lived account JWT for a short-lived stream-scoped
-  // token bound to a single resource (e.g. `subsonic:42:trackId`). Used for
-  // `<audio src>` URLs which cannot set custom headers.
-  const fetchStreamToken = async (resource: string): Promise<string | null> => {
-    const jwt = (() => { try { return localStorage.getItem('playd_token'); } catch { return null; } })();
-    if (!jwt) {
-      toast({
-        title: 'Not signed in',
-        description: 'Please sign in again to play this track.',
-        duration: 8000,
-      });
-      return null;
-    }
-    try {
-      const resp = await fetch('/api/auth/stream-token', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${jwt}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource }),
-      });
-      if (!resp.ok) {
-        const body = await resp.text().catch(() => '');
-        console.error('AudioEngine: failed to obtain stream token', resp.status, body);
-        toast({
-          title: `Stream token failed (${resp.status})`,
-          description: resp.status === 401
-            ? 'Your session expired. Sign out and sign back in.'
-            : (body.slice(0, 140) || 'Could not obtain a playback token.'),
-          duration: 9000,
-        });
-        return null;
-      }
-      const data: { token?: string } = await resp.json();
-      return data.token ?? null;
-    } catch (e) {
-      console.error('AudioEngine: stream token fetch error', e);
-      toast({
-        title: 'Network error',
-        description: `Could not reach stream-token endpoint: ${(e as Error).message ?? e}`,
-        duration: 9000,
-      });
-      return null;
-    }
-  };
-
   // Resolve a playable URL for any track source
   const resolveTrackSrc = useRef(async (track: LocalTrack): Promise<string | null> => {
     if (track.source === 'local') {
       const file = await getFileFromPathRef.current(track.fileName, track.folderPath);
       if (!file) { console.error('Cannot access local file'); return null; }
       return URL.createObjectURL(file);
-    }
-
-    if (track.source === 'subsonic' && track.subsonicServerId && track.subsonicId) {
-      // Audio elements cannot set custom headers, so we embed a resource-bound
-      // stream token in the URL. We exchange the account JWT (sent via the
-      // Authorization header) for a short-lived stream-scoped token bound to
-      // this exact track. A leaked stream URL is therefore replayable for at
-      // most ~5 minutes and only against this one resource — never against
-      // normal APIs and never against other tracks.
-      const resource = `subsonic:${track.subsonicServerId}:${track.subsonicId}`;
-      const streamToken = await fetchStreamToken(resource);
-      if (!streamToken) return null;
-      const qs = `?token=${encodeURIComponent(streamToken)}`;
-      return `/api/subsonic-servers/${track.subsonicServerId}/stream/${encodeURIComponent(track.subsonicId)}${qs}`;
     }
 
     console.warn('AudioEngine: unsupported track source', track.source);

@@ -3,6 +3,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Play, X, ListMusic } from 'lucide-react';
 import { clsx } from 'clsx';
+import type { LocalTrack } from '@/lib/track-store';
 import { 
   ContextMenu,
   ContextMenuContent,
@@ -18,8 +19,8 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export function QueuePanel() {
-  const { queue, queueIndex, play, toggleQueue } = useAudioPlayer();
+export function QueuePanel({ onEditTags }: { onEditTags?: (track: LocalTrack) => void }) {
+  const { queue, queueIndex, play, toggleQueue, setQueue } = useAudioPlayer();
 
   return (
     <div className="w-72 flex-shrink-0 flex flex-col bg-card border-l border-border overflow-hidden">
@@ -85,10 +86,17 @@ export function QueuePanel() {
                   <ContextMenuContent className="w-48 bg-card/95 backdrop-blur-md border-border/50 shadow-xl">
                     <ContextMenuItem onClick={() => play(item.track, queue, idx)}>Play Now</ContextMenuItem>
                     <ContextMenuSeparator />
-                    <ContextMenuItem>Remove from Queue</ContextMenuItem>
-                    <ContextMenuItem>Move to Top</ContextMenuItem>
+                    <ContextMenuItem onClick={() => {
+                      const filtered = queue.filter((_, i) => i !== idx);
+                      setQueue(filtered.map((qi, i) => ({ ...qi, position: i })));
+                    }}>Remove from Queue</ContextMenuItem>
+                    <ContextMenuItem onClick={() => {
+                      const items = [...queue];
+                      const [moved] = items.splice(idx, 1);
+                      setQueue([moved, ...items].map((qi, i) => ({ ...qi, position: i })));
+                    }}>Move to Top</ContextMenuItem>
                     <ContextMenuSeparator />
-                    <ContextMenuItem>Edit Tags…</ContextMenuItem>
+                    <ContextMenuItem onClick={() => onEditTags?.(item.track)}>Edit Tags…</ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
               );
