@@ -13,6 +13,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { SpectrumBar } from '@/components/player/SpectrumBar';
 import { useLibraryAutoRestore } from '@/hooks/use-library-auto-restore';
 import type { LocalTrack } from '@/lib/track-store';
 
