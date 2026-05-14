@@ -128,7 +128,10 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-
+// ── Notification close ────────────────────────────────────────────────────────
+self.addEventListener('notificationclose', () => {
+  // Analytics hook — no-op for now
+});
 
 // ── Background sync ───────────────────────────────────────────────────────────
 self.addEventListener('sync', (event) => {

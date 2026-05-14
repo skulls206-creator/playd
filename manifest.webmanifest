@@ -8,11 +8,17 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
   "orientation": "any",
   "background_color": "#0a0a0a",
   "theme_color": "#0a0a0a",
-  "categories": ["music", "entertainment"],
+  "categories": [
+    "music",
+    "entertainment"
+  ],
   "prefer_related_applications": false,
   "handle_links": "preferred",
   "launch_handler": {
@@ -50,14 +56,14 @@
       "sizes": "1280x800",
       "type": "image/jpeg",
       "form_factor": "wide",
-      "label": "PLAYD — desktop library and player"
+      "label": "PLAYD \u2014 desktop library and player"
     },
     {
       "src": "screenshots/mobile.jpg",
       "sizes": "390x844",
       "type": "image/jpeg",
       "form_factor": "narrow",
-      "label": "PLAYD — mobile library"
+      "label": "PLAYD \u2014 mobile library"
     }
   ],
   "shortcuts": [
@@ -66,7 +72,12 @@
       "short_name": "Library",
       "description": "Browse your music library",
       "url": "./",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
