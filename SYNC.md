@@ -80,6 +80,17 @@ artifact.toml untouched) — or list the explicit exception.
 AGENTS.md §2.1 respected — `AudioEngine.tsx`, `PlaydPlusPanel.tsx`, and
 `artifact.toml` were not modified.
 
+### Repo state confirmations (post code review)
+- `origin/master` tip: `3d47630` (`fix: add missing SpectrumBar import...`).
+- Local `master` is ahead only by Replit auto-checkpoint commits; no
+  application code diverges from upstream. User pushes via Git pane.
+- Upstream `artifacts/` contains **only** `audio-player/`. The previously
+  configured `api-server` and `mockup-sandbox` workflows are intentionally
+  N/A — those packages were removed upstream. `.replit` correctly defines
+  only the `Start application` workflow for `audio-player`.
+- `pnpm-lock.yaml` platform-pruning overrides (~20 entries set to `'-'`)
+  come from upstream and are expected; they do not need local fixes.
+
 ---
 
 ## Prior context (pre-SYNC.md, summarized)
