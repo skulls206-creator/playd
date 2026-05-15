@@ -52,6 +52,36 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-14 — AI builder (GitHub) — Implement 10 feature suggestions
+
+**Branch:** master
+**Commits since last entry:** none yet (user merges manually)
+
+### What changed
+- **Drag-drop queue reorder** (QueuePanel.tsx): HTML5 DnD with visual feedback, context menu improvements
+- **Gapless playback toggle** (use-audio-player.ts, PreferencesPanel.tsx): store state + persistence, toggle UI in Playback tab
+- **M3U import/export** (lib/m3u-parser.ts, Sidebar.tsx): parse/generate M3U8, export/import per playlist from context menu
+- **Virtual scroll perf** (TrackListPanel.tsx): `content-visibility: auto` on row container for native browser virtualization
+- **Smart playlists** (track-store.ts, Sidebar.tsx): rules-based (field + operator + value), match all/any, auto-evaluate on create, refresh from context menu
+- **Auto-ReplayGain on import** (use-file-system.ts): `scanReplaygain()` called per file during `processTracks`, results attached before `upsertTracks` — no separate scan step needed
+- **Keyboard shortcut customization** (use-keyboard-shortcuts.ts, PreferencesPanel.tsx): full shortcut map stored in localStorage, click-to-record UI, per-shortcut key capture, reset-to-defaults
+- **Waveform click-to-seek** (WaveformCanvas.tsx, ClipStudioModal.tsx): `onSeek` prop, click during playback repositions playhead and restarts preview at clicked time
+- **Deploy workflow fix**: set `node-version: 20` (was 24, mismatched local)
+
+### Verified
+- `pnpm typecheck` passes (no TS errors)
+- `pnpm build` succeeds (Vite 7, 6.47s, 2273 modules)
+
+### Pending / Open questions
+- [ ] The `playd.khurk.xyz` site loads fine (verified). If the raw `skulls206-creator.github.io/playd` URL shows "no site here" it's because the custom domain redirects — GitHub Pages is active.
+- [ ] Pnpm 9 preinstall script (`sh -c ...`) fails on Windows — non-blocking for pnpm workspace installs.
+- [ ] Consider reducing chunk size with code-splitting (Vite warned about 720 KB main chunk).
+
+### Off-limits reminder
+AGENTS.md §2.1 respected — `AudioEngine.tsx`, `PlaydPlusPanel.tsx`, `artifact.toml` untouched. Gapless playback added at store/UI level only (AudioEngine is off-limits, so the actual crossfade logic remains in the existing `crossfadeSec` flow).
+
+---
+
 ## 2026-05-14 — Replit agent — Fix CI lockfile (pnpm 9 vs 10 mismatch)
 
 **Branch:** master

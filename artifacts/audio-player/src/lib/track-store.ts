@@ -30,11 +30,20 @@ export interface LocalTrack {
   updatedAt: string;
 }
 
+export interface SmartPlaylistRule {
+  field: 'title' | 'artist' | 'album' | 'genre' | 'year' | 'trackNumber' | 'duration' | 'rating';
+  op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'startsWith' | 'endsWith';
+  value: string | number;
+}
+
 export interface LocalPlaylist {
   id: number;
   name: string;
   createdAt: string;
   updatedAt: string;
+  isSmart?: boolean;
+  rules?: SmartPlaylistRule[];
+  matchMode?: 'all' | 'any';
 }
 
 export interface LocalPlaylistTrack {
@@ -108,11 +117,13 @@ interface TrackStoreState {
 
   // Playlists
   loadPlaylists: () => Promise<void>;
-  createPlaylist: (name: string) => Promise<LocalPlaylist>;
+  createPlaylist: (name: string, isSmart?: boolean, rules?: SmartPlaylistRule[], matchMode?: 'all' | 'any') => Promise<LocalPlaylist>;
   updatePlaylist: (id: number, name: string) => Promise<void>;
   deletePlaylist: (id: number) => Promise<void>;
   addTrackToPlaylist: (playlistId: number, trackId: number) => Promise<void>;
   removeTrackFromPlaylist: (playlistId: number, trackId: number) => Promise<void>;
+  reorderPlaylistTrack: (playlistId: number, trackId: number, newPosition: number) => Promise<void>;
+  evaluateSmartPlaylist: (playlistId: number) => Promise<void>;
 
   // EQ Presets
   eqPresets: LocalEqPreset[];
@@ -216,9 +227,9 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     } catch {}
   },
 
-  createPlaylist: async (name) => {
+  createPlaylist: async (name, isSmart = false, rules = [], matchMode = 'all') => {
     const now = new Date().toISOString();
-    const pl: LocalPlaylist = { id: nextPlaylistId(), name, createdAt: now, updatedAt: now };
+    const pl: LocalPlaylist = { id: nextPlaylistId(), name, createdAt: now, updatedAt: now, isSmart, rules, matchMode };
     const playlists = [...get().playlists, pl];
     await idbSet(PLAYLISTS_KEY, playlists);
     set({ playlists });
@@ -258,6 +269,49 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     );
     await idbSet(PLAYLIST_TRACKS_KEY, pt);
     set({ playlistTracks: pt });
+  },
+
+  reorderPlaylistTrack: async (playlistId, trackId, newPosition) => {
+    const pt = [...get().playlistTracks];
+    const items = pt.filter(p => p.playlistId === playlistId).sort((a, b) => a.position - b.position);
+    const idx = items.findIndex(p => p.trackId === trackId);
+    if (idx < 0) return;
+    const [moved] = items.splice(idx, 1);
+    items.splice(newPosition, 0, moved);
+    const updated = items.map((p, i) => ({ ...p, position: i }));
+    const other = pt.filter(p => p.playlistId !== playlistId);
+    const newPt = [...other, ...updated];
+    await idbSet(PLAYLIST_TRACKS_KEY, newPt);
+    set({ playlistTracks: newPt });
+  },
+
+  evaluateSmartPlaylist: async (playlistId) => {
+    const { playlists, tracks } = get();
+    const pl = playlists.find(p => p.id === playlistId);
+    if (!pl || !pl.isSmart || !pl.rules || pl.rules.length === 0) return;
+    const matched = tracks.filter(t => {
+      const results = pl.rules!.map(rule => {
+        const val = String(t[rule.field as keyof typeof t] ?? '');
+        const ruleVal = String(rule.value);
+        switch (rule.op) {
+          case 'eq': return val.toLowerCase() === ruleVal.toLowerCase();
+          case 'neq': return val.toLowerCase() !== ruleVal.toLowerCase();
+          case 'gt': return Number(val) > Number(ruleVal);
+          case 'gte': return Number(val) >= Number(ruleVal);
+          case 'lt': return Number(val) < Number(ruleVal);
+          case 'lte': return Number(val) <= Number(ruleVal);
+          case 'contains': return val.toLowerCase().includes(ruleVal.toLowerCase());
+          case 'startsWith': return val.toLowerCase().startsWith(ruleVal.toLowerCase());
+          case 'endsWith': return val.toLowerCase().endsWith(ruleVal.toLowerCase());
+          default: return false;
+        }
+      });
+      return pl.matchMode === 'all' ? results.every(Boolean) : results.some(Boolean);
+    });
+    const existing = get().playlistTracks.filter(p => p.playlistId !== playlistId);
+    const newPt = [...existing, ...matched.map((t, i) => ({ playlistId, trackId: t.id, position: i }))];
+    await idbSet(PLAYLIST_TRACKS_KEY, newPt);
+    set({ playlistTracks: newPt });
   },
 
   // ── EQ Presets ────────────────────────────────────────────────────────

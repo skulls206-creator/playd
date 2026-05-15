@@ -694,6 +694,38 @@ export function ClipStudioModal({ track, onClose }: ClipStudioModalProps) {
                 playhead={playhead}
                 onTrimChange={(s, e) => { setTrimStart(s); setTrimEnd(e); }}
                 onViewChange={handleViewChange}
+                onSeek={(t) => {
+                  // Seek playback to clicked position
+                  if (audioCtxRef.current && workingBufferRef.current) {
+                    const ctx = audioCtxRef.current;
+                    const wb = workingBufferRef.current;
+                    stopPreview();
+                    playOffsetRef.current = t;
+                    playStartRef.current = ctx.currentTime;
+                    const src = ctx.createBufferSource();
+                    src.buffer = wb;
+                    src.playbackRate.value = previewRateRef.current;
+                    src.detune.value = previewDetuneRef.current;
+                    src.connect(ctx.destination);
+                    src.start(0, t);
+                    src.onended = () => {
+                      setIsPlaying(false);
+                      setPlayhead(NaN);
+                      cancelAnimationFrame(rafRef.current);
+                    };
+                    sourceNodeRef.current = src;
+                    setIsPlaying(true);
+                    const tick = () => {
+                      if (!audioCtxRef.current) return;
+                      const effectiveRate = previewRateRef.current * Math.pow(2, previewDetuneRef.current / 1200);
+                      const elapsed = (audioCtxRef.current.currentTime - playStartRef.current) * effectiveRate;
+                      const pos = playOffsetRef.current + elapsed;
+                      setPlayhead(Math.min(pos, wb.duration));
+                      if (pos < wb.duration) rafRef.current = requestAnimationFrame(tick);
+                    };
+                    rafRef.current = requestAnimationFrame(tick);
+                  }
+                }}
               />
             )}
           </div>

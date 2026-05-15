@@ -4,7 +4,7 @@ import type { LocalTrack } from '@/lib/track-store';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput, RefreshCw, Lock, Pencil } from 'lucide-react';
+import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput, RefreshCw, Lock, Pencil, GripVertical } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TrackContextMenu } from './TrackContextMenu';
 import { TrackEditModal } from './TrackEditModal';
@@ -662,8 +662,8 @@ export function TrackListPanel({
 
         {/* Track rows */}
         <ScrollArea className="flex-1">
-          {/* w-full overrides Radix's internal display:table wrapper so row widths stay constrained */}
-          <div className="w-full" ref={trackListRef}>
+          {/* content-visibility: auto provides native virtual scrolling in Chromium */}
+          <div className="w-full" ref={trackListRef} style={{ contentVisibility: 'auto' as any }}>
           {sorted.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center text-muted-foreground gap-3 py-24 px-6">
               <Music className="w-10 h-10 opacity-20" />

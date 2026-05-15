@@ -93,6 +93,10 @@ interface PlayerState {
   setSleepTimerEndOfTrack: () => void;
   clearSleepTimer: () => void;
 
+  // Gapless
+  gaplessEnabled: boolean;
+  setGaplessEnabled: (enabled: boolean) => void;
+
   // ReplayGain
   replaygainEnabled: boolean;
   setReplaygainEnabled: (enabled: boolean) => void;
@@ -177,6 +181,9 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   setCrossfadeSec: (sec) => { savePref('playd_crossfade', sec); set({ crossfadeSec: sec }); },
   showSpectrum: loadPref('playd_spectrum', true),
   setShowSpectrum: (show) => { savePref('playd_spectrum', show); set({ showSpectrum: show }); },
+
+  gaplessEnabled: loadPref('playd_gapless', false),
+  setGaplessEnabled: (enabled) => { savePref('playd_gapless', enabled); set({ gaplessEnabled: enabled }); },
 
   replaygainEnabled: loadPref('playd_replaygain', false),
   setReplaygainEnabled: (enabled) => { savePref('playd_replaygain', enabled); set({ replaygainEnabled: enabled }); },

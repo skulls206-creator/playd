@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
+import { useKeyboardShortcuts, saveShortcuts, resetShortcuts, DEFAULT_SHORTCUTS } from '@/hooks/use-keyboard-shortcuts';
+import type { ShortcutMap } from '@/hooks/use-keyboard-shortcuts';
 import {
   FolderOpen, RefreshCw, Trash2, Plus, CheckCircle2,
   XCircle, Loader2, Info, HardDrive,
@@ -31,6 +33,7 @@ export function PreferencesPanel() {
   const {
     isPrefsOpen, togglePrefs, eqBands, setActiveEqPreset,
     crossfadeSec, setCrossfadeSec, showSpectrum, setShowSpectrum,
+    gaplessEnabled, setGaplessEnabled,
     replaygainEnabled, setReplaygainEnabled,
   } = useAudioPlayer();
   const { loadSampleTrack, scanFileList, isScanning, scanStatus, getFileFromPath } = useFileSystem();
@@ -187,6 +190,49 @@ export function PreferencesPanel() {
 
   const handleDeletePreset = async (id: number) => {
     await deleteEqPreset(id);
+  };
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+  const [shortcuts, setShortcutsState] = useState<ShortcutMap>(() => {
+    try {
+      const stored = localStorage.getItem('playd_shortcuts');
+      return stored ? { ...DEFAULT_SHORTCUTS, ...JSON.parse(stored) } : DEFAULT_SHORTCUTS;
+    } catch { return DEFAULT_SHORTCUTS; }
+  });
+  const [recording, setRecording] = useState<string | null>(null);
+
+  const handleRecordShortcut = (key: keyof ShortcutMap) => {
+    setRecording(key);
+    const handler = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const mods = [];
+      if (e.ctrlKey || e.metaKey) mods.push('Ctrl');
+      if (e.shiftKey) mods.push('Shift');
+      if (e.altKey) mods.push('Alt');
+      const keyName = e.key === ' ' ? 'Space' : (e.key === 'Ctrl' || e.key === 'Shift' || e.key === 'Alt') ? '' : e.key;
+      if (!keyName) return;
+      const shortcut = [...mods, keyName].join('+');
+      const updated = { ...shortcuts, [key]: shortcut };
+      setShortcutsState(updated);
+      saveShortcuts(updated);
+      setRecording(null);
+      document.removeEventListener('keydown', handler, true);
+    };
+    document.addEventListener('keydown', handler, true);
+  };
+
+  const handleResetShortcuts = () => {
+    resetShortcuts();
+    setShortcutsState(DEFAULT_SHORTCUTS);
+  };
+
+  const shortcutLabels: Record<keyof ShortcutMap, string> = {
+    playPause: 'Play / Pause', next: 'Next Track', prev: 'Previous Track',
+    mute: 'Mute', volUp: 'Volume Up', volDown: 'Volume Down',
+    shuffle: 'Toggle Shuffle', repeat: 'Toggle Repeat',
+    search: 'Focus Search', queue: 'Toggle Queue', eq: 'Toggle EQ',
+    prefs: 'Toggle Preferences', lyrics: 'Toggle Lyrics',
   };
 
   // ── Notifications ───────────────────────────────────────────────────────
@@ -379,6 +425,41 @@ export function PreferencesPanel() {
                 </span>
               </div>
             </section>
+
+            {/* Gapless Playback */}
+            <section>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Blend className="w-3.5 h-3.5 text-primary" />
+                    Gapless Playback
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Seamless transitions between tracks with no silence gap.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setGaplessEnabled(!gaplessEnabled)}
+                  className={clsx(
+                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
+                    'transition-colors duration-200 focus:outline-none',
+                    gaplessEnabled ? 'bg-primary' : 'bg-border',
+                  )}
+                  role="switch"
+                  aria-checked={gaplessEnabled}
+                >
+                  <span
+                    className={clsx(
+                      'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg',
+                      'transform transition duration-200',
+                      gaplessEnabled ? 'translate-x-4' : 'translate-x-0',
+                    )}
+                  />
+                </button>
+              </div>
+            </section>
+
+            <Separator className="border-border/20" />
 
             {/* Spectrum Visualizer */}
             <section>
@@ -587,6 +668,43 @@ export function PreferencesPanel() {
                 })}
               </div>
             </section>
+
+            {/* Keyboard Shortcuts */}
+            <section>
+              <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                <Monitor className="w-4 h-4 text-muted-foreground" />
+                Keyboard Shortcuts
+              </h3>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                Configure global keyboard shortcuts. Click a shortcut to record a new key binding.
+              </p>
+              <div className="space-y-1">
+                {(Object.keys(shortcutLabels) as (keyof ShortcutMap)[]).map((key) => (
+                  <div key={key} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-white/5">
+                    <span className="text-[11px] text-foreground/70">{shortcutLabels[key]}</span>
+                    <button
+                      onClick={() => handleRecordShortcut(key)}
+                      className={clsx(
+                        'px-2 py-0.5 rounded text-[10px] font-mono border transition-all min-w-[80px] text-right',
+                        recording === key
+                          ? 'border-primary bg-primary/20 text-primary animate-pulse'
+                          : 'border-border/50 text-muted-foreground hover:border-foreground/30 hover:text-foreground',
+                      )}
+                    >
+                      {recording === key ? 'Press key…' : shortcuts[key]}
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={handleResetShortcuts}
+                  className="text-[10px] text-muted-foreground hover:text-foreground mt-2 transition-colors"
+                >
+                  Reset to defaults
+                </button>
+              </div>
+            </section>
+
+            <Separator className="border-border/20" />
 
             {/* Notifications */}
             <section>

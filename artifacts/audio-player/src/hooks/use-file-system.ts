@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { get, set } from 'idb-keyval';
 import { useTrackStore } from '@/lib/track-store';
 import type { LocalTrack } from '@/lib/track-store';
+import { scanReplaygain } from '@/lib/replaygain-scanner';
 
 const ART_STORE_KEY = 'track-art';
 const AUDIO_EXTS = /\.(mp3|flac|m4a|m4p|aac|wav|ogg|opus|webm|wma|aiff|aif|alac|mp4|3gp)$/i;
@@ -820,6 +821,7 @@ export function useFileSystem() {
 
     try {
       const tracks: any[] = [];
+      const rgPromises: Promise<void>[] = [];
       const artStore: Record<string, string> = (await get(ART_STORE_KEY)) || {};
       let count = 0;
 
@@ -1002,7 +1004,17 @@ export function useFileSystem() {
         count++;
         setScanProgress(count);
         setStatus(`Scanning ${rootName}… (${count} files loaded)`);
+
+        // Background ReplayGain scan — non-blocking, resolves before upsert
+        rgPromises.push(
+          scanReplaygain(file).then(gain => {
+            const last = tracks[tracks.length - 1];
+            if (last) last.replaygainGain = Math.round(gain * 10) / 10;
+          }).catch(() => { /* non-critical */ })
+        );
       }
+
+      await Promise.allSettled(rgPromises);
 
       await set(ART_STORE_KEY, artStore);
 

@@ -23,6 +23,8 @@ interface WaveformCanvasProps {
   onTrimChange: (start: number, end: number) => void;
   /** Called when the user zooms or scrolls — new view window in seconds. */
   onViewChange: (start: number, end: number) => void;
+  /** Called when the user clicks on the waveform to seek (only during playback). */
+  onSeek?: (time: number) => void;
 }
 
 const ACCENT     = '#FF3C00';
@@ -33,7 +35,7 @@ const HANDLE_HIT = 14; // px hit-target radius for trim handles
 export function WaveformCanvas({
   peaks, duration, viewStart, viewEnd,
   trimStart, trimEnd, fadeIn, fadeOut,
-  playhead, onTrimChange, onViewChange,
+  playhead, onTrimChange, onViewChange, onSeek,
 }: WaveformCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -184,12 +186,19 @@ export function WaveformCanvas({
     return (clientX - rect.left) * (canvas.width / rect.width);
   }, []);
 
-  const pointerDown = useCallback((clientX: number) => {
+  const pointerDown = useCallback((clientX: number, shiftKey = false) => {
     const canvas = canvasRef.current!;
     const cx  = getCanvasX(clientX);
     const W   = canvas.width;
     const sx  = timeToCanvasX(live.current.trimStart, W);
     const ex  = timeToCanvasX(live.current.trimEnd, W);
+
+    // Click-to-seek: shift-click or double-click during playback moves the playhead
+    if (shiftKey && onSeek && !isNaN(playhead)) {
+      const t = canvasXToTime(cx, W);
+      onSeek(t);
+      return;
+    }
 
     if (Math.abs(cx - sx) <= HANDLE_HIT) {
       trimDrag.current = { type: 'start', anchorX: cx };
@@ -197,10 +206,15 @@ export function WaveformCanvas({
       trimDrag.current = { type: 'end', anchorX: cx };
     } else {
       const t = canvasXToTime(cx, W);
+      // During playback, a single click seeks instead of starting a new trim
+      if (onSeek && !isNaN(playhead) && playhead >= 0) {
+        onSeek(t);
+        return;
+      }
       trimDrag.current = { type: 'new', anchorX: cx };
       onTrimChange(t, Math.min(t + 0.001, live.current.duration));
     }
-  }, [getCanvasX, onTrimChange]);
+  }, [getCanvasX, onTrimChange, onSeek, playhead]);
 
   const pointerMove = useCallback((clientX: number) => {
     if (!trimDrag.current) return;
@@ -316,7 +330,7 @@ export function WaveformCanvas({
   }, [getCanvasX, onViewChange]);
 
   // Mouse/touch event wiring
-  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => { e.preventDefault(); pointerDown(e.clientX); };
+  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => { e.preventDefault(); pointerDown(e.clientX, e.shiftKey); };
   const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => pointerMove(e.clientX);
 
   const onTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {

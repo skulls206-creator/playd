@@ -1,7 +1,8 @@
+import { useRef, useCallback } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Play, X, ListMusic } from 'lucide-react';
+import { Play, X, ListMusic, GripVertical } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { LocalTrack } from '@/lib/track-store';
 import { 
@@ -21,6 +22,36 @@ function formatDuration(seconds: number) {
 
 export function QueuePanel({ onEditTags }: { onEditTags?: (track: LocalTrack) => void }) {
   const { queue, queueIndex, play, toggleQueue, setQueue } = useAudioPlayer();
+  const dragIdx = useRef<number | null>(null);
+  const dragOverIdx = useRef<number | null>(null);
+
+  const handleDragStart = useCallback((idx: number) => {
+    dragIdx.current = idx;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    dragOverIdx.current = idx;
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    const from = dragIdx.current;
+    if (from === null || from === idx) return;
+    const items = [...queue];
+    const [moved] = items.splice(from, 1);
+    const to = from < idx ? idx - 1 : idx;
+    items.splice(to, 0, moved);
+    setQueue(items.map((qi, i) => ({ ...qi, position: i })));
+    dragIdx.current = null;
+    dragOverIdx.current = null;
+  }, [queue, setQueue]);
+
+  const handleDragEnd = useCallback(() => {
+    dragIdx.current = null;
+    dragOverIdx.current = null;
+  }, []);
 
   return (
     <div className="w-72 flex-shrink-0 flex flex-col bg-card border-l border-border overflow-hidden">
@@ -43,7 +74,8 @@ export function QueuePanel({ onEditTags }: { onEditTags?: (track: LocalTrack) =>
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-[28px_minmax(0,2fr)_minmax(0,1fr)_44px] gap-2 px-3 py-1 border-b border-border/50 bg-black/10 text-[9px] font-bold tracking-widest uppercase text-muted-foreground shrink-0">
+      <div className="grid grid-cols-[16px_28px_minmax(0,2fr)_minmax(0,1fr)_44px] gap-1 px-3 py-1 border-b border-border/50 bg-black/10 text-[9px] font-bold tracking-widest uppercase text-muted-foreground shrink-0">
+        <div />
         <div className="text-center">#</div>
         <div>Title</div>
         <div>Artist</div>
@@ -63,18 +95,28 @@ export function QueuePanel({ onEditTags }: { onEditTags?: (track: LocalTrack) =>
           <div className="pb-4">
             {queue?.map((item, idx) => {
               const isActive = idx === queueIndex;
+              const isDragOver = dragOverIdx.current === idx;
               return (
                 <ContextMenu key={`${item.trackId}-${idx}`}>
                   <ContextMenuTrigger>
                     <div
+                      draggable
+                      onDragStart={() => handleDragStart(idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDrop={(e) => handleDrop(e, idx)}
+                      onDragEnd={handleDragEnd}
                       onDoubleClick={() => play(item.track, queue, idx)}
                       className={clsx(
-                        "grid grid-cols-[28px_minmax(0,2fr)_minmax(0,1fr)_44px] gap-2 px-3 py-1 text-[11px] rounded-sm cursor-pointer group select-none transition-colors border-b border-border/10",
+                        "grid grid-cols-[16px_28px_minmax(0,2fr)_minmax(0,1fr)_44px] gap-1 px-3 py-1 text-[11px] rounded-sm cursor-default group select-none transition-colors border-b border-border/10",
                         isActive
                           ? "bg-primary/15 text-primary font-medium"
-                          : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                          : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                        isDragOver && "border-t-2 border-t-primary"
                       )}
                     >
+                      <div className="flex items-center cursor-grab active:cursor-grabbing text-muted-foreground/30 hover:text-muted-foreground transition-colors">
+                        <GripVertical className="w-3 h-3" />
+                      </div>
                       <div className="text-center text-[10px] opacity-50 flex items-center justify-center">
                         {isActive ? <Play className="w-2.5 h-2.5 fill-primary text-primary" /> : idx + 1}
                       </div>
