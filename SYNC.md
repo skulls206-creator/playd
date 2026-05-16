@@ -52,6 +52,64 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-16 — Satoshi — Discord Rich Presence + Electron desktop app
+
+**Branch:** feat/media-keys-and-stats (unmerged)
+**Commits since last entry:** fd67e3d..HEAD
+
+### What changed
+- **New `electron/` directory** — full Electron desktop wrapper:
+  - `main.js`: window creation, tray icon (minimize to tray instead of close),
+    native global media keys (MediaPlayPause, MediaNextTrack, MediaPreviousTrack),
+    Discord RPC via `discord-rpc` npm package (native IPC socket)
+  - `preload.js`: context bridge exposing `window.playdDesktop` API (RPC update/clear,
+    media key listener)
+  - `package.json`: electron-builder config for Windows (NSIS), macOS (DMG),
+    Linux (AppImage). Points to built PWA in `artifacts/audio-player/dist/public/`
+- **New `hooks/use-discord-rpc.ts`** — PWA-side hook that bridges playback state
+  to the Electron main process via IPC:
+  - Updates presence on track change (title, artist, album, start timestamp)
+  - Clears presence on pause/stop
+  - Listens for OS media key events and maps them to store actions
+  - Gracefully no-ops in browser (no `window.playdDesktop` = no crash)
+- **New `.github/workflows/build-electron.yml`** — GitHub Actions workflow:
+  - Builds for all 3 platforms on tag push (`v*`) or manual trigger
+  - Step 1: build PWA, Step 2: build Electron via electron-builder
+  - Uploads per-platform artifacts
+  - Creates a GitHub Release with all binaries attached
+  - Uses pnpm 9 + Node.js 20
+- **Client ID:** `1505291486974181588` configured in main.js
+
+### Why
+- Discord Rich Presence requires a native socket connection (not available in browser)
+- Electron wrapper gives us tray, global media keys, and full file system access
+- Electron app loads the exact same built PWA — no code duplication
+- CI/CD pipeline means a new tag auto-builds and releases EXE/DMG/AppImage
+
+### How to use
+1. `cd electron && pnpm install`
+2. `cd .. && pnpm build` (build the PWA first)
+3. `cd electron && pnpm start` (launches the desktop app)
+4. Discord Rich Presence shows up automatically when Discord is running
+
+### Verified
+- `pnpm typecheck` passes
+- `pnpm build` succeeds
+
+### Pending / Open questions
+- [ ] Discord dev portal needs the `playd_logo` and `playing` assets uploaded
+  for large/small images to show in Rich Presence. Without these, the text
+  still works but images are blank.
+- [ ] Electron needs to be tested on actual Windows/macOS — I can't test
+  the tray behavior from this environment.
+- [ ] The GitHub Actions workflow needs a tag push to trigger. Can also be
+  triggered manually via Actions tab.
+
+### Off-limits reminder
+AGENTS.md §2.1 respected.
+
+---
+
 ## 2026-05-16 — Satoshi — Listening stats dashboard
 
 **Branch:** feat/media-keys-and-stats (unmerged)

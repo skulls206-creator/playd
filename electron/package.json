@@ -1,0 +1,56 @@
+{
+  "name": "playd-desktop",
+  "version": "1.0.0",
+  "description": "PLAYD — foobar2000-style audio player desktop app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "xyz.khurk.playd",
+    "productName": "PLAYD",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "!node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../artifacts/audio-player/dist/public",
+        "to": "webui",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": null,
+      "artifactName": "PLAYD-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": ["dmg"],
+      "artifactName": "PLAYD-${version}.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "artifactName": "PLAYD-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "discord-rpc": "^4.0.1"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

@@ -17,6 +17,7 @@ import { useMediaSession } from '@/hooks/use-media-session';
 import { SpectrumBar } from '@/components/player/SpectrumBar';
 import { useLibraryAutoRestore } from '@/hooks/use-library-auto-restore';
 import { useListeningStatsTracker } from '@/hooks/use-listening-stats-tracker';
+import { useDiscordRpc } from '@/hooks/use-discord-rpc';
 import type { LocalTrack } from '@/lib/track-store';
 
 export default function MainPlayer() {
@@ -27,6 +28,7 @@ export default function MainPlayer() {
   useMediaSession();
   useKeyboardShortcuts();
   useListeningStatsTracker();
+  useDiscordRpc();
 
   const { needsRestore, restore, dismiss } = useLibraryAutoRestore(rescanAll);
 
