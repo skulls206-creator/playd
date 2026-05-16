@@ -19,7 +19,7 @@ import { useLibraryAutoRestore } from '@/hooks/use-library-auto-restore';
 import { useListeningStatsTracker } from '@/hooks/use-listening-stats-tracker';
 import { useDiscordRpc } from '@/hooks/use-discord-rpc';
 import { useScrobbler } from '@/hooks/use-scrobbler';
-import type { LocalTrack } from '@/lib/track-store';
+import { useTrackStore, type LocalTrack } from '@/lib/track-store';
 
 export default function MainPlayer() {
   const { rescanAll } = useFileSystem();
@@ -29,6 +29,14 @@ export default function MainPlayer() {
   useMediaSession();
   useKeyboardShortcuts();
   useListeningStatsTracker();
+  // Auto-load persisted data from IndexedDB on mount
+  useEffect(() => {
+    useTrackStore.getState().loadTracks();
+    useTrackStore.getState().loadPlaylists();
+    useTrackStore.getState().loadEqPresets();
+    useTrackStore.getState().loadPlaylistFolders();
+  }, []);
+
   useDiscordRpc();
   useScrobbler();
 
