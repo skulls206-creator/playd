@@ -1105,7 +1105,8 @@ export function useFileSystem() {
       }
     } catch (error) {
       console.error('Scan failed', error);
-      setStatus('Scan failed — see console for details', 5000);
+      const msg = error instanceof Error ? error.message : String(error);
+      setStatus(`Scan failed: ${msg.slice(0, 120)}`, 10000);
     } finally {
       setIsScanning(false);
     }
