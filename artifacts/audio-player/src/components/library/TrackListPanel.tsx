@@ -482,25 +482,31 @@ export function TrackListPanel({
                     return;
                   }
 
-                  // Check if any handles need permission re-authorization
-                  let needsReauth = false;
+                  // Try to re-authorize permission on stored handles.
+                  // On page refresh, Chrome drops granted permissions but the
+                  // handle itself is still valid — requestPermission() in a
+                  // user gesture context should re-grant it silently on desktop,
+                  // or show a quick prompt on mobile.
+                  let allGranted = true;
                   try {
                     for (const h of handles) {
-                      if ('queryPermission' in h) {
-                        const perm = await (h as any).queryPermission({ mode: 'read' });
-                        if (perm !== 'granted') { needsReauth = true; break; }
+                      if ('requestPermission' in h) {
+                        const perm = await (h as any).requestPermission({ mode: 'read' });
+                        if (perm !== 'granted') { allGranted = false; break; }
                       }
                     }
-                  } catch { needsReauth = true; }
+                  } catch { allGranted = false; }
 
-                  if (needsReauth) {
-                    // Handles exist but permissions are stale — re-prompt via folder picker
-                    // This updates the stored handle with a fresh permission grant
-                    const added = await addFolder();
-                    if (added) refreshHasFolders();
-                  } else {
+                  if (allGranted) {
                     await rescanAll();
+                    return;
                   }
+
+                  // Permission re-grant failed — open the folder picker so the
+                  // user can select the same folder again. This always works
+                  // regardless of browser quirkiness.
+                  const added = await addFolder();
+                  if (added) refreshHasFolders();
                 });
               } else {
                 // iOS: plain synchronous .click() — no async keyword anywhere above
