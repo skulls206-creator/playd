@@ -52,6 +52,45 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-16 — Satoshi — Folder Watch / Auto-import
+
+**Branch:** feat/media-keys-and-stats (unmerged)
+**Commits since last entry:** eafcc18..HEAD
+
+### What changed
+- **New `hooks/use-folder-watch.ts`** — lightweight polling-based folder watch:
+  - Enumerates file names from stored folder handles (no metadata parsing — fast)
+  - Compares against known track store keys (folderPath/fileName)
+  - When new audio files are detected, calls `rescanAll()` to import them
+  - Visibility-aware: pauses polling when the tab is hidden
+  - Configurable interval (10s–10min, default 60s)
+  - Enabled/disabled + interval persisted to localStorage
+- **Added Folder Watch UI to Preferences → Sources tab**:
+  - Toggle switch to enable/disable
+  - Slider for interval (10–600 seconds, shows human-readable label)
+  - Last-check timestamp + "Check Now" button
+  - All behind the toggle (only shows when enabled)
+
+### Why
+- No native File System Observer API available cross-browser
+- Polling is the reliable approach: directory enumeration is lightweight
+  (just listing names, no file reading) until new files are actually found
+- Reuses existing `rescanAll()` for the actual import
+
+### Verified
+- `pnpm typecheck` passes (zero TS errors)
+- `pnpm build` succeeds
+
+### Pending / Open questions
+- [ ] If a folder has thousands of files, the enumeration pass is still fast
+  (~ms) since we only read file names, not file contents.
+
+### Off-limits reminder
+AGENTS.md §2.1 respected — AudioEngine.tsx, PlaydPlusPanel.tsx, artifact.toml
+untouched.
+
+---
+
 ## 2026-05-16 — Satoshi — Global Media Keys (MediaSession API) + wiring
 
 **Branch:** feat/media-keys-and-stats (unmerged)

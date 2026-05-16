@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem } from '@/hooks/use-file-system';
+import { useFolderWatch } from '@/hooks/use-folder-watch';
 import { useTrackStore } from '@/lib/track-store';
 import type { LocalTrack } from '@/lib/track-store';
 import { scanReplaygain } from '@/lib/replaygain-scanner';
@@ -37,6 +38,7 @@ export function PreferencesPanel() {
     replaygainEnabled, setReplaygainEnabled,
   } = useAudioPlayer();
   const { loadSampleTrack, scanFileList, isScanning, scanStatus, getFileFromPath } = useFileSystem();
+  const folderWatch = useFolderWatch();
 
   const folderInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef  = useRef<HTMLInputElement>(null);
@@ -395,6 +397,76 @@ export function PreferencesPanel() {
                   {allTracks.length === 1 ? 'track' : 'tracks'} in library
                 </span>
               </div>
+            </section>
+
+            {/* Folder Watch */}
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 text-primary" />
+                  <h3 className="text-sm font-semibold">Folder Watch</h3>
+                </div>
+                <button
+                  onClick={() => folderWatch.setWatchEnabled(!folderWatch.watchEnabled)}
+                  className={clsx(
+                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
+                    'transition-colors duration-200 focus:outline-none',
+                    folderWatch.watchEnabled ? 'bg-primary' : 'bg-border',
+                  )}
+                  role="switch"
+                  aria-checked={folderWatch.watchEnabled}
+                >
+                  <span
+                    className={clsx(
+                      'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg',
+                      'transform transition duration-200',
+                      folderWatch.watchEnabled ? 'translate-x-4' : 'translate-x-0',
+                    )}
+                  />
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                Auto-detect new audio files in your imported folders and add them
+                to the library. Polling pauses when the tab is hidden.
+              </p>
+
+              {folderWatch.watchEnabled && (
+                <div className="space-y-3">
+                  {/* Interval slider */}
+                  <div className="flex items-center gap-4">
+                    <span className="text-[11px] text-muted-foreground w-16 shrink-0">
+                      {folderWatch.intervalLabel}
+                    </span>
+                    <Slider
+                      min={10}
+                      max={600}
+                      step={10}
+                      value={[folderWatch.watchInterval / 1000]}
+                      onValueChange={([v]) => folderWatch.setWatchInterval(v * 1000)}
+                      className="flex-1"
+                    />
+                  </div>
+
+                  {/* Last check + check-now button */}
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>
+                      {folderWatch.lastWatchCheck
+                        ? `Last check: ${folderWatch.lastWatchCheck}`
+                        : 'Waiting for first check…'}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs gap-1"
+                      onClick={() => folderWatch.checkNow()}
+                      disabled={isScanning}
+                    >
+                      <RefreshCw className={"w-3 h-3" + (isScanning ? ' animate-spin' : '')} />
+                      Check Now
+                    </Button>
+                  </div>
+                </div>
+              )}
             </section>
           </TabsContent>
 
