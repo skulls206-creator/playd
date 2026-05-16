@@ -18,7 +18,7 @@ import {
   FolderOpen, RefreshCw, Trash2, Plus, CheckCircle2,
   XCircle, Loader2, Info, HardDrive,
   Database, Monitor, Save, FileMusic, Bell, BellOff, Smartphone,
-  Activity, Blend, Volume2, Palette, Check, ExternalLink,
+  Activity, Blend, Volume2, Palette, Check, ExternalLink, Tag,
 } from 'lucide-react';
 import { THEMES, THEME_KEYS } from '@/lib/themes';
 import { useTheme } from '@/hooks/use-theme';
@@ -1188,6 +1188,20 @@ export function PreferencesPanel() {
                 <Badge variant="outline" className="text-[10px]">File System Access</Badge>
                 <Badge variant="outline" className="text-[10px]">Media Session</Badge>
                 <Badge variant="outline" className="text-[10px]">10-Band EQ</Badge>
+              </div>
+
+              {/* Version info */}
+              <div className="mt-4 p-3 rounded-md bg-black/20 border border-border/30">
+                <div className="flex items-center gap-2 mb-1">
+                  <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold">Version</span>
+                </div>
+                <p className="text-[10px] font-mono text-muted-foreground break-all">
+                  {typeof __PLAYD_VERSION__ !== 'undefined' ? __PLAYD_VERSION__ : 'dev'}
+                </p>
+                <p className="text-[9px] text-muted-foreground/50 mt-1">
+                  {new Date(document.lastModified).toLocaleDateString()}
+                </p>
               </div>
             </section>
           </TabsContent>

@@ -49,6 +49,9 @@ export default defineConfig(async ({ mode }) => {
       outDir: path.resolve(import.meta.dirname, "dist/public"),
       emptyOutDir: true,
     },
+    define: {
+      __PLAYD_VERSION__: JSON.stringify(process.env.PLAYD_VERSION || 'dev'),
+    },
     server: {
       port,
       host: "0.0.0.0",
