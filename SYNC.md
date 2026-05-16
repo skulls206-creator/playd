@@ -52,6 +52,52 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-16 — Satoshi — Global Media Keys (MediaSession API) + wiring
+
+**Branch:** feat/media-keys-and-stats (unmerged)
+**Commits since last entry:** (new branch, not yet pushed)
+
+### What changed
+- **New `lib/media-session.ts`** — centralised MediaSession helper with:
+  - `updateMediaSessionMetadata()` — sets metadata + artwork (resolved from IndexedDB) —
+    replaces the inline async-artwork logic that was in `use-audio-player.ts`
+  - `setMediaSessionPositionState()` — lock-screen progress/elapsed/duration
+  - `registerExtraMediaSessionHandlers()` — `stop`, `seekbackward`, `seekforward`
+- **Enhanced `use-audio-player.ts`** — calls `updateMediaSessionMetadata()` from
+  all track-change code paths: `play`, `togglePlay` (auto-select), `next`, `prev`,
+  `_advanceToIndex`. This fixes the old race condition where artwork was set async
+  after metadata creation and could resolve on the wrong track.
+- **New `hooks/use-media-session.ts`** — complements AudioEngine.tsx (off-limits):
+  - 1-second interval calling `setPositionState()` while playing
+  - Registers stop/seekbackward/seekforward handlers (AudioEngine does play/pause/next/prev/seekto)
+  - Ensures `playbackState` is synced
+- **Wired into MainPlayer.tsx**
+
+### Why
+- AudioEngine.tsx already had basic MediaSession handlers but was missing:
+  - Live lock-screen position updates
+  - Artwork that actually follows track changes (was a one-time async fire)
+  - stop/seekbackward/seekforward action handlers
+  - `setPositionState()` calls
+- Since AudioEngine.tsx is off-limits (AGENTS.md §2.1), wrapped the gaps in a hook
+  + shared lib
+
+### Verified
+- `pnpm typecheck` passes (zero TS errors)
+- `pnpm build` succeeds (Vite 7 build, same chunk size ~722 KB)
+- Cleaned up dead `resolveArtUrl()` and unused `idb-keyval/get` import from `use-audio-player.ts`
+
+### Pending / Open questions
+- [ ] Artwork is resolved async from IndexedDB — on first load (cold cache) there may be
+  a ~100ms delay before the lock screen shows the cover. Acceptable for a local PWA.
+
+### Off-limits reminder
+AGENTS.md §2.1 respected — `AudioEngine.tsx`, `PlaydPlusPanel.tsx`, `artifact.toml`
+untouched. The new `use-media-session.ts` hook and `lib/media-session.ts` lib
+complement AudioEngine from outside.
+
+---
+
 ## 2026-05-14 — AI builder (GitHub) — Implement 10 feature suggestions
 
 **Branch:** master

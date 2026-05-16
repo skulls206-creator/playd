@@ -13,6 +13,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useFileSystem } from '@/hooks/use-file-system';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { useMediaSession } from '@/hooks/use-media-session';
 import { SpectrumBar } from '@/components/player/SpectrumBar';
 import { useLibraryAutoRestore } from '@/hooks/use-library-auto-restore';
 import type { LocalTrack } from '@/lib/track-store';
@@ -22,6 +23,7 @@ export default function MainPlayer() {
   const { isQueueOpen, isLyricsOpen, pause } = useAudioPlayer();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [clipStudioTrack, setClipStudioTrack] = useState<LocalTrack | null>(null);
+  useMediaSession();
   useKeyboardShortcuts();
 
   const { needsRestore, restore, dismiss } = useLibraryAutoRestore(rescanAll);

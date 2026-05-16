@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { get } from 'idb-keyval';
 import type { LocalTrack } from '@/lib/track-store';
 import type { LyricLine } from '@/lib/lrc-parser';
+import { updateMediaSessionMetadata } from '@/lib/media-session';
 
 // ── Locally-defined types (formerly from @workspace/api-client-react) ──────
 
@@ -36,17 +36,6 @@ function loadLyricsFromStorage(trackId: number): { lyrics: LyricLine[] | null; l
     }
   } catch {}
   return { lyrics: null, lyricsTrackId: null };
-}
-
-const ART_STORE_KEY = 'track-art';
-
-async function resolveArtUrl(track: LocalTrack): Promise<string | null> {
-  if (track.albumArtDataUrl) return track.albumArtDataUrl;
-  if (track.fileName && track.folderPath) {
-    const store: Record<string, string> | undefined = await get(ART_STORE_KEY);
-    return store?.[`${track.folderPath}/${track.fileName}`] ?? null;
-  }
-  return null;
 }
 
 export interface LibraryFilter {
@@ -245,20 +234,8 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       nextTrack = nextQueue[0].track;
     }
 
-    if (nextTrack && 'mediaSession' in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: nextTrack.title,
-        artist: nextTrack.artist,
-        album: nextTrack.album,
-        artwork: [],
-      });
-      resolveArtUrl(nextTrack).then(url => {
-        if (url && navigator.mediaSession.metadata) {
-          navigator.mediaSession.metadata.artwork = [
-            { src: url, sizes: '512x512', type: 'image/jpeg' },
-          ];
-        }
-      });
+    if (nextTrack) {
+      updateMediaSessionMetadata(nextTrack);
     }
 
     const lyricsState = nextTrack ? loadLyricsFromStorage(nextTrack.id) : { lyrics: null, lyricsTrackId: null };
@@ -278,6 +255,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   togglePlay: () => set((state) => {
     if (!state.currentTrack && state.queue.length > 0) {
       const firstTrack = state.queue[0].track;
+      updateMediaSessionMetadata(firstTrack);
       return { currentTrack: firstTrack, queueIndex: 0, isPlaying: true, ...loadLyricsFromStorage(firstTrack.id) };
     }
     return { isPlaying: !state.isPlaying };
@@ -302,6 +280,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     }
 
     const nextTrackN = state.queue[nextIndex].track;
+    updateMediaSessionMetadata(nextTrackN);
     savePref('playd_last_track', nextTrackN);
     return {
       queueIndex: nextIndex,
@@ -327,6 +306,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     }
 
     const prevTrack = state.queue[prevIndex].track;
+    updateMediaSessionMetadata(prevTrack);
     savePref('playd_last_track', prevTrack);
     return {
       queueIndex: prevIndex,
@@ -413,6 +393,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
   _advanceToIndex: (idx) => set((state) => {
     if (idx < 0 || idx >= state.queue.length) return { isPlaying: false, progress: 0 };
     const advTrack = state.queue[idx].track;
+    updateMediaSessionMetadata(advTrack);
     savePref('playd_last_track', advTrack);
     return {
       queueIndex: idx,
