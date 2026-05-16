@@ -84,7 +84,17 @@ Iframe API or a direct fetch to `https://www.youtube.com/oembed`.
 
 ---
 
-## 5. Known issues / gotchas
+## 5. Build & release
+
+- **Version is automatic.** `__PLAYD_VERSION__` is injected at build time by Vite
+  `define` from `git describe --tags --always`. Every deploy automatically gets
+  a version string (e.g. `v1.0.0-5-g738dc72`). No manual version bumps needed.
+- The version displays in **Preferences → About** tab.
+- To trigger a new Electron release: `git tag v1.1.0 && git push --tags`
+- To trigger a PWA deploy: push to `master` or `ai-fixes`
+- The deploy workflow copies `index.html` as `404.html` for SPA routing.
+
+## 6. Known issues / gotchas
 
 - Must use `git@github.com-playd` remote alias for SSH push (key at `~/.ssh/playd_key`).
 - Root `tsconfig.json` may reference non-existent paths from the old monorepo.
