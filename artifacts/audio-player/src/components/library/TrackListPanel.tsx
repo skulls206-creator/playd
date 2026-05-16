@@ -475,13 +475,31 @@ export function TrackListPanel({
                 // If handles exist → rescan them.
                 // If not (e.g. browser cleared storage) → open the picker so the
                 // user can re-select their folder rather than seeing an error.
-                getStoredHandles().then(handles => {
-                  if (handles.length > 0) {
-                    rescanAll();
+                getStoredHandles().then(async (handles) => {
+                  if (handles.length === 0) {
+                    const added = await addFolder();
+                    if (added) refreshHasFolders();
+                    return;
+                  }
+
+                  // Check if any handles need permission re-authorization
+                  let needsReauth = false;
+                  try {
+                    for (const h of handles) {
+                      if ('queryPermission' in h) {
+                        const perm = await (h as any).queryPermission({ mode: 'read' });
+                        if (perm !== 'granted') { needsReauth = true; break; }
+                      }
+                    }
+                  } catch { needsReauth = true; }
+
+                  if (needsReauth) {
+                    // Handles exist but permissions are stale — re-prompt via folder picker
+                    // This updates the stored handle with a fresh permission grant
+                    const added = await addFolder();
+                    if (added) refreshHasFolders();
                   } else {
-                    addFolder().then(added => {
-                      if (added) refreshHasFolders();
-                    });
+                    await rescanAll();
                   }
                 });
               } else {

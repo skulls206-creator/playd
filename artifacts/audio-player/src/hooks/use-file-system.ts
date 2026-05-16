@@ -1275,8 +1275,18 @@ export function useFileSystem() {
       setStatus('No folders added — use Add Folder to import music', 5000);
       return;
     }
+    let anyDenied = false;
     for (const handle of handles) {
+      const permOk = await verifyPermission(handle);
+      if (!permOk) {
+        anyDenied = true;
+        console.warn('[playd] Permission denied for folder:', handle.name);
+        continue;
+      }
       await scanFolder(handle);
+    }
+    if (anyDenied) {
+      setStatus('Some folders need re-authorization — open Settings → Sources to re-add them', 8000);
     }
   };
 
