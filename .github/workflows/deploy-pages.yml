@@ -40,4 +40,5 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: artifacts/audio-player/dist/public
-          force_orphan: true
+          force_orphan: false
+          cname: playd.khurk.xyz
