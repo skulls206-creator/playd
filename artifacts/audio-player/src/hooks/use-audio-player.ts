@@ -241,11 +241,15 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     const lyricsState = nextTrack ? loadLyricsFromStorage(nextTrack.id) : { lyrics: null, lyricsTrackId: null };
     savePref('playd_last_track', nextTrack);
 
+    const overrideDuration = nextTrack?.cueDuration ?? undefined;
+
     return {
       currentTrack: nextTrack,
       queue: nextQueue,
       queueIndex: nextIndex,
       isPlaying: !!nextTrack,
+      progress: nextTrack?.cueOffset ?? 0,
+      duration: overrideDuration !== undefined ? overrideDuration : state.duration,
       ...lyricsState,
     };
   }),
@@ -256,7 +260,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
     if (!state.currentTrack && state.queue.length > 0) {
       const firstTrack = state.queue[0].track;
       updateMediaSessionMetadata(firstTrack);
-      return { currentTrack: firstTrack, queueIndex: 0, isPlaying: true, ...loadLyricsFromStorage(firstTrack.id) };
+      return { currentTrack: firstTrack, queueIndex: 0, isPlaying: true, progress: firstTrack.cueOffset ?? 0, ...loadLyricsFromStorage(firstTrack.id) };
     }
     return { isPlaying: !state.isPlaying };
   }),
@@ -286,7 +290,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       queueIndex: nextIndex,
       currentTrack: nextTrackN,
       isPlaying: true,
-      progress: 0,
+      progress: nextTrackN.cueOffset ?? 0,
       ...loadLyricsFromStorage(nextTrackN.id),
     };
   }),
@@ -312,7 +316,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       queueIndex: prevIndex,
       currentTrack: prevTrack,
       isPlaying: true,
-      progress: 0,
+      progress: prevTrack.cueOffset ?? 0,
       ...loadLyricsFromStorage(prevTrack.id),
     };
   }),
@@ -399,7 +403,7 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       queueIndex: idx,
       currentTrack: advTrack,
       isPlaying: true,
-      progress: 0,
+      progress: advTrack.cueOffset ?? 0,
       ...loadLyricsFromStorage(advTrack.id),
     };
   }),

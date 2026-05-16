@@ -26,6 +26,10 @@ export interface LocalTrack {
   rating: number;
   source: 'local'; // always local now
   replaygainGain: number | null;
+  /** CUE sheet: offset into the audio file where this track starts (seconds) */
+  cueOffset: number | null;
+  /** CUE sheet: actual duration of this segment (seconds), null means full file */
+  cueDuration: number | null;
   createdAt: string;
   updatedAt: string;
 }

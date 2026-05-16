@@ -746,7 +746,10 @@ export function TrackListPanel({
                         </div>
 
                         {/* Title — fixed resizable width, clips long text */}
-                        <div className="shrink-0 pr-3 overflow-hidden" style={{ width: colWidths.title }}>
+                        <div className="shrink-0 pr-3 overflow-hidden flex items-center gap-1" style={{ width: colWidths.title }}>
+                          {(track as any).cueOffset !== undefined && (track as any).cueOffset !== null && (
+                            <span className="text-[9px] font-semibold text-amber-500/70 tracking-wider shrink-0">CUE</span>
+                          )}
                           <span className={clsx('text-xs truncate block', isCurrent && 'font-semibold text-primary')}>
                             {track.title}
                           </span>

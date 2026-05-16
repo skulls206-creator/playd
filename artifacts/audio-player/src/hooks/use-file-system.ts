@@ -3,6 +3,7 @@ import { get, set } from 'idb-keyval';
 import { useTrackStore } from '@/lib/track-store';
 import type { LocalTrack } from '@/lib/track-store';
 import { scanReplaygain } from '@/lib/replaygain-scanner';
+import { parseCueSheet, isCueFile, resolveCueAudioFileName, getCueTrackDuration } from '@/lib/cue-parser';
 
 const ART_STORE_KEY = 'track-art';
 const AUDIO_EXTS = /\.(mp3|flac|m4a|m4p|aac|wav|ogg|opus|webm|wma|aiff|aif|alac|mp4|3gp)$/i;
@@ -1029,7 +1030,79 @@ export function useFileSystem() {
       setStatus(`Saving ${tracks.length} tracks to library…`);
       await upsertTracks(tracks as Omit<LocalTrack, 'id' | 'createdAt' | 'updatedAt'>[]);
 
-      setStatus(`✓ ${tracks.length} tracks imported successfully`, 8000);
+      // ── CUE sheet post-processing ──────────────────────────────────────
+      // Parse any .cue files found during scanning and create virtual tracks.
+      const cueFiles = entries.filter(e => isCueFile(e.relativePath));
+      if (cueFiles.length > 0) {
+        setStatus('Parsing CUE sheets…');
+        let cueTracksCreated = 0;
+        const storedTracks = useTrackStore.getState().tracks;
+
+        for (const { file, relativePath } of cueFiles) {
+          try {
+            const cueText = await file.text();
+            const cue = parseCueSheet(cueText);
+            if (!cue) {
+              console.warn(`[CUE] Failed to parse: ${relativePath}`);
+              continue;
+            }
+
+            // Find the parent audio file in the already-imported tracks
+            const availableFiles = storedTracks
+              .filter(t => t.folderPath === rootName)
+              .map(t => t.fileName);
+            const audioFileName = resolveCueAudioFileName(cue, availableFiles);
+            if (!audioFileName) {
+              console.warn(`[CUE] No matching audio file found for: ${cue.file.fileName}`);
+              continue;
+            }
+
+            const parentTrack = storedTracks.find(t =>
+              t.folderPath === rootName && t.fileName === audioFileName
+            );
+            if (!parentTrack) continue;
+
+            // Create virtual tracks from CUE entries
+            const now = new Date().toISOString();
+            let nextTrackId = Math.max(...storedTracks.map(t => t.id), 0) + 1;
+            const virtualTracks: Array<Omit<LocalTrack, 'id' | 'createdAt' | 'updatedAt'>> = [];
+
+            for (const ct of cue.tracks) {
+              const end = getCueTrackDuration(cue, ct);
+              virtualTracks.push({
+                title: ct.title || `Track ${ct.number}`,
+                artist: ct.performer || cue.albumPerformer || parentTrack.artist,
+                album: cue.albumTitle || parentTrack.album,
+                year: null,
+                genre: null,
+                duration: Math.round(end),
+                trackNumber: ct.number,
+                fileName: parentTrack.fileName,
+                folderPath: parentTrack.folderPath,
+                albumArtDataUrl: parentTrack.albumArtDataUrl,
+                rating: 0,
+                source: 'local',
+                replaygainGain: null,
+                cueOffset: ct.index,
+                cueDuration: Math.round(end),
+              });
+            }
+
+            if (virtualTracks.length > 0) {
+              await upsertTracks(virtualTracks);
+              cueTracksCreated += virtualTracks.length;
+            }
+          } catch (err) {
+            console.error(`[CUE] Error processing ${relativePath}:`, err);
+          }
+        }
+
+        if (cueTracksCreated > 0) {
+          setStatus(`✓ ${tracks.length} tracks + ${cueTracksCreated} CUE tracks imported`, 8000);
+        }
+      } else {
+        setStatus(`✓ ${tracks.length} tracks imported successfully`, 8000);
+      }
     } catch (error) {
       console.error('Scan failed', error);
       setStatus('Scan failed — see console for details', 5000);
@@ -1054,7 +1127,7 @@ export function useFileSystem() {
           await walk(entry, `${path}/${entry.name}`);
         } else if (entry.kind === 'file') {
           const file = await entry.getFile();
-          if (isLikelyAudio(file)) {
+          if (isLikelyAudio(file) || /\.cue$/i.test(entry.name)) {
             entries.push({ file, relativePath: `${path}/${entry.name}` });
           } else {
             const ext = entry.name.includes('.')

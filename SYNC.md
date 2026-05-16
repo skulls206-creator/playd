@@ -52,6 +52,56 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-16 — Satoshi — CUE sheet parser
+
+**Branch:** feat/media-keys-and-stats (unmerged)
+**Commits since last entry:** dd16943..HEAD
+
+### What changed
+- **New `lib/cue-parser.ts`** — full CUE sheet parser supporting:
+  - FILE, TRACK, INDEX (00 pregap + 01), TITLE, PERFORMER, REM, FLAGS
+  - Multiple FILE blocks (chooses the first)
+  - MM:SS:FF timestamp parsing (CD frames = 1/75s)
+  - `getCueTrackDuration()` — calculates per-track duration from adjacent track boundaries
+  - `resolveCueAudioFileName()` — matches referenced audio files to imported tracks
+- **Extended `LocalTrack`** with `cueOffset` (start position in seconds) and `cueDuration`
+  (segment length) — null for normal tracks, set for CUE-derived virtual tracks
+- **CUE auto-import** in `use-file-system.ts`:
+  - `.cue` files now collected alongside audio during scanning
+  - Post-processing phase: pairs CUE files with their parent audio tracks
+  - Creates virtual tracks that reference the same `fileName`/`folderPath` as the parent
+  - Each virtual track has `cueOffset` + `cueDuration` set for seek-at-play
+- **CUE playback** via `use-audio-player.ts`:
+  - `play()`, `next()`, `prev()`, `togglePlay()`, `_advanceToIndex()` all set
+    `progress = track.cueOffset ?? 0` when starting a CUE virtual track
+  - Duration from `cueDuration` overrides the file's full length for progress bar
+  - AudioEngine.tsx (off-limits) loads the full file, then the existing seek effect
+    (`act.audio.currentTime = progress`) jumps to the offset — no changes needed
+- **UI indicator** in `TrackListPanel.tsx`: CUE tracks show a small amber "CUE" badge
+  next to the title
+
+### Why
+- Lossless collectors commonly use single FLAC + .cue combinations
+- Virtual tracks (offset + duration) work without actual file splitting
+- All existing AudioEngine infrastructure (seek, progress) handles CUE offsets
+  without modification
+
+### Verified
+- `pnpm typecheck` passes
+- `pnpm build` succeeds
+
+### Pending / Open questions
+- [ ] CUE tracks currently show parent file's duration in the library overview
+  (not ideal but minor — the TrackListPanel shows correct segment duration)
+- [ ] If the .cue references a file we haven't imported (wrong folder), tracks
+  are silently skipped
+- [ ] Multiple FILE blocks in one CUE is rare but supported (uses the first)
+
+### Off-limits reminder
+AGENTS.md §2.1 respected. No changes to AudioEngine.tsx.
+
+---
+
 ## 2026-05-16 — Satoshi — Playlist folders / nesting
 
 **Branch:** feat/media-keys-and-stats (unmerged)
