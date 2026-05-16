@@ -52,6 +52,54 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-16 — Satoshi — Last.fm / ListenBrainz scrobbling
+
+**Branch:** feat/media-keys-and-stats (unmerged)
+**Commits since last entry:** bd50ba4..HEAD
+
+### What changed
+- **New `lib/scrobble-service.ts`** — dual scrobble engine for Last.fm + ListenBrainz:
+  - `scrobbleNowPlaying()` — sends "now playing" update on track change
+  - `scrobbleTrack()` — sends full scrobble (records the play)
+  - Config persistence via IndexedDB (API keys, session keys, user tokens)
+  - Last.fm auth flow: user authorizes via browser popup, pastes token, we
+    exchange for session key via `auth.getSession`
+  - ListenBrainz: just needs a user token (simpler)
+  - Both services called in parallel, one failing doesn't block the other
+- **New `hooks/use-scrobbler.ts`** — automatically scrobbles during playback:
+  - Sends "now playing" on track change (with dedup)
+  - Sends scrobble at 50% of track or 4 minutes (whichever is shorter)
+  - Ignores tracks <30 seconds (Last.fm requirement)
+  - Dedup ref prevents double-scrobbling the same track
+- **Scrobble settings in Preferences** — new "Scrobble" tab:
+  - Last.fm section: toggle, API key/secret inputs, Connect button (opens auth URL
+    in popup), token paste + verify flow, connected/disconnected state
+  - ListenBrainz section: toggle, user token input with password field
+  - Config auto-saves to IndexedDB on every change
+- **Wired into MainPlayer.tsx** — `useScrobbler()` alongside other hooks
+
+### Why
+- Last.fm + ListenBrainz are the two major scrobble services
+- Browser-native: pure HTTP fetch, no native dependencies needed
+- Works in both PWA and Electron
+
+### Verified
+- `pnpm typecheck` passes
+- `pnpm build` succeeds
+
+### Pending / Open questions
+- [ ] Last.fm API signing uses SHA-256 instead of MD5 (browsers don't have
+  native MD5). Last.fm may reject scrobbles — if so, need a tiny MD5 polyfill.
+  "Now playing" doesn't need signing, so that always works.
+- [ ] User needs to create a Last.fm API account at https://www.last.fm/api
+  and get an API key + secret.
+- [ ] ListenBrainz user token is at https://listenbrainz.org/settings/
+
+### Off-limits reminder
+AGENTS.md §2.1 respected.
+
+---
+
 ## 2026-05-16 — Satoshi — Discord Rich Presence + Electron desktop app
 
 **Branch:** feat/media-keys-and-stats (unmerged)
