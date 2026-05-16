@@ -188,8 +188,8 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
             <PlaydLogo size={22} />
           </h1>
           {onClose && (
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground ml-auto shrink-0" onClick={onClose}>
-              <X className="w-4 h-4" />
+            <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground ml-auto shrink-0 sm:h-7 sm:w-7" onClick={onClose}>
+              <X className="w-5 h-5 sm:w-4 sm:h-4" />
             </Button>
           )}
         </div>
