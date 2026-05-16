@@ -18,12 +18,13 @@ import {
 import {
   ListMusic, Settings, Search,
   Library, Disc3, User, ChevronDown, ChevronRight, X, Download, FileText,
-  Plus, Pencil, Trash2, Upload, RefreshCw, Sparkles,
+  Plus, Pencil, Trash2, Upload, RefreshCw, Sparkles, FolderOpen,
 } from 'lucide-react';
 import { parseM3u, generateM3u, downloadBlob, readFileAsText } from '@/lib/m3u-parser';
 import type { M3uEntry } from '@/lib/m3u-parser';
 import { clsx } from 'clsx';
 import { PlaydLogo } from '@/components/ui/PlaydLogo';
+import type { LocalPlaylist } from '@/lib/track-store';
 
 type NavSection = 'artists' | 'albums' | 'playlists';
 
@@ -67,18 +68,34 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const handleStartCreate = () => {
+  // ── Playlist Folders ───────────────────────────────────────────────────
+  const playlistFolders = useTrackStore(s => s.playlistFolders);
+  const [folderCreating, setFolderCreating] = useState<number | null>(null); // parentId while creating
+  const [folderName, setFolderName] = useState('');
+  const [openFolders, setOpenFolders] = useState<Set<number>>(new Set());
+  const [foldersRenamingId, setFoldersRenamingId] = useState<number | null>(null);
+  const [foldersRenameValue, setFoldersRenameValue] = useState('');
+  const [movingPlaylistId, setMovingPlaylistId] = useState<number | null>(null);
+
+  const rootFolders = useMemo(
+    () => useTrackStore.getState().getFolders(null),
+    [playlistFolders],
+  );
+
+  const handleStartCreate = (folderId?: number | null) => {
     setOpenSections(prev => ({ ...prev, playlists: true }));
     setIsCreating(true);
     setNewName('');
+    setMovingPlaylistId(folderId ?? null);
     setTimeout(() => newInputRef.current?.focus(), 50);
   };
 
   const handleConfirmCreate = () => {
     const name = newName.trim();
     if (!name) { setIsCreating(false); return; }
-    useTrackStore.getState().createPlaylist(name);
+    useTrackStore.getState().createPlaylist(name, false, [], 'all', movingPlaylistId);
     setIsCreating(false);
+    setMovingPlaylistId(null);
     setNewName('');
   };
 
@@ -280,7 +297,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
 
           {/* Playlists */}
           <div className="px-2">
-            {/* Section header row with "+" and smart playlist buttons */}
+            {/* Section header row with folder/playlist/smart-playlist buttons */}
             <div className="flex items-center">
               <button
                 onClick={() => toggleSection('playlists')}
@@ -292,6 +309,19 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
                 <ListMusic className="w-3 h-3" />
                 Playlists
               </button>
+              {/* New Folder */}
+              <button
+                onClick={() => {
+                  setFolderCreating(-1); // root level
+                  setFolderName('');
+                  setTimeout(() => renameInputRef.current?.focus(), 50);
+                }}
+                title="New folder"
+                className="p-1 text-muted-foreground hover:text-amber-400 transition-colors rounded-sm"
+              >
+                <FolderOpen className="w-3 h-3" />
+              </button>
+              {/* Smart Playlist */}
               <Popover open={smartOpen} onOpenChange={setSmartOpen}>
                 <PopoverTrigger asChild>
                   <button
@@ -385,14 +415,27 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
                       </select>
                     </div>
                   </div>
+                  <div className="pt-1">
+                    <select
+                      value={String(movingPlaylistId ?? '')}
+                      onChange={e => setMovingPlaylistId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full h-6 text-[10px] bg-black/30 border border-border/50 rounded px-1 text-foreground"
+                    >
+                      <option value="">Root (no folder)</option>
+                      {playlistFolders.map(f => (
+                        <option key={f.id} value={String(f.id)}>{f.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <Button size="sm" className="w-full h-7 text-xs" onClick={handleCreateSmartPlaylist}>
                     <Sparkles className="w-3 h-3" />
                     Create Smart Playlist
                   </Button>
                 </PopoverContent>
               </Popover>
+              {/* New Playlist */}
               <button
-                onClick={handleStartCreate}
+                onClick={() => handleStartCreate()}
                 title="New playlist"
                 className="p-1 text-muted-foreground hover:text-primary transition-colors rounded-sm"
               >
@@ -402,8 +445,132 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
 
             {openSections.playlists && (
               <div className="mt-0.5 space-y-0.5">
-                {/* Inline new-playlist input */}
-                {isCreating && (
+                {/* Inline new-folder input (root level) */}
+                {folderCreating === -1 && (
+                  <div className="pl-2 pr-1 flex items-center gap-1">
+                    <FolderOpen className="w-3 h-3 text-amber-400/70 shrink-0" />
+                    <input
+                      ref={renameInputRef}
+                      value={folderName}
+                      onChange={e => setFolderName(e.target.value)}
+                      onBlur={() => {
+                        const name = folderName.trim();
+                        if (name) useTrackStore.getState().createPlaylistFolder(name);
+                        setFolderCreating(null);
+                        setFolderName('');
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const name = folderName.trim();
+                          if (name) useTrackStore.getState().createPlaylistFolder(name);
+                          setFolderCreating(null);
+                          setFolderName('');
+                        }
+                        if (e.key === 'Escape') { setFolderCreating(null); setFolderName(''); }
+                      }}
+                      placeholder="Folder name…"
+                      className="flex-1 bg-black/30 border border-amber-500/40 rounded-sm px-2 py-0.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-amber-500/80"
+                    />
+                  </div>
+                )}
+
+                {/* Render root-level folders */}
+                {rootFolders.map(folder => {
+                  const folderPlaylists = playlists.filter(p => p.folderId === folder.id);
+                  const isOpen = openFolders.has(folder.id);
+                  return (
+                    <div key={folder.id}>
+                      {/* Folder header */}
+                      {foldersRenamingId === folder.id ? (
+                        <div className="pl-2 pr-1 flex items-center gap-1">
+                          <FolderOpen className="w-3 h-3 text-amber-400/70 shrink-0" />
+                          <input
+                            ref={renameInputRef}
+                            value={foldersRenameValue}
+                            onChange={e => setFoldersRenameValue(e.target.value)}
+                            onBlur={() => {
+                              const name = foldersRenameValue.trim();
+                              if (name) useTrackStore.getState().renamePlaylistFolder(folder.id, name);
+                              setFoldersRenamingId(null);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                const name = foldersRenameValue.trim();
+                                if (name) useTrackStore.getState().renamePlaylistFolder(folder.id, name);
+                                setFoldersRenamingId(null);
+                              }
+                              if (e.key === 'Escape') setFoldersRenamingId(null);
+                            }}
+                            className="flex-1 bg-black/30 border border-amber-500/40 rounded-sm px-2 py-0.5 text-xs text-foreground outline-none focus:border-amber-500/80"
+                          />
+                        </div>
+                      ) : (
+                        <ContextMenu>
+                          <ContextMenuTrigger asChild>
+                            <button
+                              onClick={() => {
+                                const next = new Set(openFolders);
+                                if (isOpen) next.delete(folder.id);
+                                else next.add(folder.id);
+                                setOpenFolders(next);
+                              }}
+                              className="w-full flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-amber-400/80 hover:text-amber-300 transition-colors rounded-sm"
+                            >
+                              {isOpen
+                                ? <ChevronDown className="w-3 h-3" />
+                                : <ChevronRight className="w-3 h-3" />}
+                              <FolderOpen className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{folder.name}</span>
+                              {folderPlaylists.length > 0 && (
+                                <span className="ml-auto text-[10px] opacity-50">{folderPlaylists.length}</span>
+                              )}
+                            </button>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent className="w-48 bg-zinc-900 border-zinc-700 text-zinc-100 shadow-2xl">
+                            <ContextMenuItem
+                              className="gap-2 cursor-pointer text-xs"
+                              onClick={() => {
+                                setFoldersRenamingId(folder.id);
+                                setFoldersRenameValue(folder.name);
+                                setTimeout(() => renameInputRef.current?.focus(), 50);
+                              }}
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-zinc-400" />
+                              Rename folder
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              className="gap-2 cursor-pointer text-xs"
+                              onClick={() => handleStartCreate(folder.id)}
+                            >
+                              <Plus className="w-3.5 h-3.5 text-zinc-400" />
+                              New playlist here
+                            </ContextMenuItem>
+                            <ContextMenuSeparator className="bg-zinc-700/50" />
+                            <ContextMenuItem
+                              className="gap-2 cursor-pointer text-xs text-red-400"
+                              onClick={() => {
+                                if (confirm(`Delete folder "${folder.name}"? Playlists inside will move to root.`)) {
+                                  useTrackStore.getState().deletePlaylistFolder(folder.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete folder
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
+                      )}
+
+                      {/* Playlists inside the folder */}
+                      {isOpen && folderPlaylists.map(pl => (
+                        <PlaylistItem key={pl.id} pl={pl} depth={2} />
+                      ))}
+                    </div>
+                  );
+                })}
+
+                {/* Inline new-playlist input (root level) */}
+                {isCreating && movingPlaylistId === null && (
                   <div className="pl-4 pr-1">
                     <input
                       ref={newInputRef}
@@ -420,112 +587,12 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
                   </div>
                 )}
 
-                {filteredPlaylists?.map(pl => (
-                  <ContextMenu key={pl.id}>
-                    <ContextMenuTrigger asChild>
-                      <div>
-                        {renamingId === pl.id ? (
-                          <div className="pl-4 pr-1">
-                            <input
-                              ref={renameInputRef}
-                              value={renameValue}
-                              onChange={e => setRenameValue(e.target.value)}
-                              onBlur={() => handleConfirmRename(pl.id)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') handleConfirmRename(pl.id);
-                                if (e.key === 'Escape') setRenamingId(null);
-                              }}
-                              className="w-full bg-black/30 border border-primary/40 rounded-sm px-2 py-0.5 text-xs text-foreground outline-none focus:border-primary/80"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            <NavItem
-                              label={pl.name}
-                              indent
-                              active={libraryFilter.type === 'playlist' && libraryFilter.value === String(pl.id)}
-                              onClick={() => setLibraryFilter({ type: 'playlist', value: String(pl.id), label: pl.name })}
-                            />
-                            {pl.isSmart && (
-                              <Sparkles className="w-2.5 h-2.5 text-purple-400 shrink-0 mr-2" />
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent className="w-48 bg-zinc-900 border-zinc-700 text-zinc-100 shadow-2xl">
-                      <ContextMenuItem
-                        className="gap-2 cursor-pointer text-xs focus:bg-white/8 focus:text-zinc-100"
-                        onClick={() => handleStartRename(pl.id, pl.name)}
-                      >
-                        <Pencil className="w-3.5 h-3.5 text-zinc-400" />
-                        Rename
-                      </ContextMenuItem>
-                      {pl.isSmart && (
-                        <ContextMenuItem
-                          className="gap-2 cursor-pointer text-xs focus:bg-white/8 focus:text-zinc-100"
-                          onClick={() => useTrackStore.getState().evaluateSmartPlaylist(pl.id)}
-                        >
-                          <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
-                          Refresh
-                        </ContextMenuItem>
-                      )}
-                      <ContextMenuSeparator className="bg-zinc-700/50" />
-                      <ContextMenuItem
-                        className="gap-2 cursor-pointer text-xs focus:bg-white/8 text-zinc-200"
-                        onClick={async () => {
-                          const tracks = useTrackStore.getState().getTracksForPlaylist(pl.id);
-                          if (tracks.length === 0) return;
-                          const entries: M3uEntry[] = tracks.map(t => ({
-                            path: `${t.folderPath}/${t.fileName}`,
-                            title: `${t.artist} - ${t.title}`,
-                            duration: t.duration || undefined,
-                          }));
-                          const m3u = generateM3u(entries);
-                          downloadBlob(m3u, `${pl.name.replace(/[^a-z0-9]/gi, '_')}.m3u`);
-                        }}
-                      >
-                        <Download className="w-3.5 h-3.5 text-zinc-400" />
-                        Export M3U
-                      </ContextMenuItem>
-                      <ContextMenuItem
-                        className="gap-2 cursor-pointer text-xs focus:bg-white/8 text-zinc-200"
-                        onClick={() => {
-                          const input = document.createElement('input');
-                          input.type = 'file';
-                          input.accept = '.m3u,.m3u8';
-                          input.onchange = async (e) => {
-                            const file = (e.target as HTMLInputElement).files?.[0];
-                            if (!file) return;
-                            const content = await readFileAsText(file);
-                            const entries = parseM3u(content);
-                            const tracks = useTrackStore.getState().tracks;
-                            for (const entry of entries) {
-                              const match = tracks.find(t => entry.path.includes(t.fileName) || entry.path.includes(`${t.artist} - ${t.title}`));
-                              if (match) {
-                                await useTrackStore.getState().addTrackToPlaylist(pl.id, match.id);
-                              }
-                            }
-                          };
-                          input.click();
-                        }}
-                      >
-                        <Upload className="w-3.5 h-3.5 text-zinc-400" />
-                        Import M3U
-                      </ContextMenuItem>
-                      <ContextMenuSeparator className="bg-zinc-700/50" />
-                      <ContextMenuItem
-                        className="gap-2 cursor-pointer text-xs focus:bg-white/8 text-red-400 focus:text-red-300"
-                        onClick={() => handleDeletePlaylist(pl.id)}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Delete playlist
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
+                {/* Root-level playlists (no folder) */}
+                {filteredPlaylists.filter(p => !p.folderId).map(pl => (
+                  <PlaylistItem key={pl.id} pl={pl} depth={1} />
                 ))}
 
-                {filteredPlaylists.length === 0 && !isCreating && (
+                {filteredPlaylists.length === 0 && !isCreating && rootFolders.length === 0 && (
                   <p className="pl-6 text-[10px] text-muted-foreground/50 italic py-1">No playlists</p>
                 )}
               </div>
@@ -564,5 +631,167 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
         </Button>
       </div>
     </div>
+  );
+}
+
+// ── Playlist item sub-component (used inside Sidebar) ──────────────────────
+
+function PlaylistItem({ pl, depth }: { pl: LocalPlaylist; depth: number }) {
+  const { libraryFilter, setLibraryFilter } = useAudioPlayer();
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const playlistFolders = useTrackStore(s => s.playlistFolders);
+
+  const handleConfirmRename = (id: number) => {
+    const name = renameValue.trim();
+    if (name) useTrackStore.getState().updatePlaylist(id, name);
+    setRenamingId(null);
+  };
+
+  const handleDeletePlaylist = (id: number) => {
+    useTrackStore.getState().deletePlaylist(id);
+    if (libraryFilter.type === 'playlist' && libraryFilter.value === String(id)) {
+      setLibraryFilter({ type: 'all', label: 'All Songs' });
+    }
+  };
+
+  if (renamingId === pl.id) {
+    return (
+      <div className="pl-4 pr-1" style={{ paddingLeft: `${depth * 1 + 1}rem` }}>
+        <input
+          ref={renameInputRef}
+          value={renameValue}
+          onChange={e => setRenameValue(e.target.value)}
+          onBlur={() => handleConfirmRename(pl.id)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') handleConfirmRename(pl.id);
+            if (e.key === 'Escape') setRenamingId(null);
+          }}
+          className="w-full bg-black/30 border border-primary/40 rounded-sm px-2 py-0.5 text-xs text-foreground outline-none focus:border-primary/80"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setLibraryFilter({ type: 'playlist', value: String(pl.id), label: pl.name })}
+            className={clsx(
+              'w-full text-left px-3 py-1 rounded-sm text-xs truncate transition-colors',
+              libraryFilter.type === 'playlist' && libraryFilter.value === String(pl.id)
+                ? 'bg-primary/20 text-primary font-medium'
+                : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+            )}
+            style={{ paddingLeft: `${depth * 1 + 0.5}rem` }}
+          >
+            {pl.name}
+          </button>
+          {pl.isSmart && (
+            <Sparkles className="w-2.5 h-2.5 text-purple-400 shrink-0 mr-2" />
+          )}
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-56 bg-zinc-900 border-zinc-700 text-zinc-100 shadow-2xl">
+        <ContextMenuItem
+          className="gap-2 cursor-pointer text-xs"
+          onClick={() => {
+            setRenamingId(pl.id);
+            setRenameValue(pl.name);
+            setTimeout(() => renameInputRef.current?.focus(), 50);
+          }}
+        >
+          <Pencil className="w-3.5 h-3.5 text-zinc-400" />
+          Rename
+        </ContextMenuItem>
+        <ContextMenuSeparator className="bg-zinc-700/50" />
+        {/* Move to folder submenu */}
+        <ContextMenuItem
+          className="gap-2 cursor-pointer text-xs"
+          onClick={() => useTrackStore.getState().updatePlaylist(pl.id, pl.name, null)}
+          disabled={!pl.folderId}
+        >
+          <FolderOpen className="w-3.5 h-3.5 text-zinc-400" />
+          Move to root
+        </ContextMenuItem>
+        {playlistFolders
+          .filter(f => f.id !== pl.folderId)
+          .map(f => (
+            <ContextMenuItem
+              key={f.id}
+              className="gap-2 cursor-pointer text-xs pl-8"
+              onClick={() => useTrackStore.getState().updatePlaylist(pl.id, pl.name, f.id)}
+            >
+              <FolderOpen className="w-3 h-3 text-amber-400/70" />
+              {f.name}
+            </ContextMenuItem>
+          ))}
+        {pl.isSmart && (
+          <ContextMenuItem
+            className="gap-2 cursor-pointer text-xs"
+            onClick={() => useTrackStore.getState().evaluateSmartPlaylist(pl.id)}
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
+            Refresh
+          </ContextMenuItem>
+        )}
+        <ContextMenuSeparator className="bg-zinc-700/50" />
+        <ContextMenuItem
+          className="gap-2 cursor-pointer text-xs"
+          onClick={async () => {
+            const tracks = useTrackStore.getState().getTracksForPlaylist(pl.id);
+            if (tracks.length === 0) return;
+            const { generateM3u, downloadBlob } = await import('@/lib/m3u-parser');
+            const entries: M3uEntry[] = tracks.map(t => ({
+              path: `${t.folderPath}/${t.fileName}`,
+              title: `${t.artist} - ${t.title}`,
+              duration: t.duration || undefined,
+            }));
+            const m3u = generateM3u(entries);
+            downloadBlob(m3u, `${pl.name.replace(/[^a-z0-9]/gi, '_')}.m3u`);
+          }}
+        >
+          <Download className="w-3.5 h-3.5 text-zinc-400" />
+          Export M3U
+        </ContextMenuItem>
+        <ContextMenuItem
+          className="gap-2 cursor-pointer text-xs"
+          onClick={() => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.m3u,.m3u8';
+            input.onchange = async (e) => {
+              const file = (e.target as HTMLInputElement).files?.[0];
+              if (!file) return;
+              const { readFileAsText, parseM3u } = await import('@/lib/m3u-parser');
+              const content = await readFileAsText(file);
+              const entries = parseM3u(content);
+              const tracks = useTrackStore.getState().tracks;
+              for (const entry of entries) {
+                const match = tracks.find(t => entry.path.includes(t.fileName) || entry.path.includes(`${t.artist} - ${t.title}`));
+                if (match) {
+                  await useTrackStore.getState().addTrackToPlaylist(pl.id, match.id);
+                }
+              }
+            };
+            input.click();
+          }}
+        >
+          <Upload className="w-3.5 h-3.5 text-zinc-400" />
+          Import M3U
+        </ContextMenuItem>
+        <ContextMenuSeparator className="bg-zinc-700/50" />
+        <ContextMenuItem
+          className="gap-2 cursor-pointer text-xs text-red-400"
+          onClick={() => handleDeletePlaylist(pl.id)}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

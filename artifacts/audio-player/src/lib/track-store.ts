@@ -36,6 +36,12 @@ export interface SmartPlaylistRule {
   value: string | number;
 }
 
+export interface PlaylistFolder {
+  id: number;
+  name: string;
+  parentId: number | null; // null = root-level folder; nested 1 level deep
+}
+
 export interface LocalPlaylist {
   id: number;
   name: string;
@@ -44,6 +50,7 @@ export interface LocalPlaylist {
   isSmart?: boolean;
   rules?: SmartPlaylistRule[];
   matchMode?: 'all' | 'any';
+  folderId?: number | null; // links to PlaylistFolder.id
 }
 
 export interface LocalPlaylistTrack {
@@ -65,6 +72,7 @@ const TRACKS_KEY = 'local-tracks';
 const PLAYLISTS_KEY = 'local-playlists';
 const PLAYLIST_TRACKS_KEY = 'local-playlist-tracks';
 const EQ_PRESETS_KEY = 'local-eq-presets';
+const PLAYLIST_FOLDERS_KEY = 'playlist-folders';
 
 // ── Built-in EQ presets (10-band) ──────────────────────────────────────
 
@@ -117,13 +125,22 @@ interface TrackStoreState {
 
   // Playlists
   loadPlaylists: () => Promise<void>;
-  createPlaylist: (name: string, isSmart?: boolean, rules?: SmartPlaylistRule[], matchMode?: 'all' | 'any') => Promise<LocalPlaylist>;
-  updatePlaylist: (id: number, name: string) => Promise<void>;
+  createPlaylist: (name: string, isSmart?: boolean, rules?: SmartPlaylistRule[], matchMode?: 'all' | 'any', folderId?: number | null) => Promise<LocalPlaylist>;
+  updatePlaylist: (id: number, name: string, folderId?: number | null) => Promise<void>;
   deletePlaylist: (id: number) => Promise<void>;
   addTrackToPlaylist: (playlistId: number, trackId: number) => Promise<void>;
   removeTrackFromPlaylist: (playlistId: number, trackId: number) => Promise<void>;
   reorderPlaylistTrack: (playlistId: number, trackId: number, newPosition: number) => Promise<void>;
   evaluateSmartPlaylist: (playlistId: number) => Promise<void>;
+
+  // Playlist Folders
+  playlistFolders: PlaylistFolder[];
+  loadPlaylistFolders: () => Promise<void>;
+  createPlaylistFolder: (name: string, parentId?: number | null) => Promise<PlaylistFolder>;
+  renamePlaylistFolder: (id: number, name: string) => Promise<void>;
+  deletePlaylistFolder: (id: number) => Promise<void>;
+  getPlaylistsInFolder: (folderId: number | null) => LocalPlaylist[];
+  getFolders: (parentId: number | null) => PlaylistFolder[];
 
   // EQ Presets
   eqPresets: LocalEqPreset[];
@@ -137,6 +154,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
   playlists: [],
   playlistTracks: [],
   eqPresets: [],
+  playlistFolders: [],
   loaded: false,
   loading: false,
 
@@ -223,22 +241,23 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     try {
       const pl = await idbGet<LocalPlaylist[]>(PLAYLISTS_KEY);
       const pt = await idbGet<LocalPlaylistTrack[]>(PLAYLIST_TRACKS_KEY);
-      set({ playlists: pl ?? [], playlistTracks: pt ?? [] });
+      const folders = await idbGet<PlaylistFolder[]>(PLAYLIST_FOLDERS_KEY);
+      set({ playlists: pl ?? [], playlistTracks: pt ?? [], playlistFolders: folders ?? [] });
     } catch {}
   },
 
-  createPlaylist: async (name, isSmart = false, rules = [], matchMode = 'all') => {
+  createPlaylist: async (name, isSmart = false, rules = [], matchMode = 'all', folderId = null) => {
     const now = new Date().toISOString();
-    const pl: LocalPlaylist = { id: nextPlaylistId(), name, createdAt: now, updatedAt: now, isSmart, rules, matchMode };
+    const pl: LocalPlaylist = { id: nextPlaylistId(), name, createdAt: now, updatedAt: now, isSmart, rules, matchMode, folderId };
     const playlists = [...get().playlists, pl];
     await idbSet(PLAYLISTS_KEY, playlists);
     set({ playlists });
     return pl;
   },
 
-  updatePlaylist: async (id, name) => {
+  updatePlaylist: async (id, name, folderId?) => {
     const playlists = (get().playlists ?? []).map(p =>
-      p.id === id ? { ...p, name, updatedAt: new Date().toISOString() } : p
+      p.id === id ? { ...p, name, folderId: folderId !== undefined ? folderId : p.folderId, updatedAt: new Date().toISOString() } : p
     );
     await idbSet(PLAYLISTS_KEY, playlists);
     set({ playlists });
@@ -250,6 +269,61 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     await idbSet(PLAYLISTS_KEY, playlists);
     await idbSet(PLAYLIST_TRACKS_KEY, pt);
     set({ playlists, playlistTracks: pt });
+  },
+
+  // ── Playlist Folders ───────────────────────────────────────────────────
+
+  loadPlaylistFolders: async () => {
+    try {
+      const folders = await idbGet<PlaylistFolder[]>(PLAYLIST_FOLDERS_KEY);
+      set({ playlistFolders: folders ?? [] });
+    } catch {}
+  },
+
+  createPlaylistFolder: async (name, parentId = null) => {
+    const folder: PlaylistFolder = {
+      id: nextPlaylistId(), // re-use playlist ID counter (simple enough)
+      name,
+      parentId: parentId ?? null,
+    };
+    const folders = [...get().playlistFolders, folder];
+    await idbSet(PLAYLIST_FOLDERS_KEY, folders);
+    set({ playlistFolders: folders });
+    return folder;
+  },
+
+  renamePlaylistFolder: async (id, name) => {
+    const folders = get().playlistFolders.map(f =>
+      f.id === id ? { ...f, name } : f
+    );
+    await idbSet(PLAYLIST_FOLDERS_KEY, folders);
+    set({ playlistFolders: folders });
+  },
+
+  deletePlaylistFolder: async (id) => {
+    const { playlists, playlistFolders } = get();
+    // Remove folder from playlists that reference it
+    const updatedPlaylists = playlists.map(p =>
+      p.folderId === id ? { ...p, folderId: null } : p
+    );
+    // Also delete any sub-folders (cascade)
+    const subIds = new Set<number>();
+    subIds.add(id);
+    for (const f of playlistFolders) {
+      if (f.parentId === id) subIds.add(f.id);
+    }
+    const updatedFolders = playlistFolders.filter(f => !subIds.has(f.id));
+    await idbSet(PLAYLISTS_KEY, updatedPlaylists);
+    await idbSet(PLAYLIST_FOLDERS_KEY, updatedFolders);
+    set({ playlists: updatedPlaylists, playlistFolders: updatedFolders });
+  },
+
+  getPlaylistsInFolder: (folderId) => {
+    return get().playlists.filter(p => p.folderId === folderId);
+  },
+
+  getFolders: (parentId) => {
+    return get().playlistFolders.filter(f => f.parentId === parentId);
   },
 
   addTrackToPlaylist: async (playlistId, trackId) => {

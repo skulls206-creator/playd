@@ -52,6 +52,49 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-16 — Satoshi — Playlist folders / nesting
+
+**Branch:** feat/media-keys-and-stats (unmerged)
+**Commits since last entry:** d32cfc4..HEAD
+
+### What changed
+- **New data model:** `PlaylistFolder` interface (id, name, parentId) + `folderId` on
+  `LocalPlaylist` — persisted to IndexedDB under key `playlist-folders`
+- **New store actions:** `createPlaylistFolder`, `renamePlaylistFolder`,
+  `deletePlaylistFolder`, `getPlaylistsInFolder`, `getFolders`. `createPlaylist`
+  and `updatePlaylist` now accept an optional `folderId`.
+- **Sidebar rework — playlists section:**
+  - Folders render as collapsible headers with amber accent color + chevron toggle
+  - Playlists inside a folder are indented below it
+  - "New Folder" button alongside "New Playlist" / "Smart Playlist" buttons
+  - Folder context menu: rename, new playlist here, delete (cascade: removes
+    folder, moves contained playlists to root, deletes sub-folders)
+  - Playlist context menu now includes "Move to folder" options (root + all folders)
+  - Smart playlist creation popover also has a folder selector
+  - Folder creation inline input (amber border)
+  - Supports 1 level of folder nesting (parentId)
+- **Extracted `PlaylistItem` component** — used for both root-level and
+  folder-contained playlists (reduces duplication)
+- **Dynamic import for m3u-parser** in PlaylistItem — Vite auto-splits into
+  separate chunk, slightly reduces main bundle
+
+### Why
+- The 8+ playlist limit becomes real once smart + regular playlists accumulate
+- Folder organization mirrors how users naturally group music (genres, moods, eras)
+
+### Verified
+- `pnpm typecheck` passes
+- `pnpm build` succeeds (main chunk 731 KB, m3u-parser auto-split to 0.89 KB)
+
+### Pending / Open questions
+- [ ] Folders currently support 1 level of nesting (parentId). Could extend to
+  deeper nesting with recursive rendering if wanted.
+
+### Off-limits reminder
+AGENTS.md §2.1 respected.
+
+---
+
 ## 2026-05-16 — Satoshi — Folder Watch / Auto-import
 
 **Branch:** feat/media-keys-and-stats (unmerged)
