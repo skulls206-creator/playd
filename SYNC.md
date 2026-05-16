@@ -52,6 +52,34 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-16 — Satoshi — Session wrap-up: all 7 features complete
+
+**Branch:** feat/media-keys-and-stats
+**Commits since last:** bd50ba4..d271b0f (plus tag v1.0.0 pushed)
+
+### Summary of session
+Built all 7 requested features in one session:
+
+1. **Global Media Keys** — `lib/media-session.ts`, `hooks/use-media-session.ts`
+2. **Folder Watch** — `hooks/use-folder-watch.ts` + Preferences UI
+3. **Playlist Folders** — `PlaylistFolder` data model + sidebar tree + context menus
+4. **CUE Sheet Parser** — `lib/cue-parser.ts` + virtual track import + playback
+5. **Stats Dashboard** — `lib/listening-stats.ts` + `/stats` page with Recharts
+6. **Discord RPC + Electron** — `electron/` directory + GitHub Actions build workflow
+7. **Scrobbling** — `lib/scrobble-service.ts` + Last.fm/LB auth + Preferences UI
+
+### Current state
+- Branch `feat/media-keys-and-stats` has all 7 features
+- Tag `v1.0.0` pushed — GitHub Actions building EXE/DMG/AppImage
+- SYNC.md has individual entries for each feature with implementation details
+
+### Verified
+- `pnpm typecheck` passes
+- `pnpm build` succeeds (all features compiled)
+- AGENTS.md §2.1 respected: AudioEngine.tsx, PlaydPlusPanel.tsx, artifact.toml untouched
+
+---
+
 ## 2026-05-16 — Satoshi — Last.fm / ListenBrainz scrobbling
 
 **Branch:** feat/media-keys-and-stats (unmerged)
