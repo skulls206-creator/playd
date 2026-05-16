@@ -32,6 +32,9 @@ jobs:
           PORT: "3000"
 
 
+      - name: Copy index.html as 404.html (SPA fallback)
+        run: cp artifacts/audio-player/dist/public/index.html artifacts/audio-player/dist/public/404.html
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
