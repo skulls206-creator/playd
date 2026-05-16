@@ -52,6 +52,52 @@ artifact.toml untouched) — or list the explicit exception.
 
 # Entries (newest first)
 
+## 2026-05-16 — Satoshi — Listening stats dashboard
+
+**Branch:** feat/media-keys-and-stats (unmerged)
+**Commits since last entry:** 95217c0..HEAD
+
+### What changed
+- **New `lib/listening-stats.ts`** — Zustand store for listening stats:
+  - Tracks total seconds listened, per-track/artist/album play time
+  - Hourly + weekday activity histograms (24h + 7d)
+  - Session management: `startSession`/`endSession`/`tickSession`
+  - Orphaned session recovery (detects stale sessions on reload)
+  - Auto-persists to IndexedDB (debounced 1s after updates)
+  - Weekly activity reset detection
+  - Top-N track/artist sorted lists rebuilt on each update
+- **New `hooks/use-listening-stats-tracker.ts`** — wires store to playback:
+  - Every 5s tick while playing (accumulates elapsed time)
+  - Starts new session on track change, ends on pause/stop
+  - Cleans up on unmount
+- **New `pages/StatsDashboard.tsx`** — full stats page with:
+  - 4 summary cards: total time, sessions, unique tracks, unique artists
+  - Top tracks bar chart with scrollable list (click navigates back to library)
+  - Top artists grid (2-col) with play times
+  - Hourly activity bar chart (24h, green)
+  - Weekday activity bar chart (7d, blue)
+  - Reset button with confirmation
+  - No-data empty state for fresh users
+- **Sidebar link** — "Stats" button in bottom nav (between Install and Preferences)
+- **Route** — `/stats` lazy-loaded with Suspense; Vite auto-splits Recharts into separate
+  389 KB chunk (main bundle stays 740 KB)
+
+### Verified
+- `pnpm typecheck` passes
+- `pnpm build` succeeds
+- Stats page is code-split: 389 KB lazy chunk vs 1132 KB previously in main
+
+### Pending / Open questions
+- [ ] Stats are total-accumulated (not daily/weekly-filtered yet). Could add
+  date-range tracking in a future version if needed.
+- [ ] Top tracks in stats link back to the library — could be smarter about
+  showing the specific track rather than all songs.
+
+### Off-limits reminder
+AGENTS.md §2.1 respected.
+
+---
+
 ## 2026-05-16 — Satoshi — CUE sheet parser
 
 **Branch:** feat/media-keys-and-stats (unmerged)

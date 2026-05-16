@@ -18,7 +18,7 @@ import {
 import {
   ListMusic, Settings, Search,
   Library, Disc3, User, ChevronDown, ChevronRight, X, Download, FileText,
-  Plus, Pencil, Trash2, Upload, RefreshCw, Sparkles, FolderOpen,
+  Plus, Pencil, Trash2, Upload, RefreshCw, Sparkles, FolderOpen, BarChart3,
 } from 'lucide-react';
 import { parseM3u, generateM3u, downloadBlob, readFileAsText } from '@/lib/m3u-parser';
 import type { M3uEntry } from '@/lib/m3u-parser';
@@ -621,6 +621,14 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
             Install App
           </Button>
         )}
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-2 h-7 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => window.location.href = `${import.meta.env.BASE_URL}stats`}
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          Stats
+        </Button>
         <Button
           variant="ghost"
           className="w-full justify-start gap-2 h-7 text-xs text-muted-foreground hover:text-foreground"

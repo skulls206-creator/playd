@@ -1,14 +1,16 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import MainPlayer from "@/pages/MainPlayer";
 import NotFound from "@/pages/not-found";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { KhurkOsBanner } from "@/components/layout/KhurkOsBanner";
 import { DiscordBanner } from "@/components/layout/DiscordBanner";
 import { requestNotificationPermission, setNotificationsEnabled } from "@/hooks/use-now-playing-notification";
+
+const StatsDashboard = lazy(() => import("@/pages/StatsDashboard"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +27,11 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={MainPlayer} />
+      <Route path="/stats">
+        <Suspense fallback={<div className="flex items-center justify-center h-screen text-muted-foreground text-sm">Loading stats…</div>}>
+          <StatsDashboard />
+        </Suspense>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

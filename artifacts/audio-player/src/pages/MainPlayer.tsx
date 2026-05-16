@@ -16,6 +16,7 @@ import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useMediaSession } from '@/hooks/use-media-session';
 import { SpectrumBar } from '@/components/player/SpectrumBar';
 import { useLibraryAutoRestore } from '@/hooks/use-library-auto-restore';
+import { useListeningStatsTracker } from '@/hooks/use-listening-stats-tracker';
 import type { LocalTrack } from '@/lib/track-store';
 
 export default function MainPlayer() {
@@ -25,6 +26,7 @@ export default function MainPlayer() {
   const [clipStudioTrack, setClipStudioTrack] = useState<LocalTrack | null>(null);
   useMediaSession();
   useKeyboardShortcuts();
+  useListeningStatsTracker();
 
   const { needsRestore, restore, dismiss } = useLibraryAutoRestore(rescanAll);
 
