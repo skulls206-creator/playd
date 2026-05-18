@@ -29,6 +29,8 @@ export interface ListeningStats {
   totalSeconds: number;
   /** Per-track play time in seconds, keyed by trackId */
   trackTime: Record<number, number>;
+  /** Track display name keyed by trackId — survives library rescans */
+  trackName: Record<number, string>;
   /** Per-artist play time in seconds */
   artistTime: Record<string, number>;
   /** Per-album play time in seconds */
@@ -58,6 +60,7 @@ function createEmptyStats(): ListeningStats {
   return {
     totalSeconds: 0,
     trackTime: {},
+    trackName: {},
     artistTime: {},
     albumTime: {},
     hourActivity: new Array(24).fill(0),
@@ -135,6 +138,7 @@ export const useListeningStats = create<ListeningStatsStore>((set, get) => ({
             // Session stale (>2 min) — count what we have and close it
             stored.totalSeconds += session.elapsedSec;
             stored.trackTime[session.trackId] = (stored.trackTime[session.trackId] || 0) + session.elapsedSec;
+            stored.trackName[session.trackId] = `${session.title} — ${session.artist}`;
             stored.artistTime[session.artist] = (stored.artistTime[session.artist] || 0) + session.elapsedSec;
             stored.albumTime[session.album] = (stored.albumTime[session.album] || 0) + session.elapsedSec;
             stored.currentSession = null;
@@ -190,6 +194,7 @@ export const useListeningStats = create<ListeningStatsStore>((set, get) => ({
     if (totalElapsed > 1) {
       stats.totalSeconds += totalElapsed;
       stats.trackTime[session.trackId] = (stats.trackTime[session.trackId] || 0) + totalElapsed;
+      stats.trackName[session.trackId] = `${session.title} — ${session.artist}`;
       stats.artistTime[session.artist] = (stats.artistTime[session.artist] || 0) + totalElapsed;
       stats.albumTime[session.album] = (stats.albumTime[session.album] || 0) + totalElapsed;
 
@@ -223,6 +228,7 @@ export const useListeningStats = create<ListeningStatsStore>((set, get) => ({
       stats.totalSeconds += tickElapsed;
       stats.trackTime[stats.currentSession.trackId] =
         (stats.trackTime[stats.currentSession.trackId] || 0) + tickElapsed;
+      stats.trackName[stats.currentSession.trackId] = `${stats.currentSession.title} — ${stats.currentSession.artist}`;
       stats.artistTime[stats.currentSession.artist] =
         (stats.artistTime[stats.currentSession.artist] || 0) + tickElapsed;
       stats.albumTime[stats.currentSession.album] =

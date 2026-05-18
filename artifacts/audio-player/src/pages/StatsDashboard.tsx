@@ -46,7 +46,7 @@ export default function StatsDashboard() {
     return topIds.map(id => {
       const t = tracks.find(tr => tr.id === id);
       return {
-        name: t ? `${t.title}${t.artist ? ` — ${t.artist}` : ''}` : `Track #${id}`,
+        name: t ? `${t.title}${t.artist ? ` — ${t.artist}` : ''}` : stats.trackName[id] || `Track #${id}`,
         seconds: stats.trackTime[id] || 0,
         trackId: id,
       };
