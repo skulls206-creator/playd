@@ -719,7 +719,41 @@ function isLikelyAudio(file: File): boolean {
 }
 
 // ─── In-memory file store (session-only, for playback) ──────────────────────
+// Entries are cleaned up after FILE_CACHE_TTL_MS of inactivity.
+// Accessing or re-setting a key refreshes its TTL.
+const FILE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const fileTimestamps = new Map<string, number>();
 const inMemoryFiles = new Map<string, File>();
+
+function setInMemoryFile(key: string, file: File): void {
+  inMemoryFiles.set(key, file);
+  fileTimestamps.set(key, Date.now());
+}
+
+function getInMemoryFile(key: string): File | undefined {
+  const file = inMemoryFiles.get(key);
+  if (file) {
+    fileTimestamps.set(key, Date.now()); // refresh TTL on access
+  }
+  return file;
+}
+
+function sweepExpiredFiles(): void {
+  const cutoff = Date.now() - FILE_CACHE_TTL_MS;
+  for (const [key, ts] of fileTimestamps) {
+    if (ts < cutoff) {
+      inMemoryFiles.delete(key);
+      fileTimestamps.delete(key);
+    }
+  }
+}
+
+// Periodic sweep every 5 minutes
+setInterval(sweepExpiredFiles, 5 * 60 * 1000);
+
+function hasInMemoryFile(key: string): boolean {
+  return inMemoryFiles.has(key);
+}
 
 function pickFilesViaInput(): Promise<FileList | null> {
   return new Promise((resolve) => {
@@ -831,7 +865,7 @@ export function useFileSystem() {
         const fileName = parts[parts.length - 1];
         const folderPath = parts.slice(0, -1).join('/') || rootName;
 
-        inMemoryFiles.set(`${folderPath}/${fileName}`, file);
+        setInMemoryFile(`${folderPath}/${fileName}`, file);
 
         const fileMeta = parseFilenameMetadata(fileName);
 
@@ -1063,8 +1097,6 @@ export function useFileSystem() {
             if (!parentTrack) continue;
 
             // Create virtual tracks from CUE entries
-            const now = new Date().toISOString();
-            let nextTrackId = Math.max(...storedTracks.map(t => t.id), 0) + 1;
             const virtualTracks: Array<Omit<LocalTrack, 'id' | 'createdAt' | 'updatedAt'>> = [];
 
             for (const ct of cue.tracks) {
@@ -1077,7 +1109,8 @@ export function useFileSystem() {
                 genre: null,
                 duration: Math.round(end),
                 trackNumber: ct.number,
-                fileName: parentTrack.fileName,
+                // Use cueOffset to disambiguate CUE tracks sharing the same audio file
+                fileName: parentTrack.folderPath + '#' + parentTrack.fileName + '#cue' + String(ct.index),
                 folderPath: parentTrack.folderPath,
                 albumArtDataUrl: parentTrack.albumArtDataUrl,
                 rating: 0,
@@ -1163,7 +1196,7 @@ export function useFileSystem() {
       const fileName = 'GRAHAM_-_Enough_For_Me.mp3';
       const file = new File([blob], fileName, { type: 'audio/mpeg' });
       const relativePath = `Samples/${fileName}`;
-      inMemoryFiles.set(relativePath, file);
+      setInMemoryFile(relativePath, file);
       await processTracks([{ file, relativePath }], 'Samples');
       return true;
     } catch (e) {
@@ -1223,7 +1256,7 @@ export function useFileSystem() {
 
   const getFileFromPath = async (fileName: string, folderPath: string): Promise<File | null> => {
     const memKey = `${folderPath}/${fileName}`;
-    if (inMemoryFiles.has(memKey)) return inMemoryFiles.get(memKey)!;
+    if (hasInMemoryFile(memKey)) return getInMemoryFile(memKey)!;
 
     try {
       const handles = await getStoredHandles();

@@ -14,6 +14,12 @@
 
 const TARGET_DBFS = -18;
 
+// ⚠️  WARNING: This function reads the ENTIRE audio file into RAM via
+// file.arrayBuffer(). For very large files (>10 MB) this can consume
+// significant memory. Consider adding a max-read-size check or streaming
+// chunked read if this becomes a bottleneck.
+//
+// TODO: Add a configurable max-read-size limit (e.g. warn/skip files > 50 MB).
 export async function scanReplaygain(file: File): Promise<number> {
   const arrayBuffer = await file.arrayBuffer();
 

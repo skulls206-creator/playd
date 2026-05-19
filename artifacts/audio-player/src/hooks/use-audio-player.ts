@@ -388,8 +388,14 @@ export const useAudioPlayer = create<PlayerState>((set, get) => ({
       return;
     }
     if (state.repeatMode === 'one') {
+      // NOTE: The AudioEngine component's handleEnded callback intercepts
+      // repeat-one BEFORE calling _trackEnded, so this path is effectively
+      // dead code. We keep it as a safety net in case AudioEngine is not
+      // mounted (e.g. testing). We only seek — the Zustand play() setter
+      // does not drive HTMLMediaElement; AudioEngine's currentTrack effect
+      // handles that when play() updates isPlaying.
       state.seek(0);
-      state.play();
+      state.next();
     } else {
       state.next();
     }

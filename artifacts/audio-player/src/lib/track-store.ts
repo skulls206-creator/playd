@@ -9,6 +9,46 @@
 import { create } from 'zustand';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 
+// ── Safe IndexedDB write helper ──────────────────────────────────────────
+// Catches QuotaExceededError and surfaces it to the user
+async function safeIdbSet<T>(key: string, value: T): Promise<void> {
+  try {
+    await idbSet(key, value);
+  } catch (err) {
+    if (isQuotaExceededError(err)) {
+      console.error(
+        `[playd] IndexedDB write failed: storage quota exceeded for key "${key}". ` +
+        `Try clearing old data or freeing disk space.`
+      );
+      // Dispatch a custom event so the UI can show a banner if desired
+      window.dispatchEvent(
+        new CustomEvent('playd:storage-quota-exceeded', {
+          detail: { key, message: 'Storage is full. Try removing some tracks or clearing app data.' },
+        })
+      );
+    } else {
+      console.error(`[playd] IndexedDB write failed for key "${key}":`, err);
+      throw err;
+    }
+  }
+}
+
+function isQuotaExceededError(err: unknown): boolean {
+  if (err instanceof DOMException) {
+    // QuotaExceededError has code 22 in older browsers, name 'QuotaExceededError' in modern ones
+    return err.name === 'QuotaExceededError' || err.code === 22;
+  }
+  if (err instanceof Error) {
+    return (
+      /quota/i.test(err.message) ||
+      /exceeded/i.test(err.message) ||
+      /storage/i.test(err.message) ||
+      /no space/i.test(err.message)
+    );
+  }
+  return false;
+}
+
 // ── Track type (matches what use-file-system produces) ───────────────────
 
 export interface LocalTrack {
@@ -199,7 +239,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
       }
     }
 
-    await idbSet(TRACKS_KEY, current);
+    await safeIdbSet(TRACKS_KEY, current);
     set({ tracks: [...current] });
     return newTracks;
   },
@@ -209,7 +249,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const idx = current.findIndex(t => t.id === id);
     if (idx < 0) return;
     current[idx] = { ...current[idx], ...patch, updatedAt: new Date().toISOString() };
-    await idbSet(TRACKS_KEY, current);
+    await safeIdbSet(TRACKS_KEY, current);
     set({ tracks: [...current] });
   },
 
@@ -218,13 +258,13 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const current = get().tracks.filter(t => !idSet.has(t.id));
     // Also remove from playlistTracks
     const pt = get().playlistTracks.filter(t => !idSet.has(t.trackId));
-    await idbSet(TRACKS_KEY, current);
-    await idbSet(PLAYLIST_TRACKS_KEY, pt);
+    await safeIdbSet(TRACKS_KEY, current);
+    await safeIdbSet(PLAYLIST_TRACKS_KEY, pt);
     set({ tracks: current, playlistTracks: pt });
   },
 
   clearTracks: async () => {
-    await idbSet(TRACKS_KEY, []);
+    await safeIdbSet(TRACKS_KEY, []);
     set({ tracks: [] });
   },
 
@@ -254,7 +294,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const now = new Date().toISOString();
     const pl: LocalPlaylist = { id: nextPlaylistId(), name, createdAt: now, updatedAt: now, isSmart, rules, matchMode, folderId };
     const playlists = [...get().playlists, pl];
-    await idbSet(PLAYLISTS_KEY, playlists);
+    await safeIdbSet(PLAYLISTS_KEY, playlists);
     set({ playlists });
     return pl;
   },
@@ -263,15 +303,15 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const playlists = (get().playlists ?? []).map(p =>
       p.id === id ? { ...p, name, folderId: folderId !== undefined ? folderId : p.folderId, updatedAt: new Date().toISOString() } : p
     );
-    await idbSet(PLAYLISTS_KEY, playlists);
+    await safeIdbSet(PLAYLISTS_KEY, playlists);
     set({ playlists });
   },
 
   deletePlaylist: async (id) => {
     const playlists = get().playlists.filter(p => p.id !== id);
     const pt = get().playlistTracks.filter(p => p.playlistId !== id);
-    await idbSet(PLAYLISTS_KEY, playlists);
-    await idbSet(PLAYLIST_TRACKS_KEY, pt);
+    await safeIdbSet(PLAYLISTS_KEY, playlists);
+    await safeIdbSet(PLAYLIST_TRACKS_KEY, pt);
     set({ playlists, playlistTracks: pt });
   },
 
@@ -291,7 +331,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
       parentId: parentId ?? null,
     };
     const folders = [...get().playlistFolders, folder];
-    await idbSet(PLAYLIST_FOLDERS_KEY, folders);
+    await safeIdbSet(PLAYLIST_FOLDERS_KEY, folders);
     set({ playlistFolders: folders });
     return folder;
   },
@@ -300,7 +340,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const folders = get().playlistFolders.map(f =>
       f.id === id ? { ...f, name } : f
     );
-    await idbSet(PLAYLIST_FOLDERS_KEY, folders);
+    await safeIdbSet(PLAYLIST_FOLDERS_KEY, folders);
     set({ playlistFolders: folders });
   },
 
@@ -317,8 +357,8 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
       if (f.parentId === id) subIds.add(f.id);
     }
     const updatedFolders = playlistFolders.filter(f => !subIds.has(f.id));
-    await idbSet(PLAYLISTS_KEY, updatedPlaylists);
-    await idbSet(PLAYLIST_FOLDERS_KEY, updatedFolders);
+    await safeIdbSet(PLAYLISTS_KEY, updatedPlaylists);
+    await safeIdbSet(PLAYLIST_FOLDERS_KEY, updatedFolders);
     set({ playlists: updatedPlaylists, playlistFolders: updatedFolders });
   },
 
@@ -337,7 +377,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     if (existing) return; // already in playlist
     const maxPos = playlistItems.reduce((max, p) => Math.max(max, p.position), -1);
     const newPt = [...pt, { playlistId, trackId, position: maxPos + 1 }];
-    await idbSet(PLAYLIST_TRACKS_KEY, newPt);
+    await safeIdbSet(PLAYLIST_TRACKS_KEY, newPt);
     set({ playlistTracks: newPt });
   },
 
@@ -345,7 +385,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const pt = get().playlistTracks.filter(
       p => !(p.playlistId === playlistId && p.trackId === trackId)
     );
-    await idbSet(PLAYLIST_TRACKS_KEY, pt);
+    await safeIdbSet(PLAYLIST_TRACKS_KEY, pt);
     set({ playlistTracks: pt });
   },
 
@@ -359,7 +399,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const updated = items.map((p, i) => ({ ...p, position: i }));
     const other = pt.filter(p => p.playlistId !== playlistId);
     const newPt = [...other, ...updated];
-    await idbSet(PLAYLIST_TRACKS_KEY, newPt);
+    await safeIdbSet(PLAYLIST_TRACKS_KEY, newPt);
     set({ playlistTracks: newPt });
   },
 
@@ -367,28 +407,56 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
     const { playlists, tracks } = get();
     const pl = playlists.find(p => p.id === playlistId);
     if (!pl || !pl.isSmart || !pl.rules || pl.rules.length === 0) return;
+
+    // Numeric fields that should use Number comparison (not string coercion)
+    const NUMERIC_FIELDS = new Set(['year', 'trackNumber', 'duration', 'rating'] as const);
+
     const matched = tracks.filter(t => {
       const results = pl.rules!.map(rule => {
-        const val = String(t[rule.field as keyof typeof t] ?? '');
-        const ruleVal = String(rule.value);
+        const field = rule.field;
+        const ruleValue = rule.value;
+
+        if (NUMERIC_FIELDS.has(field as typeof NUMERIC_FIELDS extends Set<infer E> ? E : never)) {
+          // Numeric comparison with proper type guards
+          const trackVal: number = typeof t[field as keyof typeof t] === 'number'
+            ? (t[field as keyof typeof t] as number)
+            : (t[field as keyof typeof t] != null ? Number(t[field as keyof typeof t]) : NaN);
+          const ruleNum: number = typeof ruleValue === 'number' ? ruleValue : Number(ruleValue);
+
+          if (isNaN(trackVal) || isNaN(ruleNum)) return false;
+
+          switch (rule.op) {
+            case 'eq':  return trackVal === ruleNum;
+            case 'neq': return trackVal !== ruleNum;
+            case 'gt':  return trackVal > ruleNum;
+            case 'gte': return trackVal >= ruleNum;
+            case 'lt':  return trackVal < ruleNum;
+            case 'lte': return trackVal <= ruleNum;
+            default:    return false; // contains/startsWith/endsWith not valid for numeric
+          }
+        }
+
+        // String comparison for text fields (title, artist, album, genre)
+        const val: string = t[field as keyof typeof t] != null ? String(t[field as keyof typeof t]) : '';
+        const ruleVal: string = String(ruleValue);
+
+        const STRING_OPS = new Set(['eq', 'neq', 'contains', 'startsWith', 'endsWith']);
+        if (!(STRING_OPS as Set<string>).has(rule.op)) return false; // gt/gte/lt/lte invalid on strings
+
         switch (rule.op) {
-          case 'eq': return val.toLowerCase() === ruleVal.toLowerCase();
-          case 'neq': return val.toLowerCase() !== ruleVal.toLowerCase();
-          case 'gt': return Number(val) > Number(ruleVal);
-          case 'gte': return Number(val) >= Number(ruleVal);
-          case 'lt': return Number(val) < Number(ruleVal);
-          case 'lte': return Number(val) <= Number(ruleVal);
-          case 'contains': return val.toLowerCase().includes(ruleVal.toLowerCase());
+          case 'eq':        return val.toLowerCase() === ruleVal.toLowerCase();
+          case 'neq':       return val.toLowerCase() !== ruleVal.toLowerCase();
+          case 'contains':  return val.toLowerCase().includes(ruleVal.toLowerCase());
           case 'startsWith': return val.toLowerCase().startsWith(ruleVal.toLowerCase());
-          case 'endsWith': return val.toLowerCase().endsWith(ruleVal.toLowerCase());
-          default: return false;
+          case 'endsWith':  return val.toLowerCase().endsWith(ruleVal.toLowerCase());
+          default:          return false;
         }
       });
       return pl.matchMode === 'all' ? results.every(Boolean) : results.some(Boolean);
     });
     const existing = get().playlistTracks.filter(p => p.playlistId !== playlistId);
     const newPt = [...existing, ...matched.map((t, i) => ({ playlistId, trackId: t.id, position: i }))];
-    await idbSet(PLAYLIST_TRACKS_KEY, newPt);
+    await safeIdbSet(PLAYLIST_TRACKS_KEY, newPt);
     set({ playlistTracks: newPt });
   },
 
@@ -405,7 +473,7 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
           ...p,
           id: nextPresetId(),
         }));
-        await idbSet(EQ_PRESETS_KEY, builtins);
+        await safeIdbSet(EQ_PRESETS_KEY, builtins);
         set({ eqPresets: builtins });
       }
     } catch {
@@ -417,14 +485,14 @@ export const useTrackStore = create<TrackStoreState>((set, get) => ({
   createEqPreset: async (name, bands) => {
     const preset: LocalEqPreset = { id: nextPresetId(), name, bands, isBuiltin: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     const eqPresets = [...get().eqPresets, preset];
-    await idbSet(EQ_PRESETS_KEY, eqPresets);
+    await safeIdbSet(EQ_PRESETS_KEY, eqPresets);
     set({ eqPresets });
     return preset;
   },
 
   deleteEqPreset: async (id) => {
     const eqPresets = get().eqPresets.filter(p => p.id !== id);
-    await idbSet(EQ_PRESETS_KEY, eqPresets);
+    await safeIdbSet(EQ_PRESETS_KEY, eqPresets);
     set({ eqPresets });
   },
 }));

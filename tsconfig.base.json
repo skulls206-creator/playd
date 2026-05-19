@@ -1,5 +1,9 @@
 {
   "compilerOptions": {
+    // TODO(ag): Enable "strict": true once codebase is clean.
+    // Currently strictFunctionTypes: false is the only gap — enabling it
+    // would add covariance checks that may produce errors across shared repos.
+    // For now, individual strict flags are explicitly set instead.
     "isolatedModules": true,
     "lib": ["es2022"],
     "module": "esnext",
