@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "PLAYD — foobar2000-style audio player desktop app",
   "main": "main.js",
+  "repository": "https://github.com/skulls206-creator/playd",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
@@ -12,6 +13,7 @@
   },
   "build": {
     "appId": "xyz.khurk.playd",
+    "publish": null,
     "productName": "PLAYD",
     "directories": {
       "output": "dist-electron"
