@@ -38,11 +38,16 @@ jobs:
 
       - name: Install Electron dependencies
         working-directory: electron
-        run: pnpm install
+        run: |
+          rm -f package-lock.json pnpm-lock.yaml
+          npm install --package-lock-only electron electron-builder discord-rpc
 
       - name: Build Electron app (${{ matrix.os }})
         working-directory: electron
-        run: pnpm run build
+        run: |
+          rm -rf node_modules
+          npm install
+          npx electron-builder
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
