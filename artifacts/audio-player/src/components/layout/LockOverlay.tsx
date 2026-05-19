@@ -1,55 +1,54 @@
 import { useRef, useState, useCallback } from 'react';
 import { useLock } from '@/hooks/use-lock';
-import { Lock, ChevronRight } from 'lucide-react';
-import { clsx } from 'clsx';
+import { Lock } from 'lucide-react';
 
-const UNLOCK_THRESHOLD = 0.92;
+const UNLOCK_RADIUS = 80; // px — drag this far in any direction to unlock
 
 export function LockOverlay() {
   const { isLocked, unlock } = useLock();
-  const [dragPct, setDragPct] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const [released, setReleased] = useState(false);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const startX = useRef(0);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const iconRef = useRef<HTMLDivElement>(null);
+  const origin = useRef({ x: 0, y: 0 });
 
   const reset = useCallback(() => {
     setDragging(false);
-    setReleased(true);
-    setDragPct(0);
-    setTimeout(() => setReleased(false), 300);
+    setOffset({ x: 0, y: 0 });
   }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    startX.current = e.clientX;
+    iconRef.current?.setPointerCapture(e.pointerId);
+    origin.current = { x: e.clientX, y: e.clientY };
     setDragging(true);
-    setReleased(false);
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragging) return;
     e.preventDefault();
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dx = e.clientX - rect.left;
-    const pct = Math.max(0, Math.min(1, dx / rect.width));
-    setDragPct(pct);
 
-    if (pct >= UNLOCK_THRESHOLD) {
-      setDragging(false);
-      setDragPct(0);
+    const dx = e.clientX - origin.current.x;
+    const dy = e.clientY - origin.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Clamp visual offset so the icon doesn't fly off screen
+    const clampDist = Math.min(dist, UNLOCK_RADIUS * 1.15);
+    const angle = Math.atan2(dy, dx);
+    setOffset({
+      x: Math.cos(angle) * clampDist,
+      y: Math.sin(angle) * clampDist,
+    });
+
+    if (dist >= UNLOCK_RADIUS) {
+      reset();
       unlock();
     }
-  }, [dragging, unlock]);
+  }, [dragging, unlock, reset]);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
-    if (dragPct < UNLOCK_THRESHOLD) {
-      reset();
-    }
-  }, [dragPct, reset]);
+    reset();
+  }, [reset]);
 
   const onPointerCancel = useCallback(() => {
     reset();
@@ -58,58 +57,35 @@ export function LockOverlay() {
   if (!isLocked) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm touch-none select-none">
-      {/* Lock icon */}
-      <div className="mb-8">
-        <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center">
-          <Lock className="w-10 h-10 text-white/90" />
-        </div>
-      </div>
-
-      <p className="text-white/60 text-sm font-medium tracking-widest uppercase mb-8">
-        Swipe to unlock
-      </p>
-
-      {/* Slide to unlock track */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm touch-none select-none">
+      {/* Dragable lock icon — center of screen, acts like a joystick */}
       <div
-        ref={trackRef}
-        className="relative w-64 h-12 rounded-full bg-white/10 overflow-hidden cursor-pointer"
+        ref={iconRef}
+        className="relative w-24 h-24 rounded-full bg-white/10 flex items-center justify-center cursor-grab active:cursor-grabbing transition-shadow duration-150"
+        style={{
+          transform: `translate(${offset.x}px, ${offset.y}px)`,
+          boxShadow: dragging
+            ? '0 0 40px rgba(255,255,255,0.15), 0 0 80px rgba(255,255,255,0.05)'
+            : 'none',
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
-        style={{ touchAction: 'none' }}
       >
-        {/* Fill gradient */}
-        <div
-          className={clsx(
-            'absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary/60 to-primary transition-[width] duration-75',
-            released && !dragging ? 'transition-all duration-300' : '',
-          )}
-          style={{ width: `${dragPct * 100}%` }}
-        />
-
-        {/* Text label */}
-        <span
-          className={clsx(
-            'absolute inset-0 flex items-center justify-center text-sm font-medium tracking-wider transition-colors',
-            dragPct > 0.3 ? 'text-background' : 'text-white/50',
-          )}
-        >
-          {dragPct > 0.3 ? 'Release to unlock' : 'Slide to unlock'}
-        </span>
-
-        {/* Drag thumb */}
-        <div
-          className={clsx(
-            'absolute top-1 left-1 w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center transition-[left] duration-75',
-            released && !dragging ? 'transition-all duration-300' : '',
-          )}
-          style={{ left: `calc(${Math.max(dragPct * 256, 0)}px + 4px)` }}
-        >
-          <ChevronRight className="w-5 h-5 text-foreground" />
-        </div>
+        {/* Glow ring */}
+        {dragging && (
+          <div className="absolute inset-0 rounded-full border-2 border-white/20 animate-pulse" />
+        )}
+        <Lock className="w-10 h-10 text-white/80" />
       </div>
+
+      {/* Hint text shown faintly when idle */}
+      {!dragging && (
+        <p className="absolute bottom-24 left-1/2 -translate-x-1/2 text-white/30 text-xs font-medium tracking-widest uppercase">
+          Drag to unlock
+        </p>
+      )}
     </div>
   );
 }
