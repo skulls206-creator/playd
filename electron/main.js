@@ -1,16 +1,14 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, globalShortcut } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, globalShortcut, protocol, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 // ── Discord RPC (optional — graceful if missing) ────────────────────────────
-let discordRpc = null;
 let rpcClient = null;
 let rpcReady = false;
 
 try {
-  discordRpc = require('discord-rpc');
-  const clientId = '1505291486974181588';
-  rpcClient = new discordRpc.Client({ transport: 'ipc' });
+  const { Client } = require('discord-rpc');
+  rpcClient = new Client({ transport: 'ipc' });
 } catch (e) {
   console.log('[PLAYD] Discord RPC not available (discord-rpc not installed)');
 }
@@ -25,6 +23,18 @@ const WEBUI_PATH = IS_DEV
   ? path.join(__dirname, '..', 'artifacts', 'audio-player', 'dist', 'public')
   : path.join(process.resourcesPath, 'webui');
 
+// ── Custom protocol (avoids file:// issues with CORS, SW, etc.) ─────────────
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'playd', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
+]);
+
+function getFilePath(url) {
+  let filePath = decodeURIComponent(new URL(url).pathname);
+  if (filePath === '/' || !filePath) filePath = '/index.html';
+  // Strip leading slash to join with absolute path
+  return path.join(WEBUI_PATH, filePath.replace(/^\//, ''));
+}
+
 // ── Window ──────────────────────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -35,6 +45,7 @@ function createWindow() {
     title: 'PLAYD',
     icon: path.join(WEBUI_PATH, 'favicon.png'),
     backgroundColor: '#0a0a0a',
+    show: false, // show when ready to prevent white flash
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -42,14 +53,19 @@ function createWindow() {
     },
   });
 
-  // Load the built PWA
+  // Load the built PWA via custom protocol
   const indexPath = path.join(WEBUI_PATH, 'index.html');
   if (fs.existsSync(indexPath)) {
-    mainWindow.loadFile(indexPath);
+    mainWindow.loadURL('playd://playd/index.html');
   } else {
     console.error('[PLAYD] Build not found. Run `pnpm build` first.');
-    mainWindow.loadURL('data:text/html,<h1>PLAYD — Build not found</h1><p>Run <code>pnpm build</code> in the repo root first.</p>');
+    mainWindow.loadURL('data:text/html,<h1 style="color:white;background:#0a0a0a;font-family:sans-serif;padding:40px">PLAYD — Build not found.<br><br>Run <code>pnpm build</code> in the repo root first.</h1>');
   }
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  });
 
   // Remove default menu bar
   mainWindow.setMenuBarVisibility(false);
@@ -74,7 +90,6 @@ function createTray() {
   try {
     trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
   } catch {
-    // Create a simple 16x16 colored icon as fallback
     trayIcon = nativeImage.createEmpty();
   }
 
@@ -108,12 +123,9 @@ function createTray() {
 
 // ── IPC Handlers ────────────────────────────────────────────────────────────
 function setupIpc() {
-  // Discord RPC: update presence
   ipcMain.on('rpc-update', (event, data) => {
     updateDiscordPresence(data);
   });
-
-  // Discord RPC: clear presence (pause / stop)
   ipcMain.on('rpc-clear', () => {
     clearDiscordPresence();
   });
@@ -133,12 +145,11 @@ async function connectDiscordRpc() {
 
 function updateDiscordPresence(data) {
   if (!rpcClient || !rpcReady) return;
-
   try {
     rpcClient.setActivity({
       details: data.title || 'Unknown Track',
       state: data.artist ? `${data.artist} — ${data.album || ''}` : undefined,
-      largeImageKey: 'playd_logo',       // needs Discord dev portal asset upload
+      largeImageKey: 'playd_logo',
       largeImageText: 'PLAYD',
       smallImageKey: 'playing',
       smallImageText: 'Playing',
@@ -163,12 +174,18 @@ function clearDiscordPresence() {
 
 // ── App Lifecycle ───────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  // Register custom protocol handler for serving files
+  protocol.handle('playd', (req) => {
+    const fullPath = getFilePath(req.url);
+    console.log('[PLAYD] Serving:', fullPath);
+    return net.fetch('file://' + fullPath);
+  });
+
   createWindow();
   createTray();
   setupIpc();
   connectDiscordRpc();
 
-  // Register global media keys (optional — adds native keyboard shortcuts)
   globalShortcut.register('MediaPlayPause', () => {
     mainWindow?.webContents.send('media-key', 'playPause');
   });
@@ -189,10 +206,7 @@ app.on('will-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  // Don't quit on macOS unless explicitly asked
-  if (process.platform !== 'darwin') {
-    // Actually don't quit — we have a tray
-  }
+  // Don't quit — we have a tray
 });
 
 app.on('activate', () => {
