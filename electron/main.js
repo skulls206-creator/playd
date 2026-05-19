@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, globalShortcut, protocol, net } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -23,20 +23,57 @@ const WEBUI_PATH = IS_DEV
   ? path.join(__dirname, '..', 'artifacts', 'audio-player', 'dist', 'public')
   : path.join(process.resourcesPath, 'webui');
 
-// ── Custom protocol (avoids file:// issues with CORS, SW, etc.) ─────────────
-protocol.registerSchemesAsPrivileged([
-  { scheme: 'playd', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
-]);
+// ── Launch a tiny static server for the PWA ──────────────────────────────────
+const http = require('http');
+function mimeLookup(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const map = {
+    '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
+    '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon', '.webp': 'image/webp', '.woff': 'font/woff',
+    '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.otf': 'font/otf',
+    '.eot': 'application/vnd.ms-fontobject', '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.mjs': 'application/javascript',
+    '.map': 'application/json',
+  };
+  return map[ext] || 'application/octet-stream';
+}
+let server = null;
 
-function getFilePath(url) {
-  let filePath = decodeURIComponent(new URL(url).pathname);
-  if (filePath === '/' || !filePath) filePath = '/index.html';
-  // Strip leading slash to join with absolute path
-  return path.join(WEBUI_PATH, filePath.replace(/^\//, ''));
+function startServer() {
+  return new Promise((resolve) => {
+    server = http.createServer((req, res) => {
+      let filePath = req.url === '/' ? '/index.html' : req.url;
+      // Strip query strings
+      filePath = filePath.split('?')[0];
+      const fullPath = path.join(WEBUI_PATH, filePath);
+
+      fs.readFile(fullPath, (err, data) => {
+        if (err) {
+          res.writeHead(404);
+          res.end('Not found');
+          return;
+        }
+        const contentType = mimeLookup(filePath);
+        res.writeHead(200, { 'Content-Type': contentType });
+        res.end(data);
+      });
+    });
+
+    // Use a random available port
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      console.log(`[PLAYD] Static server on http://127.0.0.1:${port}`);
+      resolve(port);
+    });
+  });
 }
 
 // ── Window ──────────────────────────────────────────────────────────────────
-function createWindow() {
+async function createWindow() {
+  const port = await startServer();
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -45,7 +82,7 @@ function createWindow() {
     title: 'PLAYD',
     icon: path.join(WEBUI_PATH, 'favicon.png'),
     backgroundColor: '#0a0a0a',
-    show: false, // show when ready to prevent white flash
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -53,18 +90,12 @@ function createWindow() {
     },
   });
 
-  // Load the built PWA via custom protocol
-  const indexPath = path.join(WEBUI_PATH, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    mainWindow.loadURL('playd://playd/index.html');
-  } else {
-    console.error('[PLAYD] Build not found. Run `pnpm build` first.');
-    mainWindow.loadURL('data:text/html,<h1 style="color:white;background:#0a0a0a;font-family:sans-serif;padding:40px">PLAYD — Build not found.<br><br>Run <code>pnpm build</code> in the repo root first.</h1>');
-  }
+  // Load from the local HTTP server
+  mainWindow.loadURL(`http://127.0.0.1:${port}/index.html`);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    // mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
 
   // Remove default menu bar
@@ -79,6 +110,10 @@ function createWindow() {
   });
 
   mainWindow.on('closed', () => {
+    if (server) {
+      server.close();
+      server = null;
+    }
     mainWindow = null;
   });
 }
@@ -173,15 +208,8 @@ function clearDiscordPresence() {
 }
 
 // ── App Lifecycle ───────────────────────────────────────────────────────────
-app.whenReady().then(() => {
-  // Register custom protocol handler for serving files
-  protocol.handle('playd', (req) => {
-    const fullPath = getFilePath(req.url);
-    console.log('[PLAYD] Serving:', fullPath);
-    return net.fetch('file://' + fullPath);
-  });
-
-  createWindow();
+app.whenReady().then(async () => {
+  await createWindow();
   createTray();
   setupIpc();
   connectDiscordRpc();
@@ -202,6 +230,9 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   if (rpcClient) {
     try { rpcClient.destroy(); } catch {}
+  }
+  if (server) {
+    server.close();
   }
 });
 

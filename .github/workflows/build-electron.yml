@@ -36,10 +36,10 @@ jobs:
       - name: Build PWA
         run: pnpm build
 
-      - name: Rebuild PWA with relative base for Electron
+      - name: Rebuild PWA with root-relative base for Electron
         working-directory: artifacts/audio-player
         env:
-          BASE_PATH: ./
+          BASE_PATH: /
         run: pnpm run build
 
       - name: Install Electron dependencies
