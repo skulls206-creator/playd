@@ -44,9 +44,29 @@ let server = null;
 function startServer() {
   return new Promise((resolve) => {
     server = http.createServer((req, res) => {
-      let filePath = req.url === '/' ? '/index.html' : req.url;
-      // Strip query strings
-      filePath = filePath.split('?')[0];
+      // Normalize the URL — strip query strings and decode
+      const reqPath = req.url.split('?')[0];
+
+      // ── SPA fallback: if the request doesn't look like a file, serve index.html ──
+      const hasExtension = /\.[a-zA-Z0-9]+$/.test(reqPath);
+
+      if (!hasExtension) {
+        // SPA route — serve index.html so React Router / wouter can handle it
+        const indexPath = path.join(WEBUI_PATH, 'index.html');
+        return fs.readFile(indexPath, (err, data) => {
+          if (err) {
+            res.writeHead(500);
+            res.end('Internal error');
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(data);
+        });
+      }
+
+      // ── Static file ──────────────────────────────────────────────────────────
+      let filePath = reqPath;
+      if (filePath === '/') filePath = '/index.html';
       const fullPath = path.join(WEBUI_PATH, filePath);
 
       fs.readFile(fullPath, (err, data) => {

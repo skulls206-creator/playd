@@ -15,6 +15,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { useLocation } from 'wouter';
 import {
   ListMusic, Settings, Search,
   Library, Disc3, User, ChevronDown, ChevronRight, X, Download, FileText,
@@ -33,6 +34,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onClose }: SidebarProps = {}) {
+  const [, setLocation] = useLocation();
   const tracks = useTrackStore(s => s.tracks);
   const playlists = useTrackStore(s => s.playlists);
   const { isScanning } = useFileSystem();
@@ -624,7 +626,7 @@ export function Sidebar({ onClose }: SidebarProps = {}) {
         <Button
           variant="ghost"
           className="w-full justify-start gap-2 h-7 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => window.location.href = `${import.meta.env.BASE_URL}stats`}
+          onClick={() => setLocation('/stats')}
         >
           <BarChart3 className="w-3.5 h-3.5" />
           Stats
