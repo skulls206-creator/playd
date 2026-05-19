@@ -39,11 +39,13 @@ jobs:
       - name: Install Electron dependencies
         working-directory: electron
         run: |
-          rm -f package-lock.json pnpm-lock.yaml
+          node -e "require('fs').existsSync('package-lock.json')&&require('fs').unlinkSync('package-lock.json')"
+          node -e "require('fs').existsSync('pnpm-lock.yaml')&&require('fs').unlinkSync('pnpm-lock.yaml')"
           npm install --package-lock-only electron electron-builder discord-rpc
 
       - name: Build Electron app (${{ matrix.os }})
         working-directory: electron
+        shell: bash
         run: |
           rm -rf node_modules
           npm install
