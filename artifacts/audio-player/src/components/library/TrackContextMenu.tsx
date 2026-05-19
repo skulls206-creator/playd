@@ -170,6 +170,11 @@ export function TrackContextMenu({
             <>
               <p className="text-xs font-semibold truncate text-zinc-100">{track.title}</p>
               <p className="text-[10px] text-zinc-400 truncate">{track.artist || 'Unknown Artist'}</p>
+              <p className="text-[9px] text-zinc-500 mt-0.5 truncate">
+                {track.replaygainGain != null
+                  ? `ReplayGain: ${track.replaygainGain > 0 ? '+' : ''}${track.replaygainGain.toFixed(1)} dB`
+                  : 'No ReplayGain data'}
+              </p>
             </>
           )}
         </div>
