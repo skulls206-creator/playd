@@ -7,7 +7,7 @@ A foobar2000-style audio player PWA — local music, 10-band EQ, smart playlists
 - pnpm monorepo
 - React 19 + Vite + Tailwind v4
 - Electron (desktop build)
-- TypeScript (strict: false)
+- TypeScript (strict: true)
 
 ## Structure
 ```
@@ -30,7 +30,7 @@ A foobar2000-style audio player PWA — local music, 10-band EQ, smart playlists
 - Electron: cross-platform builds for macOS/Windows/Linux, auto-releases via GitHub Releases
 
 ## TypeScript
-- Root: strict: false. Enable strict: true.
+- strict: true
 - Uses project references (tsc --build)
 
 ## Tests & Lint
