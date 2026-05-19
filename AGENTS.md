@@ -5,9 +5,7 @@ local LLMs, etc.) before they edit this repository. **Read it before making
 any changes.** If a rule here conflicts with a one-off chat instruction, ask
 the user to confirm which wins before proceeding.
 
-**Also read `SYNC.md`** (top 1–3 entries) before starting a session — it is
-the running handoff log between agents. When you finish a session, prepend a
-new entry to `SYNC.md` using the template in that file.
+**Also read `CODING-NOTES.md` and `CHANGES.md`** before starting a session to catch up on recent technical changes and architectural updates.
 
 ---
 
