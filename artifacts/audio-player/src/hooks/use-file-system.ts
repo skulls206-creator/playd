@@ -1072,19 +1072,25 @@ export function useFileSystem() {
 
       setStatus(`Saving ${phase1Results.length} tracks to library…`);
 
-      // Phase 2: ReplayGain — only for files under 50 MB, still concurrent
-      const rgPromises: Promise<void>[] = [];
-      for (const { track, file } of phase1Results) {
-        if (file.size < 50 * 1024 * 1024) {
-          rgPromises.push(
-            scanReplaygain(file).then(gain => {
-              (track as any).replaygainGain = Math.round(gain * 10) / 10;
-            }).catch(() => { /* non-critical */ })
-          );
+      // Phase 2: ReplayGain — only for small files, with concurrency limit.
+      // scanReplaygain() decodes the entire file into RAM via OfflineAudioContext
+      // which is extremely memory-hungry. On mobile this is even more constrained.
+      const RG_CONCURRENCY = isMobile ? 1 : 3;
+      const RG_MAX_BYTES = isMobile ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
+      const rgCandidates: Array<{ track: any; file: File }> = [];
+      for (const result of phase1Results) {
+        if (result.file.size < RG_MAX_BYTES) {
+          rgCandidates.push(result as any);
         }
       }
-
-      await Promise.allSettled(rgPromises);
+      // Process RG in concurrent batches so memory doesn't explode
+      const rgResults = await asyncBatch(rgCandidates, RG_CONCURRENCY, async ({ track, file }) => {
+        try {
+          const gain = await scanReplaygain(file);
+          (track as any).replaygainGain = Math.round(gain * 10) / 10;
+        } catch { /* non-critical */ }
+      });
+      void rgResults;
 
       await set(ART_STORE_KEY, artStore);
 
