@@ -1072,26 +1072,6 @@ export function useFileSystem() {
 
       setStatus(`Saving ${phase1Results.length} tracks to library…`);
 
-      // Phase 2: ReplayGain — only for small files, with concurrency limit.
-      // scanReplaygain() decodes the entire file into RAM via OfflineAudioContext
-      // which is extremely memory-hungry. On mobile this is even more constrained.
-      const RG_CONCURRENCY = isMobile ? 1 : 3;
-      const RG_MAX_BYTES = isMobile ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
-      const rgCandidates: Array<{ track: any; file: File }> = [];
-      for (const result of phase1Results) {
-        if (result.file.size < RG_MAX_BYTES) {
-          rgCandidates.push(result as any);
-        }
-      }
-      // Process RG in concurrent batches so memory doesn't explode
-      const rgResults = await asyncBatch(rgCandidates, RG_CONCURRENCY, async ({ track, file }) => {
-        try {
-          const gain = await scanReplaygain(file);
-          (track as any).replaygainGain = Math.round(gain * 10) / 10;
-        } catch { /* non-critical */ }
-      });
-      void rgResults;
-
       await set(ART_STORE_KEY, artStore);
 
       const tracks = phase1Results.map(r => r.track);
@@ -1173,6 +1153,27 @@ export function useFileSystem() {
       } else {
         setStatus(`✓ ${tracks.length} tracks imported successfully`, 8000);
       }
+
+      // Phase 2: ReplayGain — fire-and-forget, never blocks track visibility.
+      // scanReplaygain() decodes the entire file via OfflineAudioContext which
+      // is memory-intensive. Processed in background after tracks are visible.
+      const RG_CONCURRENCY = isMobile ? 1 : 3;
+      const RG_MAX_BYTES = isMobile ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
+      const rgCandidates: Array<{ track: any; file: File }> = [];
+      for (const result of phase1Results) {
+        if (result.file.size < RG_MAX_BYTES) {
+          rgCandidates.push(result as any);
+        }
+      }
+      // Fire and forget — RG trickles in the background
+      (async () => {
+        await asyncBatch(rgCandidates, RG_CONCURRENCY, async ({ track, file }) => {
+          try {
+            const gain = await scanReplaygain(file);
+            (track as any).replaygainGain = Math.round(gain * 10) / 10;
+          } catch { /* non-critical */ }
+        });
+      })();
     } catch (error) {
       console.error('Scan failed', error);
       const msg = error instanceof Error ? error.message : String(error);
