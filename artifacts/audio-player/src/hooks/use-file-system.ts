@@ -809,19 +809,24 @@ async function probeDuration(file: File): Promise<number> {
 // ─── Concurrency-limited async batch processor ────────────────────────────
 // Processes items from an array in batches, with up to `concurrency` items
 // being processed simultaneously. Returns results in original order.
+// `onProgress(total)` is called after each item completes for progress updates.
 async function asyncBatch<T, R>(
   items: T[],
   concurrency: number,
-  fn: (item: T, index: number) => Promise<R>
+  fn: (item: T, index: number) => Promise<R>,
+  onProgress?: (completed: number) => void,
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let nextIndex = 0;
+  let completed = 0;
 
   async function worker(): Promise<void> {
     while (true) {
       const idx = nextIndex++;
       if (idx >= items.length) break;
       results[idx] = await fn(items[idx], idx);
+      completed++;
+      onProgress?.(completed);
     }
   }
 
@@ -897,7 +902,10 @@ export function useFileSystem() {
       const artStore: Record<string, string> = (await get(ART_STORE_KEY)) || {};
 
       // Phase 1: Parse metadata from files with concurrency limit
+      const totalFiles = entries.length;
       const phase1Results = await asyncBatch(entries, CONCURRENCY, async ({ file, relativePath }, idx) => {
+        setScanProgress(idx + 1);
+        setStatus(`Scanning ${rootName}… (${idx + 1}/${totalFiles})`);
         const parts = relativePath.split('/');
         const fileName = parts[parts.length - 1];
         const folderPath = parts.slice(0, -1).join('/') || rootName;
@@ -931,6 +939,10 @@ export function useFileSystem() {
                 genre: tags.genre ?? null,
                 duration: Math.round(dur),
                 trackNumber: tags.trackNumber ?? null,
+                rating: 0,
+                replaygainGain: null,
+                cueOffset: null,
+                cueDuration: null,
                 fileName, folderPath, albumArtDataUrl: null, source: 'local',
               },
               file,
@@ -953,6 +965,10 @@ export function useFileSystem() {
                 genre: tags.genre ?? null,
                 duration: Math.round(dur),
                 trackNumber: tags.trackNumber ?? null,
+                rating: 0,
+                replaygainGain: null,
+                cueOffset: null,
+                cueDuration: null,
                 fileName, folderPath, albumArtDataUrl: null, source: 'local',
               },
               file,
@@ -973,6 +989,10 @@ export function useFileSystem() {
                 genre: flac.tags.genre ?? null,
                 duration: Math.round(dur),
                 trackNumber: flac.tags.trackNumber ?? null,
+                rating: 0,
+                replaygainGain: null,
+                cueOffset: null,
+                cueDuration: null,
                 fileName, folderPath, albumArtDataUrl: null, source: 'local',
               },
               file,
@@ -993,6 +1013,10 @@ export function useFileSystem() {
                 genre: wav.tags.genre ?? null,
                 duration: Math.round(dur),
                 trackNumber: wav.tags.trackNumber ?? null,
+                rating: 0,
+                replaygainGain: null,
+                cueOffset: null,
+                cueDuration: null,
                 fileName, folderPath, albumArtDataUrl: null, source: 'local',
               },
               file,
@@ -1013,6 +1037,10 @@ export function useFileSystem() {
                 genre: m4a.genre ?? null,
                 duration: Math.round(dur),
                 trackNumber: m4a.trackNumber ?? null,
+                rating: 0,
+                replaygainGain: null,
+                cueOffset: null,
+                cueDuration: null,
                 fileName, folderPath, albumArtDataUrl: null, source: 'local',
               },
               file,
@@ -1032,6 +1060,10 @@ export function useFileSystem() {
             year: null, genre: null,
             duration: Math.round(dur),
             trackNumber: null,
+            rating: 0,
+            replaygainGain: null,
+            cueOffset: null,
+            cueDuration: null,
             fileName, folderPath, albumArtDataUrl: null, source: 'local',
           },
           file,
