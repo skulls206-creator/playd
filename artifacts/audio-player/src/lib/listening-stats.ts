@@ -124,30 +124,45 @@ export const useListeningStats = create<ListeningStatsStore>((set, get) => ({
     try {
       const stored = await idbGet<ListeningStats>(STATS_KEY);
       if (stored) {
+        // Merge stored data with fresh defaults so new fields (trackName, etc.)
+        // are always present even if saved by an older version of the app.
+        const defaults = createEmptyStats();
+        const merged: ListeningStats = {
+          ...defaults,
+          ...stored,
+          // Deep-merge fields that are objects (don't just overwrite with defaults)
+          trackTime: { ...defaults.trackTime, ...stored.trackTime },
+          trackName: { ...defaults.trackName, ...stored.trackName },
+          artistTime: { ...defaults.artistTime, ...stored.artistTime },
+          albumTime: { ...defaults.albumTime, ...stored.albumTime },
+          hourActivity: stored.hourActivity?.length === 24 ? stored.hourActivity : defaults.hourActivity,
+          weekdayActivity: stored.weekdayActivity?.length === 7 ? stored.weekdayActivity : defaults.weekdayActivity,
+        };
+
         // Reset weekly activity if a new week started
-        if (!isSameWeek(stored.activityWeekStart)) {
-          stored.hourActivity = new Array(24).fill(0);
-          stored.weekdayActivity = new Array(7).fill(0);
-          stored.activityWeekStart = getWeekStart();
+        if (!isSameWeek(merged.activityWeekStart)) {
+          merged.hourActivity = new Array(24).fill(0);
+          merged.weekdayActivity = new Array(7).fill(0);
+          merged.activityWeekStart = getWeekStart();
         }
         // Check for an orphaned session (app was closed while playing)
-        if (stored.currentSession) {
-          const session = stored.currentSession;
+        if (merged.currentSession) {
+          const session = merged.currentSession;
           const elapsed = (Date.now() - new Date(session.lastUpdatedAt).getTime()) / 1000;
           if (elapsed > 120) {
             // Session stale (>2 min) — count what we have and close it
-            stored.totalSeconds += session.elapsedSec;
-            stored.trackTime[session.trackId] = (stored.trackTime[session.trackId] || 0) + session.elapsedSec;
-            stored.trackName[session.trackId] = `${session.title} — ${session.artist}`;
-            stored.artistTime[session.artist] = (stored.artistTime[session.artist] || 0) + session.elapsedSec;
-            stored.albumTime[session.album] = (stored.albumTime[session.album] || 0) + session.elapsedSec;
-            stored.currentSession = null;
-            stored.lastUpdated = new Date().toISOString();
-            rebuildSortedLists(stored);
+            merged.totalSeconds += session.elapsedSec;
+            merged.trackTime[session.trackId] = (merged.trackTime[session.trackId] || 0) + session.elapsedSec;
+            merged.trackName[session.trackId] = `${session.title} — ${session.artist}`;
+            merged.artistTime[session.artist] = (merged.artistTime[session.artist] || 0) + session.elapsedSec;
+            merged.albumTime[session.album] = (merged.albumTime[session.album] || 0) + session.elapsedSec;
+            merged.currentSession = null;
+            merged.lastUpdated = new Date().toISOString();
+            rebuildSortedLists(merged);
           }
           // else: keep the session alive (played recently)
         }
-        set({ stats: stored, loaded: true });
+        set({ stats: merged, loaded: true });
       } else {
         set({ stats: createEmptyStats(), loaded: true });
       }
