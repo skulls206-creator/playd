@@ -889,7 +889,11 @@ export function useFileSystem() {
     setStatus(`Scanning ${rootName}…`);
 
     try {
-      const CONCURRENCY = 8;
+      // Mobile Chrome has tighter memory limits — lower concurrency to avoid
+      // Aw-Snap crashes from stacking multiple arrayBuffer() calls.
+      // Desktop can handle 8 concurrent workers fine.
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const CONCURRENCY = isMobile ? 3 : 8;
       const artStore: Record<string, string> = (await get(ART_STORE_KEY)) || {};
 
       // Phase 1: Parse metadata from files with concurrency limit
