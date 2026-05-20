@@ -806,6 +806,30 @@ async function probeDuration(file: File): Promise<number> {
   });
 }
 
+// ─── Concurrency-limited async batch processor ────────────────────────────
+// Processes items from an array in batches, with up to `concurrency` items
+// being processed simultaneously. Returns results in original order.
+async function asyncBatch<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const idx = nextIndex++;
+      if (idx >= items.length) break;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 export function useFileSystem() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -831,8 +855,18 @@ export function useFileSystem() {
 
   const verifyPermission = async (fileHandle: FileSystemHandle, readWrite = false) => {
     const options = { mode: readWrite ? 'readwrite' : 'read' } as any;
-    if ((await fileHandle.queryPermission(options)) === 'granted') return true;
-    if ((await fileHandle.requestPermission(options)) === 'granted') return true;
+    // Check existing permission state first — no user gesture needed here
+    const current = await fileHandle.queryPermission(options);
+    if (current === 'granted') return true;
+    // If permission is 'prompt', we may be in a user-gesture context — try requesting
+    if (current === 'prompt') {
+      try {
+        const result = await fileHandle.requestPermission(options);
+        if (result === 'granted') return true;
+      } catch {
+        return false;
+      }
+    }
     return false;
   };
 
@@ -855,12 +889,11 @@ export function useFileSystem() {
     setStatus(`Scanning ${rootName}…`);
 
     try {
-      const tracks: any[] = [];
-      const rgPromises: Promise<void>[] = [];
+      const CONCURRENCY = 8;
       const artStore: Record<string, string> = (await get(ART_STORE_KEY)) || {};
-      let count = 0;
 
-      for (const { file, relativePath } of entries) {
+      // Phase 1: Parse metadata from files with concurrency limit
+      const phase1Results = await asyncBatch(entries, CONCURRENCY, async ({ file, relativePath }, idx) => {
         const parts = relativePath.split('/');
         const fileName = parts[parts.length - 1];
         const folderPath = parts.slice(0, -1).join('/') || rootName;
@@ -868,190 +901,158 @@ export function useFileSystem() {
         setInMemoryFile(`${folderPath}/${fileName}`, file);
 
         const fileMeta = parseFilenameMetadata(fileName);
+        const isOgg = isOggFile(fileName);
+        const isFlac = isFlacFile(fileName);
+        const isWav = isWavFile(fileName);
+        const isMp3 = isMp3File(fileName);
+        // M4A catch-all = an audio file that isn't one of the above specific types
+        const isM4a = !isOgg && !isFlac && !isWav && !isMp3 && AUDIO_EXTS.test(fileName);
 
-        if (isOggFile(fileName)) {
-          // ── Native Vorbis Comment parser ──────────────────────────────────
-          // Reads only the beginning of the file (tags are in the 2nd OGG page,
-          // typically within the first few KB). We cap at 2 MB to cover large
-          // embedded album art without loading entire audio streams into RAM.
-          try {
+        try {
+          if (isOgg) {
             const tagSliceSize = Math.min(file.size, 2 * 1024 * 1024);
             const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
             const bytes = new Uint8Array(tagBuf);
             const tags = parseVorbisComments(bytes);
             let dur = await getOpusDuration(file);
             if (!(dur > 0)) dur = await probeDuration(file);
-
             const artKey = `${folderPath}/${fileName}`;
-            if (tags.albumArtDataUrl) {
-              artStore[artKey] = tags.albumArtDataUrl;
-            }
-
-            tracks.push({
-              title: tags.title || fileMeta.title || fileName,
-              artist: tags.artist || fileMeta.artist || '',
-              album: tags.album || 'Unknown Album',
-              year: tags.year ?? null,
-              genre: tags.genre ?? null,
-              duration: Math.round(dur),
-              trackNumber: tags.trackNumber ?? null,
-              fileName,
-              folderPath,
-              albumArtDataUrl: null,
-              source: 'local',
-            });
-          } catch (err) {
-            console.error(`[playd] vorbis parse error for "${fileName}":`, err);
-            const dur = await probeDuration(file);
-            tracks.push({
-              title: fileMeta.title || fileName,
-              artist: fileMeta.artist || '',
-              album: 'Unknown Album',
-              year: null, genre: null, duration: Math.round(dur), trackNumber: null,
-              fileName, folderPath, albumArtDataUrl: null, source: 'local',
-            });
-          }
-        } else if (isFlacFile(fileName)) {
-          // ── Native FLAC parser ────────────────────────────────────────────
-          try {
-            const tagSliceSize = Math.min(file.size, 4 * 1024 * 1024);
-            const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
-            const flac = parseFlac(new Uint8Array(tagBuf));
-            const artKey = `${folderPath}/${fileName}`;
-            if (flac.albumArtDataUrl) artStore[artKey] = flac.albumArtDataUrl;
-            const dur = flac.duration > 0 ? flac.duration : await probeDuration(file);
-            tracks.push({
-              title: flac.tags.title || fileMeta.title || fileName,
-              artist: flac.tags.artist || fileMeta.artist || '',
-              album: flac.tags.album || 'Unknown Album',
-              year: flac.tags.year ?? null,
-              genre: flac.tags.genre ?? null,
-              duration: Math.round(dur),
-              trackNumber: flac.tags.trackNumber ?? null,
-              fileName, folderPath, albumArtDataUrl: null, source: 'local',
-            });
-          } catch (err) {
-            console.error(`[playd] flac parse error for "${fileName}":`, err);
-            const dur = await probeDuration(file);
-            tracks.push({ title: fileMeta.title || fileName, artist: fileMeta.artist || '', album: 'Unknown Album',
-              year: null, genre: null, duration: Math.round(dur), trackNumber: null, fileName, folderPath, albumArtDataUrl: null, source: 'local' });
-          }
-        } else if (isWavFile(fileName)) {
-          // ── Native WAV parser ─────────────────────────────────────────────
-          try {
-            const tagSliceSize = Math.min(file.size, 4 * 1024 * 1024);
-            const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
-            const wav = parseWav(new Uint8Array(tagBuf));
-            const artKey = `${folderPath}/${fileName}`;
-            if (wav.albumArtDataUrl) artStore[artKey] = wav.albumArtDataUrl;
-            const dur = wav.duration > 0 ? wav.duration : await probeDuration(file);
-            tracks.push({
-              title: wav.tags.title || fileMeta.title || fileName,
-              artist: wav.tags.artist || fileMeta.artist || '',
-              album: wav.tags.album || 'Unknown Album',
-              year: wav.tags.year ?? null,
-              genre: wav.tags.genre ?? null,
-              duration: Math.round(dur),
-              trackNumber: wav.tags.trackNumber ?? null,
-              fileName, folderPath, albumArtDataUrl: null, source: 'local',
-            });
-          } catch (err) {
-            console.error(`[playd] wav parse error for "${fileName}":`, err);
-            const dur = await probeDuration(file);
-            tracks.push({ title: fileMeta.title || fileName, artist: fileMeta.artist || '', album: 'Unknown Album',
-              year: null, genre: null, duration: Math.round(dur), trackNumber: null, fileName, folderPath, albumArtDataUrl: null, source: 'local' });
-          }
-        } else if (isMp3File(fileName)) {
-          // ── Native ID3v2 parser for MP3 files ─────────────────────────────
-          try {
-            // Read only up to 10 MB for tag parsing — covers even large APIC art
+            if (tags.albumArtDataUrl) artStore[artKey] = tags.albumArtDataUrl;
+            return {
+              track: {
+                title: tags.title || fileMeta.title || fileName,
+                artist: tags.artist || fileMeta.artist || '',
+                album: tags.album || 'Unknown Album',
+                year: tags.year ?? null,
+                genre: tags.genre ?? null,
+                duration: Math.round(dur),
+                trackNumber: tags.trackNumber ?? null,
+                fileName, folderPath, albumArtDataUrl: null, source: 'local',
+              },
+              file,
+            };
+          } else if (isMp3) {
             const tagSliceSize = Math.min(file.size, 10 * 1024 * 1024);
             const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
             const bytes = new Uint8Array(tagBuf);
             const tags = parseID3v2(bytes);
             let dur = await getMp3Duration(file);
             if (!(dur > 0)) dur = await probeDuration(file);
-
             const artKey = `${folderPath}/${fileName}`;
-            if (tags.albumArtDataUrl) {
-              artStore[artKey] = tags.albumArtDataUrl;
-            }
-
-            tracks.push({
-              title: tags.title || fileMeta.title || fileName,
-              artist: tags.artist || fileMeta.artist || '',
-              album: tags.album || 'Unknown Album',
-              year: tags.year ?? null,
-              genre: tags.genre ?? null,
-              duration: Math.round(dur),
-              trackNumber: tags.trackNumber ?? null,
-              fileName,
-              folderPath,
-              albumArtDataUrl: null,
-              source: 'local',
-            });
-          } catch (err) {
-            console.error(`[playd] id3 parse error for "${fileName}":`, err);
-            const dur = await probeDuration(file);
-            tracks.push({
-              title: fileMeta.title || fileName,
-              artist: fileMeta.artist || '',
-              album: 'Unknown Album',
-              year: null, genre: null, duration: Math.round(dur), trackNumber: null,
-              fileName, folderPath, albumArtDataUrl: null, source: 'local',
-            });
-          }
-        } else {
-          // ── Native M4A/MP4 atom parser for M4A, AAC, ALAC, MP4, etc. ─────
-          try {
+            if (tags.albumArtDataUrl) artStore[artKey] = tags.albumArtDataUrl;
+            return {
+              track: {
+                title: tags.title || fileMeta.title || fileName,
+                artist: tags.artist || fileMeta.artist || '',
+                album: tags.album || 'Unknown Album',
+                year: tags.year ?? null,
+                genre: tags.genre ?? null,
+                duration: Math.round(dur),
+                trackNumber: tags.trackNumber ?? null,
+                fileName, folderPath, albumArtDataUrl: null, source: 'local',
+              },
+              file,
+            };
+          } else if (isFlac) {
+            const tagSliceSize = Math.min(file.size, 4 * 1024 * 1024);
+            const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
+            const flac = parseFlac(new Uint8Array(tagBuf));
+            const artKey = `${folderPath}/${fileName}`;
+            if (flac.albumArtDataUrl) artStore[artKey] = flac.albumArtDataUrl;
+            const dur = flac.duration > 0 ? flac.duration : await probeDuration(file);
+            return {
+              track: {
+                title: flac.tags.title || fileMeta.title || fileName,
+                artist: flac.tags.artist || fileMeta.artist || '',
+                album: flac.tags.album || 'Unknown Album',
+                year: flac.tags.year ?? null,
+                genre: flac.tags.genre ?? null,
+                duration: Math.round(dur),
+                trackNumber: flac.tags.trackNumber ?? null,
+                fileName, folderPath, albumArtDataUrl: null, source: 'local',
+              },
+              file,
+            };
+          } else if (isWav) {
+            const tagSliceSize = Math.min(file.size, 4 * 1024 * 1024);
+            const tagBuf = await file.slice(0, tagSliceSize).arrayBuffer();
+            const wav = parseWav(new Uint8Array(tagBuf));
+            const artKey = `${folderPath}/${fileName}`;
+            if (wav.albumArtDataUrl) artStore[artKey] = wav.albumArtDataUrl;
+            const dur = wav.duration > 0 ? wav.duration : await probeDuration(file);
+            return {
+              track: {
+                title: wav.tags.title || fileMeta.title || fileName,
+                artist: wav.tags.artist || fileMeta.artist || '',
+                album: wav.tags.album || 'Unknown Album',
+                year: wav.tags.year ?? null,
+                genre: wav.tags.genre ?? null,
+                duration: Math.round(dur),
+                trackNumber: wav.tags.trackNumber ?? null,
+                fileName, folderPath, albumArtDataUrl: null, source: 'local',
+              },
+              file,
+            };
+          } else if (isM4a) {
             const sliceSize = Math.min(file.size, 8 * 1024 * 1024);
             const tagBuf = await file.slice(0, sliceSize).arrayBuffer();
             const m4a = parseM4A(new Uint8Array(tagBuf));
             const artKey = `${folderPath}/${fileName}`;
             if (m4a.albumArtDataUrl) artStore[artKey] = m4a.albumArtDataUrl;
             const dur = m4a.duration > 0 ? m4a.duration : await probeDuration(file);
-            tracks.push({
-              title: m4a.title || fileMeta.title || fileName,
-              artist: m4a.artist || fileMeta.artist || '',
-              album: m4a.album || 'Unknown Album',
-              year: m4a.year ?? null,
-              genre: m4a.genre ?? null,
-              duration: Math.round(dur),
-              trackNumber: m4a.trackNumber ?? null,
-              fileName,
-              folderPath,
-              albumArtDataUrl: null,
-              source: 'local',
-            });
-          } catch (err) {
-            console.error(`[playd] m4a parse error for "${fileName}":`, err);
-            const dur = await probeDuration(file);
-            tracks.push({
-              title: fileMeta.title || fileName,
-              artist: fileMeta.artist || '',
-              album: 'Unknown Album',
-              year: null, genre: null, duration: Math.round(dur), trackNumber: null,
-              fileName, folderPath, albumArtDataUrl: null, source: 'local',
-            });
+            return {
+              track: {
+                title: m4a.title || fileMeta.title || fileName,
+                artist: m4a.artist || fileMeta.artist || '',
+                album: m4a.album || 'Unknown Album',
+                year: m4a.year ?? null,
+                genre: m4a.genre ?? null,
+                duration: Math.round(dur),
+                trackNumber: m4a.trackNumber ?? null,
+                fileName, folderPath, albumArtDataUrl: null, source: 'local',
+              },
+              file,
+            };
           }
+        } catch (err) {
+          console.error(`[playd] parse error for "${fileName}":`, err);
         }
 
-        count++;
-        setScanProgress(count);
-        setStatus(`Scanning ${rootName}… (${count} files loaded)`);
+        // Fallback: unknown file type or parse error
+        const dur = await probeDuration(file);
+        return {
+          track: {
+            title: fileMeta.title || fileName,
+            artist: fileMeta.artist || '',
+            album: 'Unknown Album',
+            year: null, genre: null,
+            duration: Math.round(dur),
+            trackNumber: null,
+            fileName, folderPath, albumArtDataUrl: null, source: 'local',
+          },
+          file,
+        };
+      });
 
-        // Background ReplayGain scan — non-blocking, resolves before upsert
-        rgPromises.push(
-          scanReplaygain(file).then(gain => {
-            const last = tracks[tracks.length - 1];
-            if (last) last.replaygainGain = Math.round(gain * 10) / 10;
-          }).catch(() => { /* non-critical */ })
-        );
+      setStatus(`Saving ${phase1Results.length} tracks to library…`);
+
+      // Phase 2: ReplayGain — only for files under 50 MB, still concurrent
+      const rgPromises: Promise<void>[] = [];
+      for (const { track, file } of phase1Results) {
+        if (file.size < 50 * 1024 * 1024) {
+          rgPromises.push(
+            scanReplaygain(file).then(gain => {
+              (track as any).replaygainGain = Math.round(gain * 10) / 10;
+            }).catch(() => { /* non-critical */ })
+          );
+        }
       }
 
       await Promise.allSettled(rgPromises);
 
       await set(ART_STORE_KEY, artStore);
+
+      const tracks = phase1Results.map(r => r.track);
 
       if (tracks.length === 0) {
         const extInfo = skippedExts && skippedExts.length > 0
@@ -1061,11 +1062,9 @@ export function useFileSystem() {
         return;
       }
 
-      setStatus(`Saving ${tracks.length} tracks to library…`);
       await upsertTracks(tracks as Omit<LocalTrack, 'id' | 'createdAt' | 'updatedAt'>[]);
 
       // ── CUE sheet post-processing ──────────────────────────────────────
-      // Parse any .cue files found during scanning and create virtual tracks.
       const cueFiles = entries.filter(e => isCueFile(e.relativePath));
       if (cueFiles.length > 0) {
         setStatus('Parsing CUE sheets…');
@@ -1081,7 +1080,6 @@ export function useFileSystem() {
               continue;
             }
 
-            // Find the parent audio file in the already-imported tracks
             const availableFiles = storedTracks
               .filter(t => t.folderPath === rootName)
               .map(t => t.fileName);
@@ -1096,7 +1094,6 @@ export function useFileSystem() {
             );
             if (!parentTrack) continue;
 
-            // Create virtual tracks from CUE entries
             const virtualTracks: Array<Omit<LocalTrack, 'id' | 'createdAt' | 'updatedAt'>> = [];
 
             for (const ct of cue.tracks) {
@@ -1105,11 +1102,9 @@ export function useFileSystem() {
                 title: ct.title || `Track ${ct.number}`,
                 artist: ct.performer || cue.albumPerformer || parentTrack.artist,
                 album: cue.albumTitle || parentTrack.album,
-                year: null,
-                genre: null,
+                year: null, genre: null,
                 duration: Math.round(end),
                 trackNumber: ct.number,
-                // Use cueOffset to disambiguate CUE tracks sharing the same audio file
                 fileName: parentTrack.folderPath + '#' + parentTrack.fileName + '#cue' + String(ct.index),
                 folderPath: parentTrack.folderPath,
                 albumArtDataUrl: parentTrack.albumArtDataUrl,
@@ -1311,8 +1306,20 @@ export function useFileSystem() {
     }
     let anyDenied = false;
     for (const handle of handles) {
-      const permOk = await verifyPermission(handle);
-      if (!permOk) {
+      // Use the two-step permission check (don't rely on verifyPermission which
+      // may fail when requestPermission returns 'denied' without user gesture).
+      let perm: PermissionState;
+      try {
+        perm = await handle.queryPermission({ mode: 'read' });
+        if (perm === 'prompt') {
+          // We have a user gesture (Sync Now button click) — request permission fresh
+          perm = await handle.requestPermission({ mode: 'read' });
+        }
+      } catch {
+        perm = 'denied';
+      }
+
+      if (perm !== 'granted') {
         anyDenied = true;
         console.warn('[playd] Permission denied for folder:', handle.name);
         continue;
