@@ -29,8 +29,6 @@ import {
   setNotificationsEnabled,
   requestNotificationPermission,
 } from '@/hooks/use-now-playing-notification';
-import { getScrobbleConfig, saveScrobbleConfig, getLastfmAuthUrl, getLastfmSession } from '@/lib/scrobble-service';
-import type { ScrobbleConfig } from '@/lib/scrobble-service';
 
 export function PreferencesPanel() {
   const {
@@ -41,16 +39,6 @@ export function PreferencesPanel() {
   } = useAudioPlayer();
   const { loadSampleTrack, scanFileList, scanFolder, isScanning, scanStatus, getFileFromPath, getStoredHandles } = useFileSystem();
   const folderWatch = useFolderWatch();
-  const [scrobbleConfig, setScrobbleConfig] = useState<ScrobbleConfig | null>(null);
-  const [scrobbleLoading, setScrobbleLoading] = useState(true);
-  const [scrobbleLastfmToken, setScrobbleLastfmToken] = useState('');
-
-  useEffect(() => {
-    getScrobbleConfig().then(c => {
-      setScrobbleConfig(c);
-      setScrobbleLoading(false);
-    });
-  }, []);
 
   const folderInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef  = useRef<HTMLInputElement>(null);
@@ -330,7 +318,6 @@ export function PreferencesPanel() {
             <TabsTrigger value="sources"    className="flex-1 text-xs">Sources</TabsTrigger>
             <TabsTrigger value="playback"   className="flex-1 text-xs">Playback</TabsTrigger>
             <TabsTrigger value="appearance" className="flex-1 text-xs">Appearance</TabsTrigger>
-            <TabsTrigger value="scrobble"   className="flex-1 text-xs">Scrobble</TabsTrigger>
             <TabsTrigger value="about"      className="flex-1 text-xs">About</TabsTrigger>
           </TabsList>
 
@@ -901,231 +888,6 @@ export function PreferencesPanel() {
           </TabsContent>
 
           {/* ── SCROBBLE TAB ── */}
-          <TabsContent value="scrobble" className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 mt-4">
-            {scrobbleLoading ? (
-              <div className="text-xs text-muted-foreground py-8 text-center">Loading scrobble config...</div>
-            ) : scrobbleConfig ? (
-              <>
-                {/* Last.fm */}
-                <section>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <ExternalLink className="w-3.5 h-3.5 text-red-400" />
-                      <h3 className="text-sm font-semibold">Last.fm</h3>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        const updated = { ...scrobbleConfig, lastfm: { ...scrobbleConfig.lastfm, enabled: !scrobbleConfig.lastfm.enabled } };
-                        setScrobbleConfig(updated);
-                        await saveScrobbleConfig(updated);
-                      }}
-                      className={clsx(
-                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
-                        'transition-colors duration-200 focus:outline-none',
-                        scrobbleConfig.lastfm.enabled ? 'bg-primary' : 'bg-border',
-                      )}
-                      role="switch"
-                      aria-checked={scrobbleConfig.lastfm.enabled}
-                    >
-                      <span
-                        className={clsx(
-                          'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg',
-                          'transform transition duration-200',
-                          scrobbleConfig.lastfm.enabled ? 'translate-x-4' : 'translate-x-0',
-                        )}
-                      />
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mb-3">
-                    Scrobble plays to your Last.fm profile.
-                    {scrobbleConfig.lastfm.enabled && !scrobbleConfig.lastfm.sessionKey && (
-                      <span className="text-amber-400 block mt-1">
-                        Needs authentication — connect your Last.fm account below.
-                      </span>
-                    )}
-                  </p>
-
-                  {/* API Key */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">API Key</label>
-                    <Input
-                      value={scrobbleConfig.lastfm.apiKey}
-                      onChange={async (e) => {
-                        const updated = { ...scrobbleConfig, lastfm: { ...scrobbleConfig.lastfm, apiKey: e.target.value } };
-                        setScrobbleConfig(updated);
-                        await saveScrobbleConfig(updated);
-                      }}
-                      placeholder="Your Last.fm API key"
-                      className="h-7 text-xs bg-black/20 border-border/50"
-                    />
-                  </div>
-
-                  {/* API Secret */}
-                  <div className="space-y-2 mt-2">
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">API Secret</label>
-                    <Input
-                      type="password"
-                      value={scrobbleConfig.lastfm.apiSecret}
-                      onChange={async (e) => {
-                        const updated = { ...scrobbleConfig, lastfm: { ...scrobbleConfig.lastfm, apiSecret: e.target.value } };
-                        setScrobbleConfig(updated);
-                        await saveScrobbleConfig(updated);
-                      }}
-                      placeholder="Your Last.fm API secret"
-                      className="h-7 text-xs bg-black/20 border-border/50"
-                    />
-                  </div>
-
-                  {/* Auth link */}
-                  {scrobbleConfig.lastfm.apiKey && !scrobbleConfig.lastfm.sessionKey && (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-[10px] text-muted-foreground">
-                        1. Click the button below to authorize PLAYD on Last.fm
-                      </p>
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs gap-1 w-full"
-                        onClick={() => {
-                          const authUrl = getLastfmAuthUrl(
-                            scrobbleConfig.lastfm.apiKey,
-                            window.location.origin + '/lastfm-callback'
-                          );
-                          window.open(authUrl, '_blank', 'width=600,height=600');
-                        }}
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        Connect Last.fm
-                      </Button>
-                      <p className="text-[10px] text-muted-foreground">
-                        2. After authorizing, paste the token from the URL below:
-                      </p>
-                      <div className="flex gap-2">
-                        <Input
-                          value={scrobbleLastfmToken}
-                          onChange={e => setScrobbleLastfmToken(e.target.value)}
-                          placeholder="Paste token here"
-                          className="h-7 text-xs bg-black/20 border-border/50"
-                        />
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs shrink-0"
-                          disabled={!scrobbleLastfmToken}
-                          onClick={async () => {
-                            const result = await getLastfmSession(
-                              scrobbleConfig.lastfm.apiKey,
-                              scrobbleConfig.lastfm.apiSecret,
-                              scrobbleLastfmToken
-                            );
-                            if (result) {
-                              const updated = {
-                                ...scrobbleConfig,
-                                lastfm: {
-                                  ...scrobbleConfig.lastfm,
-                                  sessionKey: result.sessionKey,
-                                  username: result.username,
-                                },
-                              };
-                              setScrobbleConfig(updated);
-                              await saveScrobbleConfig(updated);
-                              setScrobbleLastfmToken('');
-                            }
-                          }}
-                        >
-                          Verify
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Connected state */}
-                  {scrobbleConfig.lastfm.sessionKey && (
-                    <div className="mt-3 p-3 rounded-md bg-black/20 border border-border/30">
-                      <div className="flex items-center gap-2 text-xs">
-                        <Check className="w-3.5 h-3.5 text-green-400" />
-                        <span>Connected as <strong>{scrobbleConfig.lastfm.username}</strong></span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 text-[10px] text-muted-foreground mt-2"
-                        onClick={async () => {
-                          const updated = {
-                            ...scrobbleConfig,
-                            lastfm: { ...scrobbleConfig.lastfm, sessionKey: '', username: '' },
-                          };
-                          setScrobbleConfig(updated);
-                          await saveScrobbleConfig(updated);
-                        }}
-                      >
-                        Disconnect
-                      </Button>
-                    </div>
-                  )}
-                </section>
-
-                <Separator className="border-border/20" />
-
-                {/* ListenBrainz */}
-                <section>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <ExternalLink className="w-3.5 h-3.5 text-purple-400" />
-                      <h3 className="text-sm font-semibold">ListenBrainz</h3>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        const updated = { ...scrobbleConfig, listenbrainz: { ...scrobbleConfig.listenbrainz, enabled: !scrobbleConfig.listenbrainz.enabled } };
-                        setScrobbleConfig(updated);
-                        await saveScrobbleConfig(updated);
-                      }}
-                      className={clsx(
-                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
-                        'transition-colors duration-200 focus:outline-none',
-                        scrobbleConfig.listenbrainz.enabled ? 'bg-primary' : 'bg-border',
-                      )}
-                      role="switch"
-                      aria-checked={scrobbleConfig.listenbrainz.enabled}
-                    >
-                      <span
-                        className={clsx(
-                          'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg',
-                          'transform transition duration-200',
-                          scrobbleConfig.listenbrainz.enabled ? 'translate-x-4' : 'translate-x-0',
-                        )}
-                      />
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mb-3">
-                    Scrobble plays to your ListenBrainz profile. You need your user token.
-                  </p>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">User Token</label>
-                    <Input
-                      type="password"
-                      value={scrobbleConfig.listenbrainz.userToken}
-                      onChange={async (e) => {
-                        const updated = { ...scrobbleConfig, listenbrainz: { ...scrobbleConfig.listenbrainz, userToken: e.target.value } };
-                        setScrobbleConfig(updated);
-                        await saveScrobbleConfig(updated);
-                      }}
-                      placeholder="Your ListenBrainz user token"
-                      className="h-7 text-xs bg-black/20 border-border/50"
-                    />
-                  </div>
-
-                  {scrobbleConfig.listenbrainz.userToken && (
-                    <div className="mt-3 p-3 rounded-md bg-black/20 border border-border/30">
-                      <div className="flex items-center gap-2 text-xs">
-                        <Check className="w-3.5 h-3.5 text-green-400" />
-                        <span>User token configured</span>
-                      </div>
-                    </div>
-                  )}
-                </section>
-              </>
-            ) : null}
-          </TabsContent>
 
           {/* ── APPEARANCE TAB ── */}
           <TabsContent value="appearance" className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 mt-4">
