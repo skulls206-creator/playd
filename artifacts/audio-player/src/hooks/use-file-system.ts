@@ -9,6 +9,32 @@ import { parseCueSheet, isCueFile, resolveCueAudioFileName, getCueTrackDuration 
 const ART_STORE_KEY = 'track-art';
 const AUDIO_EXTS = /\.(mp3|flac|m4a|m4p|aac|wav|ogg|opus|webm|wma|aiff|aif|alac|mp4|3gp)$/i;
 
+// ── Handle cache for gesture-dependent paths ──────────────────────────────
+// On Android Chrome, reading IndexedDB (async) inside a click handler
+// consumes the user gesture. requestPermission and showDirectoryPicker
+// need that gesture to show the permission/picker dialog.
+//
+// We keep a synchronously-accessible cache of stored handles so the
+// Sync Now and refresh buttons can check BEFORE any await, preserving
+// the gesture for permission re-authorization.
+let _handleCache: FileSystemDirectoryHandle[] | null = null;
+
+async function _ensureHandleCache(): Promise<FileSystemDirectoryHandle[]> {
+  if (_handleCache === null) {
+    _handleCache = (await get('music-folders')) || [];
+  }
+  return _handleCache;
+}
+function _invalidateHandleCache() {
+  _handleCache = null;
+}
+
+/** Sync access — call inside click handlers before any await */
+export function getStoredHandlesSync(): FileSystemDirectoryHandle[] {
+  return _handleCache ? [..._handleCache] : [];
+}
+
+
 // ─── Native Vorbis Comment parser (OGG / Opus files) ────────────────────────
 // Bypasses music-metadata-browser entirely for these formats.
 // OGG Opus layout:
@@ -877,7 +903,7 @@ export function useFileSystem() {
   };
 
   const getStoredHandles = async (): Promise<FileSystemDirectoryHandle[]> => {
-    return (await get('music-folders')) || [];
+    return _ensureHandleCache();
   };
 
   const getArtForTrack = async (fileName: string, folderPath: string): Promise<string | null> => {
@@ -1265,6 +1291,7 @@ export function useFileSystem() {
         const existing = await getStoredHandles();
         if (!existing.some(h => h.name === handle.name)) {
           await set('music-folders', [...existing, handle]);
+          _invalidateHandleCache();
         }
         // Also sync to local-folder-names so PreferencesPanel's Sources tab shows it
         const folderNames: string[] = (await get('local-folder-names')) || [];
@@ -1393,6 +1420,7 @@ export function useFileSystem() {
           const existing = await getStoredHandles();
           if (!existing.some(h => h.name === dirHandle.name)) {
             await set('music-folders', [...existing, dirHandle]);
+          _invalidateHandleCache();
           }
         }
       }

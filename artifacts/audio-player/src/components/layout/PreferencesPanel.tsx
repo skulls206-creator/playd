@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
-import { useFileSystem } from '@/hooks/use-file-system';
+import { useFileSystem, getStoredHandlesSync } from '@/hooks/use-file-system';
 import { useFolderWatch } from '@/hooks/use-folder-watch';
 import { useTrackStore } from '@/lib/track-store';
 import type { LocalTrack } from '@/lib/track-store';
@@ -126,24 +126,58 @@ export function PreferencesPanel() {
     setLocalFolders(names);
   };
 
-  const handleRescanFolder = async (folderName: string) => {
+  const handleRescanFolder = (folderName: string) => {
     setScanningFolderName(folderName);
-    const handles = await getStoredHandles();
-    const handle = handles.find(h => h.name === folderName);
+
+    // Try cached handle first — sync lookup preserves user gesture
+    const cached = getStoredHandlesSync();
+    const handle = cached.find(h => h.name === folderName);
     if (handle) {
-      try {
-        await scanFolder(handle);
-      } catch {
-        // Handle stale — fall back to picker so user can re-select
+      // requestPermission preserves gesture in Chrome when called
+      // synchronously from a click handler
+      (async () => {
+        try {
+          const perm = await handle.requestPermission({ mode: 'read' });
+          if (perm === 'granted') {
+            await scanFolder(handle);
+            setScanningFolderName(null);
+            return;
+          }
+        } catch {}
+        // Permission not granted or stale — fall back to async handle load
+        const handles = await getStoredHandles();
+        const h2 = handles.find(x => x.name === folderName);
+        if (h2) {
+          try {
+            const p2 = await h2.requestPermission({ mode: 'read' });
+            if (p2 === 'granted') {
+              await scanFolder(h2);
+              setScanningFolderName(null);
+              return;
+            }
+          } catch {}
+        }
+        // Everything failed — open picker as last resort
         folderInputRef.current?.click();
-        return;
-      }
+      })();
     } else {
-      // No stored handle — open picker so user can re-select
-      folderInputRef.current?.click();
-      return;
+      // No cached handle — try async load
+      (async () => {
+        const handles = await getStoredHandles();
+        const h2 = handles.find(x => x.name === folderName);
+        if (h2) {
+          try {
+            const p2 = await h2.requestPermission({ mode: 'read' });
+            if (p2 === 'granted') {
+              await scanFolder(h2);
+              setScanningFolderName(null);
+              return;
+            }
+          } catch {}
+        }
+        folderInputRef.current?.click();
+      })();
     }
-    setScanningFolderName(null);
   };
 
   const handleRemoveFolder = async (folderName: string) => {

@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useTrackStore } from '@/lib/track-store';
 import type { LocalTrack } from '@/lib/track-store';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
-import { useFileSystem } from '@/hooks/use-file-system';
+import { useFileSystem, getStoredHandlesSync } from '@/hooks/use-file-system';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput, RefreshCw, Lock, Pencil, GripVertical } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -471,22 +471,24 @@ export function TrackListPanel({
           <button
             onClick={() => {
               if (hasDirectoryPicker) {
-                // Desktop/Android: check for saved handles first.
-                // If handles exist → rescan them.
-                // If not (e.g. browser cleared storage) → open the picker so the
-                // user can re-select their folder rather than seeing an error.
-                getStoredHandles().then(async (handles) => {
+                // Try cached handles first (sync lookup = preserves user gesture
+                // on Android Chrome where IndexedDB reads consume it).
+                const cached = getStoredHandlesSync();
+                const handlesPromise = cached.length > 0
+                  ? Promise.resolve(cached)
+                  : getStoredHandles();
+
+                handlesPromise.then(async (handles) => {
                   if (handles.length === 0) {
                     const added = await addFolder();
                     if (added) refreshHasFolders();
                     return;
                   }
 
-                  // Try to re-authorize permission on stored handles.
-                  // On page refresh, Chrome drops granted permissions but the
-                  // handle itself is still valid — requestPermission() in a
-                  // user gesture context should re-grant it silently on desktop,
-                  // or show a quick prompt on mobile.
+                  // requestPermission preserves the user gesture context in
+                  // Chrome/Edge when called from a click handler, even though
+                  // it returns a Promise — the permission dialog uses the
+                  // gesture that was active when requestPermission() was called.
                   let allGranted = true;
                   try {
                     for (const h of handles) {
@@ -503,8 +505,7 @@ export function TrackListPanel({
                   }
 
                   // Permission re-grant failed — open the folder picker so the
-                  // user can select the same folder again. This always works
-                  // regardless of browser quirkiness.
+                  // user can select the same folder again.
                   const added = await addFolder();
                   if (added) refreshHasFolders();
                 });
