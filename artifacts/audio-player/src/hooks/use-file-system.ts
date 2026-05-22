@@ -1266,6 +1266,11 @@ export function useFileSystem() {
         if (!existing.some(h => h.name === handle.name)) {
           await set('music-folders', [...existing, handle]);
         }
+        // Also sync to local-folder-names so PreferencesPanel's Sources tab shows it
+        const folderNames: string[] = (await get('local-folder-names')) || [];
+        if (!folderNames.includes(handle.name)) {
+          await set('local-folder-names', [...folderNames, handle.name]);
+        }
         await scanFolder(handle);
         return true;
       } catch (e: any) {
