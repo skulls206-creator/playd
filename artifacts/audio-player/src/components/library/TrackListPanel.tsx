@@ -3,6 +3,7 @@ import { useTrackStore } from '@/lib/track-store';
 import type { LocalTrack } from '@/lib/track-store';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useFileSystem, getStoredHandlesSync } from '@/hooks/use-file-system';
+import { toast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChevronUp, ChevronDown, Music, Pause, Play, Menu, FolderOpen, Trash2, X, FolderInput, RefreshCw, Lock, Pencil, GripVertical } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -471,44 +472,64 @@ export function TrackListPanel({
           <button
             onClick={() => {
               if (hasDirectoryPicker) {
-                // Try cached handles first (sync lookup = preserves user gesture
-                // on Android Chrome where IndexedDB reads consume it).
+                // Try cached handles first (sync = preserves gesture).
+                // queryPermission doesn't need a gesture — just checks state.
                 const cached = getStoredHandlesSync();
-                const handlesPromise = cached.length > 0
-                  ? Promise.resolve(cached)
-                  : getStoredHandles();
+                const canRescan = cached.length > 0 && cached.some(h => {
+                  try { return 'queryPermission' in h; } catch { return false; }
+                });
 
-                handlesPromise.then(async (handles) => {
-                  if (handles.length === 0) {
-                    const added = await addFolder();
-                    if (added) refreshHasFolders();
-                    return;
-                  }
-
-                  // requestPermission preserves the user gesture context in
-                  // Chrome/Edge when called from a click handler, even though
-                  // it returns a Promise — the permission dialog uses the
-                  // gesture that was active when requestPermission() was called.
-                  let allGranted = true;
-                  try {
-                    for (const h of handles) {
-                      if ('requestPermission' in h) {
-                        const perm = await (h as any).requestPermission({ mode: 'read' });
-                        if (perm !== 'granted') { allGranted = false; break; }
+                if (canRescan) {
+                  // Permission may already be granted (desktop, or Android
+                  // before page refresh). Rescan the actual files.
+                  (async () => {
+                    const handles = cached.length > 0 ? cached : await getStoredHandles();
+                    if (handles.length === 0) return;
+                    // queryPermission — no gesture needed
+                    let allGranted = true;
+                    try {
+                      for (const h of handles) {
+                        const state = await h.queryPermission({ mode: 'read' });
+                        if (state !== 'granted') { allGranted = false; break; }
+                      }
+                    } catch { allGranted = false; }
+                    if (allGranted) {
+                      await rescanAll();
+                    } else {
+                      // Permission not granted — can't rescan files.
+                      // Show count from store instead.
+                      const count = useTrackStore.getState().tracks.length;
+                      if (count > 0) {
+                        const label = `\u2713 ${count} track${count !== 1 ? 's' : ''} synced to PLAYD`;
+                        toast({ title: label });
                       }
                     }
-                  } catch { allGranted = false; }
-
-                  if (allGranted) {
-                    await rescanAll();
-                    return;
-                  }
-
-                  // Permission re-grant failed — open the folder picker so the
-                  // user can select the same folder again.
-                  const added = await addFolder();
-                  if (added) refreshHasFolders();
-                });
+                  })();
+                } else {
+                  // No handles cached — try async load, then same logic
+                  (async () => {
+                    const handles = await getStoredHandles();
+                    if (handles.length > 0) {
+                      let allGranted = true;
+                      try {
+                        for (const h of handles) {
+                          const state = await h.queryPermission({ mode: 'read' });
+                          if (state !== 'granted') { allGranted = false; break; }
+                        }
+                      } catch { allGranted = false; }
+                      if (allGranted) {
+                        await rescanAll();
+                        return;
+                      }
+                    }
+                    // No handle with permission — show count from store
+                    const count = useTrackStore.getState().tracks.length;
+                    if (count > 0) {
+                      const label = `\u2713 ${count} track${count !== 1 ? 's' : ''} synced to PLAYD`;
+                      toast({ title: label });
+                    }
+                  })();
+                }
               } else {
                 // iOS: plain synchronous .click() — no async keyword anywhere above
                 iosFileInputRef.current?.click();
