@@ -869,6 +869,12 @@ export function useFileSystem() {
   const statusClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { upsertTracks } = useTrackStore();
 
+  // Eagerly populate handle cache on mount so getStoredHandles() returns
+  // synchronously from cache — preserves user gesture for requestPermission.
+  if (_handleCache === null) {
+    _ensureHandleCache().catch(() => {});
+  }
+
   // Always cancel any pending clear before setting a new status message.
   // Pass clearAfterMs to auto-clear; omit to leave it up indefinitely.
   const setStatus = (msg: string, clearAfterMs?: number) => {
