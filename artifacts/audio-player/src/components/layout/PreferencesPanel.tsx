@@ -39,7 +39,7 @@ export function PreferencesPanel() {
     gaplessEnabled, setGaplessEnabled,
     replaygainEnabled, setReplaygainEnabled,
   } = useAudioPlayer();
-  const { loadSampleTrack, scanFileList, isScanning, scanStatus, getFileFromPath } = useFileSystem();
+  const { loadSampleTrack, scanFileList, scanFolder, isScanning, scanStatus, getFileFromPath, getStoredHandles } = useFileSystem();
   const folderWatch = useFolderWatch();
   const [scrobbleConfig, setScrobbleConfig] = useState<ScrobbleConfig | null>(null);
   const [scrobbleLoading, setScrobbleLoading] = useState(true);
@@ -126,9 +126,26 @@ export function PreferencesPanel() {
     setLocalFolders(names);
   };
 
-  const handleRescanFolder = (folderName: string) => {
+  const handleRescanFolder = async (folderName: string) => {
     setScanningFolderName(folderName);
-    folderInputRef.current?.click();
+    const handles = await getStoredHandles();
+    const handle = handles.find(h => h.name === folderName);
+    if (handle) {
+      try {
+        const count = await scanFolder(handle);
+        if (count === 0) {
+          // Folder had no audio files or handle is stale — fall back to picker
+          folderInputRef.current?.click();
+        }
+      } catch {
+        // Handle is stale (folder deleted) — fall back to picker
+        folderInputRef.current?.click();
+      }
+    } else {
+      // No stored handle — fall back to picker so user can re-select
+      folderInputRef.current?.click();
+    }
+    setScanningFolderName(null);
   };
 
   const handleRemoveFolder = async (folderName: string) => {
