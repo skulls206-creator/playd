@@ -33,7 +33,7 @@ declare global {
 const SESSION_KEY = 'playd_restore_dismissed';
 const FOLDER_STORE_KEY = 'music-folders';
 
-export function useLibraryAutoRestore(rescanAll: () => Promise<void>) {
+export function useLibraryAutoRestore(rescanAll: () => Promise<{ total: number; folders: number }>) {
   const [needsRestore, setNeedsRestore] = useState(false);
   const ran = useRef(false);
 

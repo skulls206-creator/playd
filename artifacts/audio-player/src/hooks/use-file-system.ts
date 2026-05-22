@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { toast } from '@/hooks/use-toast';
 import { get, set } from 'idb-keyval';
 import { useTrackStore } from '@/lib/track-store';
 import type { LocalTrack } from '@/lib/track-store';
@@ -1127,10 +1128,10 @@ export function useFileSystem() {
         }
 
         if (cueTracksCreated > 0) {
-          setStatus(`✓ ${entries.length} tracks + ${cueTracksCreated} CUE tracks imported`, 8000);
+          setStatus(`✓ ${entries.length} tracks + ${cueTracksCreated} CUE tracks ready`, 8000);
         }
       } else {
-        setStatus(`✓ ${entries.length} tracks imported successfully`, 8000);
+        setStatus(`✓ ${entries.length} tracks ready`, 8000);
       }
 
       // Phase 2: ReplayGain — fire-and-forget, never blocks track visibility.
@@ -1169,14 +1170,14 @@ export function useFileSystem() {
     }
   };
 
-  const scanFolder = async (dirHandle: FileSystemDirectoryHandle) => {
+  const scanFolder = async (dirHandle: FileSystemDirectoryHandle): Promise<number> => {
     const entries: Array<{ file: File; relativePath: string }> = [];
     const skippedExts: string[] = [];
 
     const hasPermission = await verifyPermission(dirHandle);
     if (!hasPermission) {
       setStatus('Permission denied', 5000);
-      return;
+      return 0;
     }
 
     async function walk(handle: FileSystemDirectoryHandle, path: string) {
@@ -1199,6 +1200,7 @@ export function useFileSystem() {
 
     await walk(dirHandle, dirHandle.name);
     await processTracks(entries, dirHandle.name, skippedExts);
+    return entries.length;
   };
 
   const scanFileList = async (files: FileList) => {
@@ -1327,13 +1329,14 @@ export function useFileSystem() {
     }
   };
 
-  const rescanAll = async (): Promise<void> => {
+  const rescanAll = async (): Promise<{ total: number; folders: number }> => {
     const handles = await getStoredHandles();
     if (handles.length === 0) {
       setStatus('No folders added — use Add Folder to import music', 5000);
-      return;
+      return { total: 0, folders: 0 };
     }
     let anyDenied = false;
+    let totalTracks = 0;
     for (const handle of handles) {
       // Use the two-step permission check (don't rely on verifyPermission which
       // may fail when requestPermission returns 'denied' without user gesture).
@@ -1353,11 +1356,18 @@ export function useFileSystem() {
         console.warn('[playd] Permission denied for folder:', handle.name);
         continue;
       }
-      await scanFolder(handle);
+      const count = await scanFolder(handle);
+      totalTracks += count;
     }
     if (anyDenied) {
       setStatus('Some folders need re-authorization — open Settings → Sources to re-add them', 8000);
     }
+    if (totalTracks > 0) {
+      const label = `✓ ${totalTracks} track${totalTracks !== 1 ? 's' : ''} synced to PLAYD`;
+      setStatus(label, 8000);
+      toast({ title: label });
+    }
+    return { total: totalTracks, folders: handles.length };
   };
 
   const importDroppedItems = async (items: DataTransferItemList): Promise<void> => {
