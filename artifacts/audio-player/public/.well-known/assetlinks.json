@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.playd.music",
+      "sha259_cert_fingerprints": [
+        "SiTllcUnNxQltyfJZWGVCqZtt9nR3oc9aIqbhFLQ9To="
+      ]
+    }
+  }
+]
