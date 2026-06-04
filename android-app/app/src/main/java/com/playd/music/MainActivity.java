@@ -234,7 +234,7 @@ public class MainActivity extends Activity {
 
         // File picker + media session bridge
         webView.setWebChromeClient(new WebChromeClient() {
-            // ── File Picker ───────────────────────────────────────────────────
+            // ── File/Folder Picker ─────────────────────────────────────────────
             @Override
             public boolean onShowFileChooser(
                     WebView webView,
@@ -247,32 +247,41 @@ public class MainActivity extends Activity {
                 }
                 fileChooserCallback = callback;
 
-                // Build intent based on what the web page requested
-                Intent intent;
-
-                String[] acceptTypes = fileChooserParams.getAcceptTypes();
-                boolean isMedia = false;
-                if (acceptTypes != null) {
-                    for (String type : acceptTypes) {
-                        if (type != null && (type.startsWith("audio/") || type.startsWith("video/") ||
-                                type.contains("audio") || type.contains("video"))) {
-                            isMedia = true;
-                            break;
+                // Check if this is a webkitdirectory request
+                // Android WebView sets isCaptureEnabled=false for directory picks
+                // but also for regular file picks. Best heuristic: always use
+                // folder picker for the main app, since it's a music player.
+                // Detect: if FileChooserParams mode is MODE_OPEN_MULTIPLE and
+                // not capture, try folder picker first.
+                boolean directoryMode = false;
+                try {
+                    // Check if the triggering element has webkitdirectory
+                    // by examining the title and mode
+                    String title = fileChooserParams.getTitle() != null ? fileChooserParams.getTitle().toString() : "";
+                    String[] acceptTypes = fileChooserParams.getAcceptTypes();
+                    boolean allEmpty = true;
+                    if (acceptTypes != null) {
+                        for (String t : acceptTypes) {
+                            if (t != null && !t.isEmpty()) { allEmpty = false; break; }
                         }
                     }
+                    // webkitdirectory → empty accept types, not capture, multiple selection
+                    // Also check for audio type with no specific extension (music folder scan)
+                    directoryMode = !fileChooserParams.isCaptureEnabled() &&
+                        (allEmpty || isAudioOnlyAccept(acceptTypes));
+                } catch (Exception e) {
+                    directoryMode = false;
                 }
 
-                if (isMedia) {
-                    // Open media picker (audio/video files)
-                    intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    intent.setType("audio/*");
-                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                Intent intent;
+                if (directoryMode) {
+                    // ── FOLDER PICKER ──
+                    intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                                   Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
                 } else if (fileChooserParams.isCaptureEnabled()) {
-                    // Camera or microphone capture
                     intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
                 } else {
-                    // General file picker
                     intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
                     intent.setType("*/*");
@@ -281,11 +290,10 @@ public class MainActivity extends Activity {
 
                 try {
                     startActivityForResult(
-                        Intent.createChooser(intent, "Select files"),
+                        Intent.createChooser(intent, directoryMode ? "Select music folder" : "Select files"),
                         FILE_CHOOSER_REQUEST
                     );
                 } catch (Exception e) {
-                    // No file manager available
                     if (fileChooserCallback != null) {
                         fileChooserCallback.onReceiveValue(null);
                         fileChooserCallback = null;
@@ -310,7 +318,17 @@ public class MainActivity extends Activity {
         webView.loadUrl(PLAYD_URL);
     }
 
-    // ── File Picker Result ────────────────────────────────────────────────────
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    private boolean isAudioOnlyAccept(String[] types) {
+        if (types == null || types.length == 0) return false;
+        for (String t : types) {
+            if (t == null || t.isEmpty()) continue;
+            if (!t.startsWith("audio/") && !t.contains("audio")) return false;
+        }
+        return true;
+    }
+
+    // ── File/Folder Picker Result ───────────────────────────────────────────
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -318,32 +336,80 @@ public class MainActivity extends Activity {
             if (fileChooserCallback == null) return;
 
             if (resultCode == RESULT_OK && data != null) {
-                Uri[] results = null;
+                Uri treeUri = data.getData();
 
-                // Check for multiple files
-                String dataString = data.getDataString();
-                if (dataString != null) {
-                    results = new Uri[]{Uri.parse(dataString)};
-                } else if (data.getClipData() != null) {
-                    int count = data.getClipData().getItemCount();
-                    results = new Uri[count];
-                    for (int i = 0; i < count; i++) {
-                        results[i] = data.getClipData().getItemAt(i).getUri();
-                    }
-                }
-
-                if (results != null) {
-                    // Grant read permission to the WebView
-                    for (Uri uri : results) {
+                if (treeUri != null) {
+                    // Persist permission so the folder survives reboots
+                    try {
                         getContentResolver().takePersistableUriPermission(
-                            uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    } catch (Exception ignored) {}
+
+                    // Recursively enumerate all files in the folder
+                    java.util.ArrayList<Uri> allFiles = new java.util.ArrayList<>();
+                    enumerateFolder(treeUri, allFiles);
+
+                    if (!allFiles.isEmpty()) {
+                        fileChooserCallback.onReceiveValue(allFiles.toArray(new Uri[0]));
+                    } else {
+                        fileChooserCallback.onReceiveValue(null);
+                    }
+                } else {
+                    // Fallback: might have multiple URIs via clipData
+                    if (data.getClipData() != null) {
+                        int count = data.getClipData().getItemCount();
+                        Uri[] results = new Uri[count];
+                        for (int i = 0; i < count; i++) {
+                            results[i] = data.getClipData().getItemAt(i).getUri();
+                        }
+                        fileChooserCallback.onReceiveValue(results);
+                    } else if (data.getDataString() != null) {
+                        fileChooserCallback.onReceiveValue(new Uri[]{Uri.parse(data.getDataString())});
+                    } else {
+                        fileChooserCallback.onReceiveValue(null);
                     }
                 }
-                fileChooserCallback.onReceiveValue(results);
             } else {
                 fileChooserCallback.onReceiveValue(null);
             }
             fileChooserCallback = null;
+        }
+    }
+
+    private void enumerateFolder(Uri treeUri, java.util.ArrayList<Uri> out) {
+        try {
+            String treeDocId = android.provider.DocumentsContract.getTreeDocumentId(treeUri);
+            Uri childrenUri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(
+                treeUri, treeDocId);
+
+            String[] projection = {
+                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME
+            };
+
+            try (android.database.Cursor cursor = getContentResolver().query(
+                    childrenUri, projection, null, null, null)) {
+                if (cursor == null) return;
+
+                while (cursor.moveToNext()) {
+                    String docId = cursor.getString(0);
+                    String mimeType = cursor.getString(1);
+                    String name = cursor.getString(2);
+
+                    Uri docUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                        treeUri, docId);
+
+                    if (android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(mimeType)) {
+                        // Recurse into subdirectory
+                        enumerateFolder(docUri, out);
+                    } else {
+                        out.add(docUri);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Silently skip inaccessible folders
         }
     }
 
