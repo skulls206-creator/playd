@@ -227,6 +227,16 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // Kill showDirectoryPicker — it exists in WebView but silently hangs.
+                // Forces the app to fall back to <input webkitdirectory> which our
+                // native onShowFileChooser intercepts properly.
+                view.evaluateJavascript(
+                    "(function() {" +
+                    "  if (typeof window.showDirectoryPicker === 'function') {" +
+                    "    window.showDirectoryPicker = undefined;" +
+                    "    delete window.showDirectoryPicker;" +
+                    "  }" +
+                    "})()", null);
                 // Inject JS bridge for media session updates from the web app
                 injectMediaBridge(view);
             }
@@ -333,50 +343,56 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == FILE_CHOOSER_REQUEST) {
-            if (fileChooserCallback == null) return;
+            final ValueCallback<Uri[]> callback = fileChooserCallback;
+            fileChooserCallback = null;
+            if (callback == null) return;
 
             if (resultCode == RESULT_OK && data != null) {
-                Uri treeUri = data.getData();
+                final Uri treeUri = data.getData();
 
                 if (treeUri != null) {
-                    // Persist permission so the folder survives reboots
+                    // Persist permission
                     try {
                         getContentResolver().takePersistableUriPermission(
                             treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     } catch (Exception ignored) {}
 
-                    // Recursively enumerate all files in the folder
-                    java.util.ArrayList<Uri> allFiles = new java.util.ArrayList<>();
-                    enumerateFolder(treeUri, allFiles);
-
-                    if (!allFiles.isEmpty()) {
-                        fileChooserCallback.onReceiveValue(allFiles.toArray(new Uri[0]));
-                    } else {
-                        fileChooserCallback.onReceiveValue(null);
-                    }
+                    // Run enumeration on background thread to avoid ANR
+                    final android.content.ContentResolver cr = getContentResolver();
+                    new Thread(() -> {
+                        java.util.ArrayList<Uri> allFiles = new java.util.ArrayList<>();
+                        enumerateFolder(treeUri, allFiles, cr);
+                        // Post result back to UI thread for the WebView callback
+                        runOnUiThread(() -> {
+                            if (!allFiles.isEmpty()) {
+                                callback.onReceiveValue(allFiles.toArray(new Uri[0]));
+                            } else {
+                                callback.onReceiveValue(null);
+                            }
+                        });
+                    }).start();
+                    return; // Don't null out — callback fires from the thread above
                 } else {
-                    // Fallback: might have multiple URIs via clipData
                     if (data.getClipData() != null) {
                         int count = data.getClipData().getItemCount();
                         Uri[] results = new Uri[count];
                         for (int i = 0; i < count; i++) {
                             results[i] = data.getClipData().getItemAt(i).getUri();
                         }
-                        fileChooserCallback.onReceiveValue(results);
+                        callback.onReceiveValue(results);
                     } else if (data.getDataString() != null) {
-                        fileChooserCallback.onReceiveValue(new Uri[]{Uri.parse(data.getDataString())});
+                        callback.onReceiveValue(new Uri[]{Uri.parse(data.getDataString())});
                     } else {
-                        fileChooserCallback.onReceiveValue(null);
+                        callback.onReceiveValue(null);
                     }
                 }
             } else {
-                fileChooserCallback.onReceiveValue(null);
+                callback.onReceiveValue(null);
             }
-            fileChooserCallback = null;
         }
     }
 
-    private void enumerateFolder(Uri treeUri, java.util.ArrayList<Uri> out) {
+    private void enumerateFolder(Uri treeUri, java.util.ArrayList<Uri> out, android.content.ContentResolver cr) {
         try {
             String treeDocId = android.provider.DocumentsContract.getTreeDocumentId(treeUri);
             Uri childrenUri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(
@@ -388,7 +404,7 @@ public class MainActivity extends Activity {
                 android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME
             };
 
-            try (android.database.Cursor cursor = getContentResolver().query(
+            try (android.database.Cursor cursor = cr.query(
                     childrenUri, projection, null, null, null)) {
                 if (cursor == null) return;
 
@@ -402,7 +418,7 @@ public class MainActivity extends Activity {
 
                     if (android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(mimeType)) {
                         // Recurse into subdirectory
-                        enumerateFolder(docUri, out);
+                        enumerateFolder(docUri, out, cr);
                     } else {
                         out.add(docUri);
                     }
