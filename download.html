@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLAYD Music - Android APK Download</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            max-width: 600px;
+            padding: 40px;
+            text-align: center;
+        }
+        .logo {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            color: #6366f1;
+        }
+        .version {
+            color: #888;
+            margin-bottom: 30px;
+        }
+        .download-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #fff;
+            text-decoration: none;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 30px;
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
+        }
+        .info {
+            background: #1a1a1a;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+        .info h3 {
+            color: #6366f1;
+            margin-bottom: 12px;
+        }
+        .info ul {
+            list-style: none;
+            padding: 0;
+        }
+        .info li {
+            padding: 8px 0;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+        }
+        .info li:last-child {
+            border-bottom: none;
+        }
+        .info li::before {
+            content: "✓";
+            color: #10b981;
+            margin-right: 12px;
+            font-weight: bold;
+        }
+        .requirements {
+            color: #888;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        .footer {
+            margin-top: 40px;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🎵</div>
+        <h1>PLAYD Music</h1>
+        <p class="version">Android APK v1.0.0 (Debug)</p>
+        
+        <a href="PLAYD-debug.apk" class="download-btn">
+            ⬇️ Download APK (5.4 MB)
+        </a>
+        
+        <div class="info">
+            <h3>Features</h3>
+            <ul>
+                <li>foobar2000-inspired dark UI</li>
+                <li>Local file playback (MP3, FLAC, WAV, etc.)</li>
+                <li>Playlist management</li>
+                <li>Background playback</li>
+                <li>Lock screen controls</li>
+                <li>ReplayGain support</li>
+                <li>10-band EQ</li>
+                <li>CUE sheet support</li>
+            </ul>
+        </div>
+        
+        <div class="info">
+            <h3>Permissions</h3>
+            <ul>
+                <li>Read audio files from device</li>
+                <li>Background audio playback</li>
+                <li>Media controls notification</li>
+            </ul>
+        </div>
+        
+        <p class="requirements">
+            Requires Android 7.0 (API 24) or later<br>
+            Debug build - signed with debug key
+        </p>
+        
+        <div class="footer">
+            Built with Capacitor • Source: <a href="https://github.com/skulls206-creator/playd" style="color: #6366f1;">GitHub</a>
+        </div>
+    </div>
+</body>
+</html>
