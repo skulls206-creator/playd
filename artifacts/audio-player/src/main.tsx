@@ -10,8 +10,9 @@ interface ServiceWorkerRegistrationWithPeriodicSync extends ServiceWorkerRegistr
   periodicSync: PeriodicSyncManager;
 }
 
-// Register service worker for PWA
-if ('serviceWorker' in navigator) {
+// Register service worker for PWA — skip in Capacitor (service workers break WebView)
+const isCapacitor = !!(window as any).Capacitor;
+if ('serviceWorker' in navigator && !isCapacitor) {
   window.addEventListener('load', async () => {
     const base = import.meta.env.BASE_URL || '/';
     const swUrl = `${base}sw.js`;
