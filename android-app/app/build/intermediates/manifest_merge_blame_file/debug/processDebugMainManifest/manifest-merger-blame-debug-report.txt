@@ -5,206 +5,177 @@
 5    android:versionName="1.0.0" >
 6
 7    <uses-sdk
-8        android:minSdkVersion="24"
-9        android:targetSdkVersion="36" />
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="35" />
 10
-11    <!-- Network -->
-12    <uses-permission android:name="android.permission.INTERNET" />
-12-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:6:5-67
-12-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:6:22-64
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:5:5-67
+11-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:5:22-64
+12    <uses-permission android:name="android.permission.WAKE_LOCK" />
+12-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:6:5-68
+12-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:6:22-65
 13
-14    <!-- Audio files (Android 13+) -->
-15    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-15-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:9:5-75
-15-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:9:22-72
-16
-17    <!-- Audio files (Android 12 and below) -->
-18    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-18-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:12:5-80
-18-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:12:22-77
-19    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-19-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:13:5-81
-19-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:13:22-78
-20
-21    <!-- Background audio -->
-22    <uses-permission android:name="android.permission.WAKE_LOCK" />
-22-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:16:5-68
-22-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:16:22-65
-23    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-23-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:17:5-77
-23-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:17:22-74
-24    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-24-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:18:5-92
-24-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:18:22-89
-25
-26    <!-- Notifications (Android 13+) -->
-27    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-27-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:21:5-77
-27-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:21:22-74
-28
-29    <!-- Audio focus -->
-30    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-30-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:24:5-80
-30-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:24:22-77
+14    <!-- Storage permissions -->
+15    <uses-permission
+15-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:9:5-10:38
+16        android:name="android.permission.READ_EXTERNAL_STORAGE"
+16-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:9:22-77
+17        android:maxSdkVersion="32" />
+17-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:10:9-35
+18    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+18-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:11:5-75
+18-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:11:22-72
+19
+20    <!-- Foreground service permissions -->
+21    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+21-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:14:5-77
+21-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:14:22-74
+22    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+22-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:15:5-92
+22-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:15:22-89
+23
+24    <!-- Notification permission (Android 13+) -->
+25    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+25-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:18:5-77
+25-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:18:22-74
+26    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+26-->[androidx.media3:media3-common:1.5.1] /root/.gradle/caches/8.14.3/transforms/af30a4c40124113463dc1bfe62cb9a8e/transformed/media3-common-1.5.1/AndroidManifest.xml:22:5-79
+26-->[androidx.media3:media3-common:1.5.1] /root/.gradle/caches/8.14.3/transforms/af30a4c40124113463dc1bfe62cb9a8e/transformed/media3-common-1.5.1/AndroidManifest.xml:22:22-76
+27
+28    <permission
+28-->[androidx.core:core:1.15.0] /root/.gradle/caches/8.14.3/transforms/6bbaa40ba0a027f166eff8eb0e0ec866/transformed/core-1.15.0/AndroidManifest.xml:22:5-24:47
+29        android:name="com.playd.music.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+29-->[androidx.core:core:1.15.0] /root/.gradle/caches/8.14.3/transforms/6bbaa40ba0a027f166eff8eb0e0ec866/transformed/core-1.15.0/AndroidManifest.xml:23:9-81
+30        android:protectionLevel="signature" />
+30-->[androidx.core:core:1.15.0] /root/.gradle/caches/8.14.3/transforms/6bbaa40ba0a027f166eff8eb0e0ec866/transformed/core-1.15.0/AndroidManifest.xml:24:9-44
 31
-32    <permission
-32-->[androidx.core:core:1.13.0] /root/.gradle/caches/8.14.3/transforms/e05c08cb719129d2c01c616774febb39/transformed/core-1.13.0/AndroidManifest.xml:22:5-24:47
-33        android:name="com.playd.music.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
-33-->[androidx.core:core:1.13.0] /root/.gradle/caches/8.14.3/transforms/e05c08cb719129d2c01c616774febb39/transformed/core-1.13.0/AndroidManifest.xml:23:9-81
-34        android:protectionLevel="signature" />
-34-->[androidx.core:core:1.13.0] /root/.gradle/caches/8.14.3/transforms/e05c08cb719129d2c01c616774febb39/transformed/core-1.13.0/AndroidManifest.xml:24:9-44
-35
-36    <uses-permission android:name="com.playd.music.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
-36-->[androidx.core:core:1.13.0] /root/.gradle/caches/8.14.3/transforms/e05c08cb719129d2c01c616774febb39/transformed/core-1.13.0/AndroidManifest.xml:26:5-97
-36-->[androidx.core:core:1.13.0] /root/.gradle/caches/8.14.3/transforms/e05c08cb719129d2c01c616774febb39/transformed/core-1.13.0/AndroidManifest.xml:26:22-94
-37
-38    <application
-38-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:26:5-65:19
-39        android:allowBackup="true"
-39-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:27:9-35
-40        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
-40-->[androidx.core:core:1.13.0] /root/.gradle/caches/8.14.3/transforms/e05c08cb719129d2c01c616774febb39/transformed/core-1.13.0/AndroidManifest.xml:28:18-86
-41        android:debuggable="true"
-42        android:extractNativeLibs="false"
-43        android:hardwareAccelerated="true"
-43-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:33:9-43
-44        android:icon="@mipmap/ic_launcher"
-44-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:28:9-43
-45        android:label="@string/app_name"
-45-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:29:9-41
-46        android:networkSecurityConfig="@xml/network_security_config"
-46-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:35:9-69
-47        android:roundIcon="@mipmap/ic_launcher_round"
-47-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:30:9-54
-48        android:supportsRtl="true"
-48-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:31:9-35
-49        android:theme="@style/AppTheme"
-49-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:32:9-40
-50        android:usesCleartextTraffic="false" >
-50-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:34:9-45
-51        <activity
-51-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:37:9-57:20
-52            android:name="com.playd.music.MainActivity"
-52-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:38:13-41
-53            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|density"
-53-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:41:13-95
-54            android:exported="true"
-54-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:39:13-36
-55            android:launchMode="singleTask"
-55-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:40:13-44
-56            android:screenOrientation="unspecified"
-56-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:42:13-52
-57            android:windowSoftInputMode="adjustResize" >
-57-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:43:13-55
-58            <intent-filter>
-58-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:45:13-48:29
-59                <action android:name="android.intent.action.MAIN" />
-59-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:46:17-69
-59-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:46:25-66
+32    <uses-permission android:name="com.playd.music.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+32-->[androidx.core:core:1.15.0] /root/.gradle/caches/8.14.3/transforms/6bbaa40ba0a027f166eff8eb0e0ec866/transformed/core-1.15.0/AndroidManifest.xml:26:5-97
+32-->[androidx.core:core:1.15.0] /root/.gradle/caches/8.14.3/transforms/6bbaa40ba0a027f166eff8eb0e0ec866/transformed/core-1.15.0/AndroidManifest.xml:26:22-94
+33
+34    <application
+34-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:20:5-44:19
+35        android:allowBackup="true"
+35-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:21:9-35
+36        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+36-->[androidx.core:core:1.15.0] /root/.gradle/caches/8.14.3/transforms/6bbaa40ba0a027f166eff8eb0e0ec866/transformed/core-1.15.0/AndroidManifest.xml:28:18-86
+37        android:debuggable="true"
+38        android:extractNativeLibs="false"
+39        android:icon="@mipmap/ic_launcher"
+39-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:22:9-43
+40        android:label="@string/app_name"
+40-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:24:9-41
+41        android:roundIcon="@mipmap/ic_launcher_round"
+41-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:23:9-54
+42        android:supportsRtl="true"
+42-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:25:9-35
+43        android:theme="@style/Theme.Playd" >
+43-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:26:9-43
+44        <activity
+44-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:28:9-37:20
+45            android:name="com.playd.music.MainActivity"
+45-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:29:13-41
+46            android:exported="true"
+46-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:30:13-36
+47            android:launchMode="singleTask"
+47-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:31:13-44
+48            android:theme="@style/Theme.Playd" >
+48-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:32:13-47
+49            <intent-filter>
+49-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:33:13-36:29
+50                <action android:name="android.intent.action.MAIN" />
+50-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:34:17-69
+50-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:34:25-66
+51
+52                <category android:name="android.intent.category.LAUNCHER" />
+52-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:35:17-77
+52-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:35:27-74
+53            </intent-filter>
+54        </activity>
+55
+56        <service
+56-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:39:9-43:36
+57            android:name="com.playd.music.player.MusicPlayerService"
+57-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:40:13-54
+58            android:exported="false"
+58-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:41:13-37
+59            android:foregroundServiceType="mediaPlayback" />
+59-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:42:13-58
 60
-61                <category android:name="android.intent.category.LAUNCHER" />
-61-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:47:17-77
-61-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:47:27-74
-62            </intent-filter>
-63
-64            <!-- Deep links -->
-65            <intent-filter>
-65-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:51:13-56:29
-66                <action android:name="android.intent.action.VIEW" />
-66-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:52:17-69
-66-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:52:25-66
-67
-68                <category android:name="android.intent.category.DEFAULT" />
-68-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:53:17-76
-68-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:53:27-73
-69                <category android:name="android.intent.category.BROWSABLE" />
-69-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:54:17-78
-69-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:54:27-75
-70
-71                <data
-71-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:55:17-79
-72                    android:host="playd.khurk.xyz"
-72-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:55:46-76
-73                    android:scheme="https" />
-73-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:55:23-45
-74            </intent-filter>
-75        </activity>
-76
-77        <!-- Background audio service -->
-78        <service
-78-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:60:9-63:40
-79            android:name="com.playd.music.AudioService"
-79-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:61:13-41
-80            android:exported="false"
-80-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:63:13-37
-81            android:foregroundServiceType="mediaPlayback" />
-81-->/root/.openclaw/workspace/playd/android-app/app/src/main/AndroidManifest.xml:62:13-58
-82
-83        <provider
-83-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/9d1b43af1a3b9b621868f42d34a22ac5/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
-84            android:name="androidx.startup.InitializationProvider"
-84-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/9d1b43af1a3b9b621868f42d34a22ac5/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
-85            android:authorities="com.playd.music.androidx-startup"
-85-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/9d1b43af1a3b9b621868f42d34a22ac5/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
-86            android:exported="false" >
-86-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/9d1b43af1a3b9b621868f42d34a22ac5/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
-87            <meta-data
-87-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/9d1b43af1a3b9b621868f42d34a22ac5/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
-88                android:name="androidx.emoji2.text.EmojiCompatInitializer"
-88-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/9d1b43af1a3b9b621868f42d34a22ac5/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
-89                android:value="androidx.startup" />
-89-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/9d1b43af1a3b9b621868f42d34a22ac5/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
-90            <meta-data
-90-->[androidx.lifecycle:lifecycle-process:2.6.2] /root/.gradle/caches/8.14.3/transforms/b9fccaea96a88401b0bb166ccae6467c/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:29:13-31:52
-91                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-91-->[androidx.lifecycle:lifecycle-process:2.6.2] /root/.gradle/caches/8.14.3/transforms/b9fccaea96a88401b0bb166ccae6467c/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:30:17-78
-92                android:value="androidx.startup" />
-92-->[androidx.lifecycle:lifecycle-process:2.6.2] /root/.gradle/caches/8.14.3/transforms/b9fccaea96a88401b0bb166ccae6467c/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:31:17-49
-93            <meta-data
-93-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:29:13-31:52
-94                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
-94-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:30:17-85
-95                android:value="androidx.startup" />
-95-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:31:17-49
-96        </provider>
-97
-98        <receiver
-98-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:34:9-52:20
-99            android:name="androidx.profileinstaller.ProfileInstallReceiver"
-99-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:35:13-76
-100            android:directBootAware="false"
-100-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:36:13-44
-101            android:enabled="true"
-101-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:37:13-35
-102            android:exported="true"
-102-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:38:13-36
-103            android:permission="android.permission.DUMP" >
-103-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:39:13-57
-104            <intent-filter>
-104-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:40:13-42:29
-105                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
-105-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:17-91
-105-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:25-88
-106            </intent-filter>
-107            <intent-filter>
-107-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:43:13-45:29
-108                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
-108-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:17-85
-108-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:25-82
-109            </intent-filter>
-110            <intent-filter>
-110-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:46:13-48:29
-111                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
-111-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:17-88
-111-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:25-85
-112            </intent-filter>
-113            <intent-filter>
-113-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:49:13-51:29
-114                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
-114-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:17-95
-114-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/2e9dfb09fcd1ae8335553c36604f1209/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:25-92
-115            </intent-filter>
-116        </receiver>
-117    </application>
-118
-119</manifest>
+61        <provider
+61-->[androidx.lifecycle:lifecycle-process:2.8.7] /root/.gradle/caches/8.14.3/transforms/621b473493c09a72ae0f39a787d9e94d/transformed/lifecycle-process-2.8.7/AndroidManifest.xml:24:9-32:20
+62            android:name="androidx.startup.InitializationProvider"
+62-->[androidx.lifecycle:lifecycle-process:2.8.7] /root/.gradle/caches/8.14.3/transforms/621b473493c09a72ae0f39a787d9e94d/transformed/lifecycle-process-2.8.7/AndroidManifest.xml:25:13-67
+63            android:authorities="com.playd.music.androidx-startup"
+63-->[androidx.lifecycle:lifecycle-process:2.8.7] /root/.gradle/caches/8.14.3/transforms/621b473493c09a72ae0f39a787d9e94d/transformed/lifecycle-process-2.8.7/AndroidManifest.xml:26:13-68
+64            android:exported="false" >
+64-->[androidx.lifecycle:lifecycle-process:2.8.7] /root/.gradle/caches/8.14.3/transforms/621b473493c09a72ae0f39a787d9e94d/transformed/lifecycle-process-2.8.7/AndroidManifest.xml:27:13-37
+65            <meta-data
+65-->[androidx.lifecycle:lifecycle-process:2.8.7] /root/.gradle/caches/8.14.3/transforms/621b473493c09a72ae0f39a787d9e94d/transformed/lifecycle-process-2.8.7/AndroidManifest.xml:29:13-31:52
+66                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+66-->[androidx.lifecycle:lifecycle-process:2.8.7] /root/.gradle/caches/8.14.3/transforms/621b473493c09a72ae0f39a787d9e94d/transformed/lifecycle-process-2.8.7/AndroidManifest.xml:30:17-78
+67                android:value="androidx.startup" />
+67-->[androidx.lifecycle:lifecycle-process:2.8.7] /root/.gradle/caches/8.14.3/transforms/621b473493c09a72ae0f39a787d9e94d/transformed/lifecycle-process-2.8.7/AndroidManifest.xml:31:17-49
+68            <meta-data
+68-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/ef20179490425421ddb7f67c88e1b9c9/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
+69                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+69-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/ef20179490425421ddb7f67c88e1b9c9/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
+70                android:value="androidx.startup" />
+70-->[androidx.emoji2:emoji2:1.3.0] /root/.gradle/caches/8.14.3/transforms/ef20179490425421ddb7f67c88e1b9c9/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
+71            <meta-data
+71-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:29:13-31:52
+72                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+72-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:30:17-85
+73                android:value="androidx.startup" />
+73-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:31:17-49
+74        </provider>
+75
+76        <service
+76-->[androidx.room:room-runtime:2.6.1] /root/.gradle/caches/8.14.3/transforms/be9186511d0b158dfbc08e7d15722727/transformed/room-runtime-2.6.1/AndroidManifest.xml:24:9-28:63
+77            android:name="androidx.room.MultiInstanceInvalidationService"
+77-->[androidx.room:room-runtime:2.6.1] /root/.gradle/caches/8.14.3/transforms/be9186511d0b158dfbc08e7d15722727/transformed/room-runtime-2.6.1/AndroidManifest.xml:25:13-74
+78            android:directBootAware="true"
+78-->[androidx.room:room-runtime:2.6.1] /root/.gradle/caches/8.14.3/transforms/be9186511d0b158dfbc08e7d15722727/transformed/room-runtime-2.6.1/AndroidManifest.xml:26:13-43
+79            android:exported="false" />
+79-->[androidx.room:room-runtime:2.6.1] /root/.gradle/caches/8.14.3/transforms/be9186511d0b158dfbc08e7d15722727/transformed/room-runtime-2.6.1/AndroidManifest.xml:27:13-37
+80
+81        <receiver
+81-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:34:9-52:20
+82            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+82-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:35:13-76
+83            android:directBootAware="false"
+83-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:36:13-44
+84            android:enabled="true"
+84-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:37:13-35
+85            android:exported="true"
+85-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:38:13-36
+86            android:permission="android.permission.DUMP" >
+86-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:39:13-57
+87            <intent-filter>
+87-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:40:13-42:29
+88                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+88-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:17-91
+88-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:25-88
+89            </intent-filter>
+90            <intent-filter>
+90-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:43:13-45:29
+91                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+91-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:17-85
+91-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:25-82
+92            </intent-filter>
+93            <intent-filter>
+93-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:46:13-48:29
+94                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+94-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:17-88
+94-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:25-85
+95            </intent-filter>
+96            <intent-filter>
+96-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:49:13-51:29
+97                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+97-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:17-95
+97-->[androidx.profileinstaller:profileinstaller:1.3.1] /root/.gradle/caches/8.14.3/transforms/808835c49db53f83b620f4b8b59e6ecc/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:25-92
+98            </intent-filter>
+99        </receiver>
+100    </application>
+101
+102</manifest>

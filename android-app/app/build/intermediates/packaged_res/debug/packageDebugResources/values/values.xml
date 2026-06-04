@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PLAYD</string>
-    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#0a0a0a</item>
+    <style name="Theme.Playd" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
         <item name="android:statusBarColor">#0a0a0a</item>
         <item name="android:navigationBarColor">#0a0a0a</item>
-        <item name="android:windowFullscreen">true</item>
+        <item name="colorPrimary">#6366F1</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSurface">#141414</item>
+        <item name="colorOnSurface">#FFFFFF</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:textColorSecondary">#AAAAAA</item>
     </style>
 </resources>

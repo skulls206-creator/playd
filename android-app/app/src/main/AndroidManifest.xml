@@ -1,66 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.playd.music">
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Network -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Audio files (Android 13+) -->
+    <!-- Storage permissions -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
-    <!-- Audio files (Android 12 and below) -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-
-    <!-- Background audio -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Foreground service permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- Notifications (Android 13+) -->
+    <!-- Notification permission (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- Audio focus -->
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme"
-        android:hardwareAccelerated="true"
-        android:usesCleartextTraffic="false"
-        android:networkSecurityConfig="@xml/network_security_config">
+        android:theme="@style/Theme.Playd">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|density"
-            android:screenOrientation="unspecified"
-            android:windowSoftInputMode="adjustResize">
-
+            android:theme="@style/Theme.Playd">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <!-- Deep links -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="playd.khurk.xyz" />
-            </intent-filter>
         </activity>
 
-        <!-- Background audio service -->
         <service
-            android:name=".AudioService"
+            android:name=".player.MusicPlayerService"
+            android:exported="false"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="false" />
-
+            tools:targetApi="34" />
     </application>
 </manifest>

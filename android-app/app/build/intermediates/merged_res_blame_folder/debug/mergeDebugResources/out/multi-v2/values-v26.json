@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.playd.music.app-mergeDebugResources-23:/values-v26/values-v26.xml",
+            "outputFile": "com.playd.music.app-mergeDebugResources-71:/values-v26/values-v26.xml",
             "map": [
                 {
-                    "source": "/root/.gradle/caches/8.14.3/transforms/ff7b0efd9aea665782dc125f1366f30b/transformed/appcompat-1.7.0/res/values-v26/values-v26.xml",
+                    "source": "/root/.gradle/caches/8.14.3/transforms/7756e0571f1e653ff502822941ea3bb8/transformed/appcompat-1.7.0/res/values-v26/values-v26.xml",
                     "from": {
                         "startLines": "2,3,4,8,12,16",
                         "startColumns": "4,4,4,4,4,4",

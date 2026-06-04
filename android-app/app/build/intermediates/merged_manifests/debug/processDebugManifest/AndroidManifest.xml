@@ -5,29 +5,25 @@
     android:versionName="1.0.0" >
 
     <uses-sdk
-        android:minSdkVersion="24"
-        android:targetSdkVersion="36" />
+        android:minSdkVersion="26"
+        android:targetSdkVersion="35" />
 
-    <!-- Network -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Audio files (Android 13+) -->
+    <!-- Storage permissions -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
-    <!-- Audio files (Android 12 and below) -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-
-    <!-- Background audio -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Foreground service permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- Notifications (Android 13+) -->
+    <!-- Notification permission (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- Audio focus -->
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <permission
         android:name="com.playd.music.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
@@ -40,43 +36,25 @@
         android:appComponentFactory="androidx.core.app.CoreComponentFactory"
         android:debuggable="true"
         android:extractNativeLibs="false"
-        android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="false" >
+        android:theme="@style/Theme.Playd" >
         <activity
             android:name="com.playd.music.MainActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|density"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="unspecified"
-            android:windowSoftInputMode="adjustResize" >
+            android:theme="@style/Theme.Playd" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <!-- Deep links -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data
-                    android:host="playd.khurk.xyz"
-                    android:scheme="https" />
-            </intent-filter>
         </activity>
 
-        <!-- Background audio service -->
         <service
-            android:name="com.playd.music.AudioService"
+            android:name="com.playd.music.player.MusicPlayerService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
@@ -85,15 +63,20 @@
             android:authorities="com.playd.music.androidx-startup"
             android:exported="false" >
             <meta-data
-                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
                 android:value="androidx.startup" />
             <meta-data
-                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+                android:name="androidx.emoji2.text.EmojiCompatInitializer"
                 android:value="androidx.startup" />
             <meta-data
                 android:name="androidx.profileinstaller.ProfileInstallerInitializer"
                 android:value="androidx.startup" />
         </provider>
+
+        <service
+            android:name="androidx.room.MultiInstanceInvalidationService"
+            android:directBootAware="true"
+            android:exported="false" />
 
         <receiver
             android:name="androidx.profileinstaller.ProfileInstallReceiver"
