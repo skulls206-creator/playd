@@ -17,9 +17,9 @@ export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-
 echo "🎵 Building PLAYD APK ($BUILD_TYPE)..."
 
 # Build web assets
-echo "📦 Building web assets..."
+echo "📦 Building web assets (Capacitor mode)..."
 cd "$PROJECT_DIR"
-pnpm build
+BASE_PATH=./ pnpm build
 
 # Sync to Android
 echo "🔄 Syncing to Android..."
