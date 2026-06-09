@@ -551,13 +551,15 @@ export function AudioEngine() {
     }
   }, [replaygainEnabled, currentTrack]);
 
-  // Track change
+  // Track change — with cancellation to prevent stale loads from stacking
+  const loadGenerationRef = useRef(0);
   useEffect(() => {
     if (!currentTrack) return;
     const ctx = ctxRef.current;
     if (!ctx) return;
 
     const activeDeck = getActive();
+    const gen = ++loadGenerationRef.current;
 
     // Already preloaded by crossfade on the active deck — only call play() if it
     // is actually paused. On Android Chrome, calling play() on an already-playing
@@ -586,25 +588,27 @@ export function AudioEngine() {
       idleDeck.audio.pause();
 
       const ok = await loadDeckFile.current(activeDeck, currentTrack);
+
+      // Bail if a newer track change happened while we were loading
+      if (gen !== loadGenerationRef.current) return;
+
       if (!ok) {
-        // resolveTrackSrc already showed a specific toast; surface a generic
-        // fallback in case it didn't (e.g. unsupported track source).
+        // File inaccessible — clear the deck so old track doesn't keep playing
+        // (this is what causes "every track sounds the same")
+        if (activeDeck.objectUrl) { URL.revokeObjectURL(activeDeck.objectUrl); activeDeck.objectUrl = null; }
+        activeDeck.audio.pause();
+        activeDeck.audio.removeAttribute('src');
+        activeDeck.audio.load();
+        activeDeck.loadedTrackId = null;
         console.warn('[AudioEngine] loadDeckFile failed', { id: currentTrack.id, source: currentTrack.source, title: currentTrack.title });
         return;
       }
 
       const { isPlaying: playing } = useAudioPlayer.getState();
       if (playing) {
-        // Fire resume and play together — do NOT await resume before play().
-        // On iOS in the background, ctx.resume() returns a Promise that won't
-        // resolve until the app is foregrounded. Chaining play() after it means
-        // music only starts when the user opens the app. The silent keep-alive
-        // MediaElementSourceNode keeps the AudioContext alive between tracks so
-        // play() succeeds immediately without waiting for an explicit resume.
         ctx.resume().catch(() => {}); // fire-and-forget
         activeDeck.audio.play().catch((e: Error) => {
           console.warn('Autoplay prevented', e);
-
         });
       }
     };

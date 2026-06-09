@@ -748,7 +748,7 @@ function isLikelyAudio(file: File): boolean {
 // ─── In-memory file store (session-only, for playback) ──────────────────────
 // Entries are cleaned up after FILE_CACHE_TTL_MS of inactivity.
 // Accessing or re-setting a key refreshes its TTL.
-const FILE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const FILE_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours — Android aggressively revokes handles when backgrounded
 const fileTimestamps = new Map<string, number>();
 const inMemoryFiles = new Map<string, File>();
 
@@ -775,8 +775,8 @@ function sweepExpiredFiles(): void {
   }
 }
 
-// Periodic sweep every 5 minutes
-setInterval(sweepExpiredFiles, 5 * 60 * 1000);
+// Periodic sweep every 15 minutes (less aggressive — Android kills handles frequently)
+setInterval(sweepExpiredFiles, 15 * 60 * 1000);
 
 function hasInMemoryFile(key: string): boolean {
   return inMemoryFiles.has(key);
@@ -1328,7 +1328,20 @@ export function useFileSystem() {
       const rootHandle = handles.find(h => h.name === rootFolderName);
 
       if (!rootHandle) return null;
-      if (!(await verifyPermission(rootHandle))) return null;
+
+      // Check permission — if lost (common on Android when tab is backgrounded),
+      // try to re-request. This may fail without user gesture, but it's worth
+      // trying since some Chromium versions auto-restore after foregrounding.
+      let hasPerm = await verifyPermission(rootHandle);
+      if (!hasPerm) {
+        try {
+          const result = await rootHandle.requestPermission({ mode: 'read' } as any);
+          hasPerm = result === 'granted';
+        } catch {
+          // Silently fail — will be caught by stalled-playback toast
+        }
+        if (!hasPerm) return null;
+      }
 
       const pathParts = folderPath.split('/').slice(1);
       let currentHandle: FileSystemDirectoryHandle = rootHandle;
