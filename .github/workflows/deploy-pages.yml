@@ -31,6 +31,7 @@ jobs:
           BASE_PATH=/ pnpm run build
         env:
           PORT: "3000"
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
 
       - name: Copy index.html as 404.html (SPA fallback)
